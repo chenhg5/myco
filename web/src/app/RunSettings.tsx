@@ -9,7 +9,7 @@ import { hubAfter0194 } from "@/app/hubVersion";
 import { ConfirmDialog, ErrorText } from "@/app/dialogs";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { quotaHasNumbers, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaTight, quotaWindowLabel, quotaWindowText } from "@/app/quota";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import { L, lang } from "@/lib/i18n";
 
 /** The models a node may be told to use when its computer does not say
@@ -303,6 +303,7 @@ export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
             {L("现在用的：", "In use: ")}<SourceValue value={rt?.model} source={rt?.model_source} />
           </span>
         )}
+        <ModelsSource row={row} now={now} mayRefresh={editable} onRefresh={onRefresh} />
       </div>
 
       {tunable && (
@@ -344,6 +345,57 @@ export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
           if (accessEditable && cap === "full") void save({ model, effort, access: "full" }).then((saved) => { if (saved) setConfirmAccess(false); });
         }} />
     </>
+  );
+}
+
+/** Where an agent's model list came from, when it is its provider's (or
+ *  the built-in list for it), with a way to list again on runners that
+ *  can: the request goes through the hub, and the runner reads it within
+ *  a minute. */
+function ModelsSource({ row, now, mayRefresh, onRefresh }: { row: AgentRow; now: number; mayRefresh: boolean; onRefresh: () => Promise<void> }) {
+  const rt = row.st.agent.runtime;
+  const from = rt?.models_from;
+  const at = rt?.models_at || "";
+  const [asked, setAsked] = useState<{ at: string } | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  // Done once a new list is there; given up after a while (the runner may
+  // be busy or offline): the line says what it has.
+  useEffect(() => { if (asked && at !== asked.at) setAsked(null); }, [at, asked]);
+  useEffect(() => {
+    if (!asked) return;
+    const pulls = [15_000, 40_000, 70_000].map((ms) => setTimeout(() => void onRefresh().catch(() => undefined), ms));
+    const end = setTimeout(() => setAsked(null), 90_000);
+    return () => { pulls.forEach(clearTimeout); clearTimeout(end); };
+  }, [asked, onRefresh]);
+  if (from !== "provider" && from !== "catalog") return null;
+  const where = rt?.provider || rt?.provider_host || L("服务商", "the provider");
+  const canRefresh = mayRefresh && !!rt?.features?.includes("models_refresh");
+  const refresh = async () => {
+    setError(null);
+    setAsked({ at });
+    try {
+      await appApi.setRunSettings(row.hub.id, row.st.agent.name, { models_refresh: new Date().toISOString() });
+      void onRefresh().catch(() => undefined);
+    } catch (e) {
+      setAsked(null);
+      setError(e);
+    }
+  };
+  return (
+    <span className="app-kv-help" data-testid="run-models-source">
+      {from === "provider"
+        ? L(`模型列表从 ${where} 读取`, `Models as ${where} lists them`) + (at ? ` · ${timeAgo(at, now)}` : "")
+        : L(`内置列表：还没能从 ${where} 读取`, `Built-in list: ${where} could not be asked yet`)}
+      {canRefresh && (
+        <>
+          {" · "}
+          <button type="button" className="app-kv-link" disabled={!!asked} onClick={() => void refresh()}>
+            {asked ? L("正在读取…", "Listing…") : L("重新读取", "List again")}
+          </button>
+        </>
+      )}
+      <ErrorText error={error} />
+    </span>
   );
 }
 

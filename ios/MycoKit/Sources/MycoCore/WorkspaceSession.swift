@@ -383,6 +383,21 @@ public final class WorkspaceSession {
         }
     }
 
+    /// Asks an agent's runner to list its provider's models again (it
+    /// does within a minute; the list comes with its next report).
+    /// Answers why it could not, if it could not.
+    public func listModelsAgain(of name: String) async -> String? {
+        do {
+            let agent = try await hub.listModelsAgain(of: name)
+            if let index = statuses.firstIndex(where: { $0.agent.name == name }) { statuses[index].agent = agent }
+            return nil
+        } catch let error as HubError {
+            return error.message
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     // MARK: Hidden messages
 
     private func loadHidden() async {

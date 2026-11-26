@@ -38,6 +38,11 @@ public struct RunChoice: Sendable, Hashable {
     public var pending = false
     /// Display names its CLI gave the models, by id.
     public var names: [String: String] = [:]
+    /// Where the models came from, when they are its provider's: "模型列表从
+    /// DeepSeek 读取 · 10 分钟前".
+    public var source: String?
+    /// Its runner can be asked to list them again from here.
+    public var canListAgain = false
 
     /// How a model is shown: the name its CLI gave it, else short.
     public func name(of model: String) -> String { names[model] ?? RunChoice.short(model) }
@@ -54,7 +59,7 @@ public struct RunChoice: Sendable, Hashable {
     /// - Parameters:
     ///   - manages: I own the agent, or manage the workspace.
     ///   - tooOld: the workspace answered that it keeps no run settings.
-    public static func of(_ agent: Agent, manages: Bool, tooOld: Bool = false) -> RunChoice? {
+    public static func of(_ agent: Agent, manages: Bool, tooOld: Bool = false, now: Date = Date()) -> RunChoice? {
         guard Naming.kind(of: agent) == .agent else { return nil }
         let runtime = agent.runtime
         var cli = runtime?.cli ?? ""
@@ -87,8 +92,38 @@ public struct RunChoice: Sendable, Hashable {
             choice.efforts = with([inUseEffort, chosenEffort], before: efforts.isEmpty ? (knownEfforts[cli] ?? []) : efforts)
             choice.names = Dictionary(offered.compactMap { m in m.name.map { (m.id, $0) } }, uniquingKeysWith: { a, _ in a })
             choice.pending = (!chosenModel.isEmpty && chosenModel != inUseModel) || (!chosenEffort.isEmpty && chosenEffort != inUseEffort)
+            choice.source = source(of: runtime, now: now)
+            choice.canListAgain = choice.source != nil && (runtime?.features ?? []).contains("models_refresh")
         }
         return choice
+    }
+
+    /// Where its models came from, when they are its provider's (or the
+    /// built-in list for it). The desktop app's `ModelsSource`.
+    static func source(of runtime: Runtime?, now: Date) -> String? {
+        guard let runtime, !(runtime.models ?? []).isEmpty else { return nil }
+        let provider = runtime.provider.flatMap { $0.isEmpty ? nil : $0 } ?? L("服务商", "the provider")
+        switch runtime.modelsFrom {
+        case "provider":
+            let line = L("模型列表从 \(provider) 读取", "Models as \(provider) lists them")
+            guard let at = runtime.modelsAt else { return line }
+            return line + " · " + ago(at, now: now)
+        case "catalog":
+            return L("内置列表：还没能从 \(provider) 读取", "Built-in list: \(provider) could not be asked yet")
+        default:
+            return nil
+        }
+    }
+
+    /// "刚刚", "10 分钟前", "3 小时前", "2 天前".
+    static func ago(_ date: Date, now: Date) -> String {
+        let s = max(0, Int(now.timeIntervalSince(date).rounded()))
+        if s < 60 { return L("刚刚", "just now") }
+        let m = s / 60
+        if m < 60 { return L("\(m) 分钟前", "\(m) min ago") }
+        let h = m / 60
+        if h < 48 { return L("\(h) 小时前", "\(h) h ago") }
+        return L("\(h / 24) 天前", "\(h / 24) days ago")
     }
 
     /// The list with what is in use put first, when it is not in it.

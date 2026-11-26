@@ -5425,6 +5425,40 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
+    // An agent on another vendor with an API key: the models are that
+    // vendor's, the line says where they came from and when, and its owner
+    // can have them listed again.
+    await step("成员 · 服务商的模型列表", async () => {
+      await go(page, "成员", narrow);
+      const card = page.locator(".mb-card", { hasText: "MCP Claude" }).first();
+      await card.scrollIntoViewIfNeeded(); await card.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const body = page.locator(".ms .ms-fold-body");
+      const offered = await body.locator(".app-kv", { hasText: "模型" }).first().locator("select option").allTextContents();
+      if (!offered.some((o) => o.includes("DeepSeek V4 Flash (deepseek-v4-flash)")) || offered.some((o) => o === "fable" || o === "haiku")) {
+        throw new Error(`应列出服务商给的模型，不再列 Claude 的别名，实际「${offered.join("、")}」`);
+      }
+      const source = body.locator("[data-testid=run-models-source]");
+      await source.waitFor({ timeout: 5_000 });
+      const said = compactText(await source.innerText());
+      if (!/模型列表从 .+ 读取 · \d+ 分钟前/.test(said)) throw new Error(`应写模型列表从哪读的、多久前，实际「${said}」`);
+      const again = source.getByRole("button", { name: "重新读取" });
+      await source.scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-provider-models");
+      await clickVisible(page, again);
+      let sent;
+      for (let i = 0; i < 50 && !sent; i++) {
+        const { last } = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`)).json();
+        if (last?.agent === "mcp-claude" && last.body.models_refresh) sent = last; else await sleep(100);
+      }
+      if (!sent) throw new Error("点重新读取后 App 后端没有收到请求");
+      await page.waitForFunction(() => /刚刚/.test(document.querySelector(".ms [data-testid=run-models-source]")?.textContent || ""), null, { timeout: 10_000 });
+      await source.getByRole("button", { name: "重新读取" }).waitFor({ timeout: 5_000 });
+      await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
     await step("成员 · 工具", async () => {
       await go(page, "成员", narrow);
       const card = page.locator(".mb-card", { hasText: "MCP Claude" }).first();

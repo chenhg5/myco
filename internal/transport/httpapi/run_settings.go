@@ -39,6 +39,7 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 		MCPTools          *bool                     `json:"mcp_tools"`
 		Provider          *string                   `json:"provider"`
 		ProviderEncrypted *domain.EncryptedProvider `json:"provider_encrypted"`
+		ModelsRefresh     *string                   `json:"models_refresh"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -54,6 +55,14 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 	}
 	if in.Effort != nil {
 		rs.Effort = strings.TrimSpace(*in.Effort)
+	}
+	if in.ModelsRefresh != nil {
+		v := strings.TrimSpace(*in.ModelsRefresh)
+		if len(v) > 40 || strings.ContainsAny(v, "\x00\r\n") {
+			writeError(w, domain.Errf(domain.CodeInvalidArgument, "invalid models_refresh"))
+			return
+		}
+		rs.ModelsRefresh = v
 	}
 	providerChanged := in.Provider != nil || in.ProviderEncrypted != nil
 	// A model editor may echo the current selection. An unchanged custom

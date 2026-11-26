@@ -315,6 +315,12 @@ public struct HubClient: HubAPI {
         return try Self.decode(Agent.self, from: data)
     }
 
+    public func listModelsAgain(of agent: String) async throws -> Agent {
+        let body = ["models_refresh": ISO8601DateFormatter().string(from: Date())]
+        let data = try await call("PUT", "/v1/agents/\(Self.segment(agent))/run-settings", body: HubJSON.encoder().encode(body))
+        return try Self.decode(Agent.self, from: data)
+    }
+
     public func handovers(of agent: String) async throws -> [Handover] {
         let envelope: HandoversEnvelope = try await get("/v1/agents/\(Self.segment(agent))/handovers", timeout: Self.pollTimeout)
         return envelope.handovers

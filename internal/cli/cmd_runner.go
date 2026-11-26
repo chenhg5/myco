@@ -340,6 +340,12 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 			return quota.Input{CLI: h.Name(), Workdir: workdir, Binary: first(ov.binary, rc.Binary), Home: home, Host: ch.host, Model: first(rep.quotaModel(), ov.model, rc.Model), Env: env, Overrides: overrides, Pinned: pinned, UnmodeledLaunch: len(args) > 0}
 		}, currentProvider)
 	}
+	if rep != nil && e.in.Getenv("CLAUDE_CODE_REMOTE_SESSION_ID") == "" && !strings.HasPrefix(me.Binding.Environment, "claude-cloud") && (h.Name() == "claude" || h.Name() == "codex") {
+		home, _ := os.UserHomeDir()
+		rep.startModels(e.in.Ctx, config.Dir(e.defaultPath), func(ch providerChoice) (providerTarget, bool) {
+			return providerTargetOf(h.Name(), home, quotaEnvironment(envFunc()), ch)
+		}, currentProvider)
+	}
 	if execSpec != nil {
 		allow := "any command"
 		if len(execSpec.Allow) > 0 {
@@ -380,6 +386,8 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 			return ch.settings
 		},
 		OnRunSettings:         rep.RunSettings,
+		ModelEnv:              rep.ModelEnv,
+		OnModelsRefresh:       rep.ModelsRefresh,
 		ApplyProviderSettings: remoteProviderApplier(cfgPath, c),
 		OnQuota:               rep.Quota,
 		OnStop:                rep.Goodbye,

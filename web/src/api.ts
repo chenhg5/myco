@@ -63,6 +63,8 @@ export interface RunSettings {
   mcp_tools?: boolean;
   /** permission level chosen by the node's owner ("" follows the machine); only its owner may change it */
   access?: RuntimeAccess | "";
+  /** the App's last request to list the provider's models again (a time); runners with "models_refresh" ask when it changes */
+  models_refresh?: string;
 }
 /** What the node actually runs; absent on nodes reported by old runners. */
 /** A model a CLI offers: the id --model takes, a display name, the efforts it supports. */
@@ -108,6 +110,9 @@ export interface Runtime {
   env?: "wsl" | string;
   /** the models its CLI offers on that computer, in the CLI's order (Codex; runners from v0.21.1) */
   models?: RuntimeModel[];
+  /** where models came from: "provider" (the vendor of its API key listed them, at models_at), "catalog" (myco's built-in list: the vendor could not be asked yet) or "cli" (the CLI's own list); absent from older runners */
+  models_from?: "provider" | "catalog" | "cli" | string;
+  models_at?: string;
   mcp?: MCPServer[];
   skills?: ToolSkill[];
   plugins?: ToolPlugin[];

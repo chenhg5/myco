@@ -894,6 +894,17 @@ public actor FakeHub: HubAPI {
         return agents[index].agent
     }
 
+    /// Its runner lists the models again at once (a real one within a minute).
+    public func listModelsAgain(of agent: String) async throws -> Agent {
+        try await check()
+        if tooOldForRunSettings { throw HubError(error: "not_found", message: "not found") }
+        guard let index = agents.firstIndex(where: { $0.agent.name == agent }) else {
+            throw HubError(error: "not_found", message: "agent \(agent) not found")
+        }
+        if agents[index].agent.runtime?.modelsFrom != nil { agents[index].agent.runtime?.modelsAt = Date() }
+        return agents[index].agent
+    }
+
     // MARK: Handovers
 
     private var handoverList: [Handover] = []

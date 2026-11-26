@@ -99,6 +99,10 @@ type Runtime struct {
 	// (EncodeModels), so that the struct stays comparable; "" when it did
 	// not say (Claude Code, older runners).
 	Models string `json:"models,omitempty"`
+	// ModelsFrom is where Models came from (provider, catalog, cli) and
+	// ModelsAt when the provider listed them.
+	ModelsFrom string    `json:"models_from,omitempty"`
+	ModelsAt   time.Time `json:"models_at,omitzero"`
 	// Tools is the secret-free project inventory as JSON; kept comparable
 	// like Models because Runtime is compared before database updates.
 	Tools string `json:"tools,omitempty"`
@@ -113,7 +117,7 @@ type RuntimeModel struct {
 }
 
 // MaxRuntimeModels bounds the models a runtime keeps.
-const MaxRuntimeModels = 40
+const MaxRuntimeModels = 100
 
 // EncodeModels keeps a sane list of models (ids and names of at most 80
 // characters, at most MaxRuntimeModels) as JSON; "" for none.
@@ -206,6 +210,9 @@ type RunSettings struct {
 	// Access is the permission level (readonly, workspace or full). Only the
 	// agent's owner sets it, and its machine caps it (spawn.max_access).
 	Access string `json:"access,omitempty"`
+	// ModelsRefresh is the App's last request to list the provider's
+	// models again (a time); the runner asks when it changes.
+	ModelsRefresh string `json:"models_refresh,omitempty"`
 }
 
 // Accesses are the permission levels, lowest first.
