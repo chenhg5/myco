@@ -16,16 +16,27 @@ const (
 
 // Watch is a durable, bounded wait. Terminal states cannot be reopened.
 type Watch struct {
-	ID          string     `json:"id"`
-	Agent       string     `json:"agent"`
-	Project     string     `json:"project,omitempty"`
-	Task        string     `json:"task,omitempty"`
-	What        string     `json:"what"`
-	Kind        string     `json:"kind"`
-	Target      string     `json:"target,omitempty"`
-	Command     string     `json:"command,omitempty"`
-	Match       string     `json:"match,omitempty"`
-	EverySec    int        `json:"every_sec,omitempty"`
+	ID          string       `json:"id"`
+	Agent       string       `json:"agent"`
+	Project     string       `json:"project,omitempty"`
+	Task        string       `json:"task,omitempty"`
+	What        string       `json:"what"`
+	Kind        string       `json:"kind"`
+	Target      string       `json:"target,omitempty"`
+	Command     string       `json:"command,omitempty"`
+	Match       string       `json:"match,omitempty"`
+	EverySec    int          `json:"every_sec,omitempty"`
+	MachineID   string       `json:"machine_id,omitempty"`
+	Environment string       `json:"environment,omitempty"`
+	Workdir     string       `json:"workdir,omitempty"`
+	Revision    int          `json:"revision,omitempty"`
+	ClaimID     string       `json:"claim_id,omitempty"`
+	ClaimRunner string       `json:"claim_runner,omitempty"`
+	ClaimUntil  *time.Time   `json:"claim_until,omitempty"`
+	NextCheckAt *time.Time   `json:"next_check_at,omitempty"`
+	LastCheckID string       `json:"last_check_id,omitempty"`
+	History     []WatchCheck `json:"history,omitempty"`
+
 	StartedAt   time.Time  `json:"started_at"`
 	Deadline    time.Time  `json:"deadline"`
 	LastCheckAt *time.Time `json:"last_check_at,omitempty"`
@@ -70,4 +81,12 @@ type WatchRepository interface {
 	List(context.Context, bool) ([]*Watch, error)
 	Hold(context.Context, string, *Watch, func(*Message) error) (*Message, error)
 	Save(context.Context, *Watch, time.Time, int, *Message) (bool, *Message, *Message, error)
+}
+
+// WatchCheck is a bounded, redacted command check summary.
+type WatchCheck struct {
+	At       time.Time `json:"at"`
+	Result   string    `json:"result"`
+	Matched  bool      `json:"matched"`
+	ExitCode int       `json:"exit_code"`
 }

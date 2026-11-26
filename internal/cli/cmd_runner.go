@@ -360,6 +360,11 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		OnStop:                rep.Goodbye,
 		Access:                access,
 		MaxAccess:             maxAccess,
+		CommandRunnerID:       runnerInstance,
+		CommandEnvironment:    host,
+		CommandWatchAllowed: func() bool {
+			return name != execnode.Name && name != machinenode.Name && e.machineMaxAccess() == harness.AccessFull
+		},
 	}, alog), nil
 }
 

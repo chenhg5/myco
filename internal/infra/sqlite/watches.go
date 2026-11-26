@@ -101,7 +101,7 @@ func (r *WatchRepo) Hold(ctx context.Context, id string, w *domain.Watch, fn fun
 		if err = json.Unmarshal([]byte(existing), &previous); err != nil {
 			return nil, internal(err)
 		}
-		if previous.Target != w.Target || previous.Kind != w.Kind {
+		if previous.Target != w.Target || previous.Kind != w.Kind || previous.Command != w.Command || previous.Match != w.Match || previous.EverySec != w.EverySec || previous.MachineID != w.MachineID || previous.Environment != w.Environment || previous.Workdir != w.Workdir {
 			return nil, domain.Errf(domain.CodeConflict, "this task already has a different active watch; stop it first")
 		}
 		*w = previous
@@ -127,7 +127,15 @@ func (r *WatchRepo) Save(ctx context.Context, w *domain.Watch, deadline time.Tim
 			wake = nil
 		}
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE watches SET state=?,deadline=?,checks=?,data=? WHERE id=? AND state='watching' AND deadline=? AND checks=?`, w.State, ms(w.Deadline), w.Checks, watchJSON(w), w.ID, ms(deadline), checks)
+	revision := w.Revision
+	w.Revision++
+	committed := false
+	defer func() {
+		if !committed {
+			w.Revision = revision
+		}
+	}()
+	res, err := tx.ExecContext(ctx, `UPDATE watches SET state=?,deadline=?,checks=?,data=? WHERE id=? AND state='watching' AND deadline=? AND checks=? AND COALESCE(json_extract(data,'$.revision'),0)=?`, w.State, ms(w.Deadline), w.Checks, watchJSON(w), w.ID, ms(deadline), checks, revision)
 	if err != nil {
 		return false, nil, nil, internal(err)
 	}
@@ -148,7 +156,7 @@ func (r *WatchRepo) Save(ctx context.Context, w *domain.Watch, deadline time.Tim
 					parent.Attempts--
 				}
 				parent.HoldWake, parent.HoldUntil = wake.ID, ""
-				if w.State == domain.WatchMet && w.Kind != "workflow" {
+				if w.State == domain.WatchMet && (w.Kind == "task" || w.Kind == "reply") {
 					reply, e := NewMessageRepo(r.db).one(ctx, tx, `WHERE reply_to=? AND to_agent=? AND type IN ('reply','event') ORDER BY created_at,id LIMIT 1`, w.Target, w.Agent)
 					if e != nil && !domain.IsCode(e, domain.CodeNotFound) {
 						return false, nil, nil, e
@@ -162,7 +170,7 @@ func (r *WatchRepo) Save(ctx context.Context, w *domain.Watch, deadline time.Tim
 				}
 				wake.Status = domain.StatusDone
 				// A completed child's reply is context for the resumed task, not a second delivery.
-				if w.State == domain.WatchMet {
+				if w.State == domain.WatchMet && (w.Kind == "task" || w.Kind == "reply") {
 					_, err = tx.ExecContext(ctx, `UPDATE messages SET status='done',updated_at=? WHERE reply_to=? AND to_agent=? AND type IN ('reply','event') AND status IN ('queued','delivered')`, ms(wake.CreatedAt), w.Target, w.Agent)
 					if err != nil {
 						return false, nil, nil, internal(err)
@@ -176,7 +184,9 @@ func (r *WatchRepo) Save(ctx context.Context, w *domain.Watch, deadline time.Tim
 			return false, nil, nil, err
 		}
 	}
-	return true, parent, wake, internal(tx.Commit())
+	err = internal(tx.Commit())
+	committed = err == nil
+	return true, parent, wake, err
 }
 
 // finishHeldWatches participates in the runner's existing wake transaction.
@@ -208,6 +218,7 @@ func finishHeldWatches(ctx context.Context, tx *sql.Tx, task, state string, now 
 		if err = w.End(now, state, "hub", "held task resumed"); err != nil {
 			return err
 		}
+		w.Revision++
 		w.LastCheckAt = &now
 		w.Checks++
 		w.LastResult = "task resumed"

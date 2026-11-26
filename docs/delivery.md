@@ -169,5 +169,33 @@ not cancel the delegated task or workflow itself.
 `task:` matches a terminal delegated task, `reply:` matches its reply/failure
 event, and `run:` matches a terminal workflow run. New watch commands on an
 older Hub report that the Hub must be upgraded; the existing hold commands
-keep their previous compatibility rules. Command checks are reserved for a
-later step and are not executed by these endpoints.
+keep their previous compatibility rules. Command watches additionally require a
+current local runner, as described below.
+
+### Checking a command in the background
+
+A full-access agent on a shell-enabled computer can wait on a local command without
+starting a model for each check:
+
+```sh
+myco watch start --what "Build completes" --cmd "gh run view 123 --json conclusion --jq .conclusion" --match "^success$" --every 30s --for 30m
+```
+
+Without `--match`, exit code 0 meets the condition. With it, the Go/RE2 expression
+matches bounded stdout/stderr. The check runs in that agent's saved working directory
+on its original computer. Readonly/workspace agents and exec/machine nodes are refused;
+this feature does not bypass a CLI sandbox or an exec allowlist. Upgrade the Hub and
+runner first. Full access and full shell permission must already be reported by that runner.
+
+The runner checks without using a model slot, at most two commands per agent at once.
+Each command has half the interval to finish (at most 60 seconds), with bounded output
+and process-tree cancellation. Hub summaries redact token/key-shaped values and keep
+only the latest line and five recent checks. Do not put credentials in the command.
+Use read-only, idempotent checks: a process interrupted by restart may be retried after
+its short lease expires. A completed report is safe to resend and wakes the agent once.
+
+The Hub still expires the watch if the runner goes offline or an older runner does not
+support commands. `--task <open-task-id>` uses the same atomic hold/resume as other
+watches; otherwise completion or expiry sends the agent one event. `watch stop` and
+`watch extend` use the existing owner/coordinator controls. The App shows the latest
+check result and time in the existing watch bar.

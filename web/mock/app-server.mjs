@@ -1767,7 +1767,7 @@ function watchesOf(h) {
       w({ id: "wat_ci", agent: "legacy-codex", what: "CI 跑完", kind: "workflow", started_at: iso(min(200)), deadline: iso(min(170)), ended_at: iso(min(170)), state: "expired", checks: 60, outcome: "30 分钟没等到" }),
       w({ id: "wat_review", agent: "legacy-codex", what: "Review 的审查意见", started_at: iso(min(95)), deadline: iso(min(35)), ended_at: iso(min(80)), state: "stopped", ended_by: CONSOLE, checks: 30, outcome: "你停止了" }),
       w({ id: "wat_pm", agent: "grok-agent-7c2e", what: "PM (Codex) 的答复", started_at: iso(min(6)), deadline: new Date(Date.now() + 24 * 60_000).toISOString(), last_check_at: iso(12), checks: 12, state: "watching" }),
-      w({ id: "wat_build", agent: "grok-agent-7c2e", what: "构建流水线跑完", kind: "workflow", started_at: iso(min(3)), deadline: new Date(Date.now() + 57 * 60_000).toISOString(), last_check_at: iso(45), last_result: "第 3/5 步：跑测试", checks: 4, state: "watching" }),
+      w({ id: "wat_build", agent: "grok-agent-7c2e", what: "构建流水线跑完", kind: "command", command: "echo pending", match: "^success$", every_sec: 30, started_at: iso(min(3)), deadline: new Date(Date.now() + 57 * 60_000).toISOString(), last_check_at: iso(45), last_result: "build: pending", checks: 4, state: "watching" }),
     ]);
   }
   return watchStore.get(h.id);

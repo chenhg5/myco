@@ -42,3 +42,14 @@ func (c *Client) ExtendWatch(ctx context.Context, id string, seconds int, dry bo
 	err := c.do(ctx, http.MethodPost, "/v1/watches/"+esc(id)+"/extend", dryQuery(dry), api.WatchExtendRequest{ForSec: seconds}, &out)
 	return &out, err
 }
+
+func (c *Client) ClaimWatch(ctx context.Context, id, runner string) (*api.Watch, error) {
+	var out api.Watch
+	err := c.do(ctx, http.MethodPost, "/v1/watches/"+esc(id)+"/claim", nil, api.WatchClaimRequest{Runner: runner}, &out)
+	return &out, err
+}
+func (c *Client) CheckWatch(ctx context.Context, id string, in api.WatchCheckRequest) (*api.Watch, error) {
+	var out api.Watch
+	err := c.do(ctx, http.MethodPost, "/v1/watches/"+esc(id)+"/checks", nil, in, &out)
+	return &out, err
+}

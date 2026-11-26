@@ -1332,16 +1332,16 @@ myco page file remove --page pg_demo --file paf_example --dry-run
 
 ### Durable watches
 
-A watch is a Hub-side, bounded wait for a reply, task completion, or workflow
-run. It does not run a model or execute commands. Watch records survive Hub
+A watch is a durable, bounded wait for a reply, task completion, local command, or workflow
+run. Checks do not run a model; command checks execute on the initiating agent's
+permitted local runner, never on the Hub. Watch records survive Hub
 restarts. Agent profiles and overview entries include `watching`, the number
 of records in `watching` state; this is separate from `held` and `queued`.
 Older Hubs omit this counter and do not provide the watch endpoints.
 
 - `POST /v1/watches` (agent token): `{what, kind, target, project?, task?, for_sec?}`.
-  `kind` is `reply`, `task`, or `workflow`; `command` is reserved and returns
-  `unsupported` in this version. `target` is a task message ID, or a workflow
-  run ID. The caller must be able to read the target. A reply watch targets a
+  `kind` is `reply`, `task`, `workflow`, or `command`. For reply/task/workflow,
+  `target` is a task message ID or workflow run ID. The caller must be able to read the target. A reply watch targets a
   task the caller sent. When specified, `project` must contain the agent and
   match the target and associated task. `task` is a delivered/acked/held task addressed to
   the caller; starting with `task` atomically holds it and creates the watch.
@@ -1370,8 +1370,45 @@ A Watch contains `id` (`wat_…`), `agent`, optional `project` and `task`, `what
 `last_result` (a status summary, never the target's content), `checks`, `state`,
 and optional `ended_at`, `ended_by`, `outcome`. Dates are RFC3339 timestamps.
 States are `watching`, `met`, `expired`, `stopped`; terminal states cannot be
-reopened. `command`, `match`, `every_sec` are reserved/optional fields;
-per-check command reporting is not available in this step.
+reopened. Command watches also carry `command`, optional `match`, `every_sec`,
+immutable execution `machine_id`, `environment`, `workdir`, and a `history` of at most
+five `{at, result, matched, exit_code}` summaries. `revision` fences concurrent updates.
+
+#### Command checks
+
+Start with `{what, kind:"command", command, match?, every_sec?, project?, task?, for_sec?}`;
+`target` must be absent. `command` is 1–8192 bytes without NUL, `match` is a Go/RE2
+regular expression (max 2048 bytes), and `every_sec` defaults to 30 (1–86400).
+The initiating agent must have a machine-bound, current runner advertising
+`command_watch`, full agent access and a machine allowing full shell access.
+Readonly/workspace agents, exec/machine nodes, and unbound or unsupported runners
+receive `permission_denied`. This does not grant a sandboxed agent unrestricted shell access.
+
+- `POST /v1/watches/{id}/claim` takes `{runner}` (the runtime runner instance).
+  Only the initiating agent can claim a due command check on its original machine,
+  environment and directory. The returned Watch contains `claim_id`, `claim_runner`,
+  `claim_until`, and `next_check_at`. A live lease or a not-yet-due check returns `conflict`.
+- `POST /v1/watches/{id}/checks` takes `{check_id, runner, result, matched, exit_code}`.
+  A report must own the current lease; a repeated check ID is idempotent. For watches
+  without `match`, exit code 0 determines success; with `match`, the runner evaluates
+  the regex against bounded stdout/stderr. Timeout never counts as a match. Reports
+  received after the deadline cannot meet the condition. Terminal watches stay terminal.
+
+The runner executes without a model in the saved working directory, with a minimal
+shell environment excluding myco credentials. Timeout is half the interval, capped
+at 60 seconds; process-tree cleanup may take up to another seven seconds. Captured
+stdout and stderr are capped at 32 KiB each; regex evaluation uses this bounded output
+with surrounding whitespace removed. The latest printable line is reported, even
+when captured output was truncated. Both runner and Hub redact credential-shaped
+strings before retaining at most 1024 bytes of that line. History holds only the most
+recent five summaries, never full output. Use existing CLI credential stores rather
+than literal secrets in `command` or `what`.
+
+A runner restart resumes the saved schedule. An abandoned lease can be claimed again;
+a crash during a process can therefore cause that check to run again: use read-only,
+idempotent commands. Only the final state and wake are committed once. An old or
+absent runner never prevents Hub expiration. Stop/deadline/policy cancellation ends
+an in-flight process when observed by the runner; it cannot undo command side effects.
 
 The Hub evaluates conditions in the background. `task` means done or failed;
 `reply` means a reply/failure event exists; `workflow` means succeeded, failed,

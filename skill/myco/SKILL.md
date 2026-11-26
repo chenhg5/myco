@@ -202,6 +202,22 @@ it waits until that task closes. A steer is part of the current task, not a new 
 If you sent a task by mistake or no longer need it, run `myco message stop --id <message-id>`.
 Only the sender can stop it; the recipient's runner will end its run when it notices.
 
+## Wait for a local command without a model
+
+On your existing full-access runner and shell-enabled computer:
+
+```bash
+myco watch start --what "Build completes" --cmd "gh run view 123 --json conclusion --jq .conclusion" --match "^success$" --every 30s --for 30m
+```
+
+Without `--match`, exit 0 matches. The runner checks in your saved working directory;
+it uses no model for each check, bounds runtime/output, redacts summaries, and resumes
+after restart. Use read-only, idempotent commands and keep secrets out of command text.
+Readonly/workspace sandboxes, exec/machine nodes, unbound agents and old runners are
+refused: this cannot grant shell permission or bypass an allowlist. Completion or
+expiry wakes you once; `--task <open-task-id>` holds and resumes that task atomically.
+The default duration is 30 minutes, at most 24 hours. Stop/extend use `myco watch`.
+
 ## Diagrams, code and pictures in a reply
 
 Replies and progress updates are Markdown, and the myco App draws more than text:

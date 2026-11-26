@@ -400,6 +400,30 @@ export const scenes = [
   },
 
   {
+    id: "watch-command",
+    title: "命令盯着 / Local command watches",
+    zh: "不用反复叫醒模型，后台定时检查命令；会话里能看到已脱敏的最近结果，并随时停止或延长。",
+    en: "Check a command in the background without repeated model calls, with a redacted latest result and Stop or Extend controls.",
+    tags: ["协作", "自动化"], themes: ["light", "dark"],
+    description: "Agent会话顶部展开的命令盯着条，显示最近检查的脱敏结果、检查次数、起止时间及延长和停止按钮",
+    prepare: async ({ page, T }) => {
+      await page.route("**/app/hubs/*/watches*", async route => {
+        if (route.request().method() !== "GET") return route.continue();
+        const response = await route.fetch(), data = await response.json();
+        for (const w of data.watches || []) if (w.agent === "build-backend" && w.state === "watching") {
+          Object.assign(w, {kind:"command",what:T("构建部署成功", "Build deployment succeeds"),command:"echo pending",match:"^success$",every_sec:30,last_result:"build: pending [redacted]",checks:8});
+        }
+        await route.fulfill({response,json:data});
+      });
+      await member(page, T);
+      const bar = page.locator(".conv-detail:visible [data-testid=watch-bar]").last();
+      await bar.waitFor();
+      await bar.locator(".watch-toggle").click();
+      await bar.locator(".watch-result",{hasText:"build: pending [redacted]"}).waitFor();
+    },
+  },
+
+  {
     id: "watch",
     title: "后台盯着，一眼看到 / Watching in the background",
     zh: "Agent 在后台等回复、等流水线时，会话顶部写着在等什么、还剩多久，可以延长或停止。",

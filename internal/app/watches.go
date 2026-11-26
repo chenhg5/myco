@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -96,6 +97,8 @@ func (s *WatchService) List(ctx context.Context, by Actor, agent, project string
 
 type WatchStart struct {
 	What, Kind, Target, Project, Task string
+	Command, Match                    string
+	EverySec                          int
 	ForSec                            int
 }
 
@@ -105,17 +108,36 @@ func (s *WatchService) Start(ctx context.Context, by Actor, in WatchStart, dry b
 	}
 	in.What = strings.TrimSpace(in.What)
 	in.Target = strings.TrimSpace(in.Target)
-	if in.Target == "" {
+	if in.Target == "" && in.Kind != "command" {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "target is required")
 	}
 	if in.What == "" || utf8.RuneCountInString(in.What) > 200 || strings.ContainsAny(in.What, "\r\n") {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "what must be 1 to 200 characters")
 	}
-	if in.Kind == "command" {
-		return nil, domain.Errf(domain.CodeUnsupported, "command watches are not available yet")
+	if in.Kind != "task" && in.Kind != "reply" && in.Kind != "workflow" && in.Kind != "command" {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "kind must be reply, task, workflow, or command")
 	}
-	if in.Kind != "task" && in.Kind != "reply" && in.Kind != "workflow" {
-		return nil, domain.Errf(domain.CodeInvalidArgument, "kind must be reply, task, or workflow")
+	if in.Kind == "command" {
+		if err := commandWatchAgent(by.Agent); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(in.Command) == "" || len(in.Command) > 8192 || strings.ContainsRune(in.Command, 0) || in.Target != "" {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "command requires 1–8192 bytes, no NUL, and no target")
+		}
+		if len(in.Match) > 2048 {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "match is too long (max 2048 bytes)")
+		}
+		if _, err := regexp.Compile(in.Match); err != nil {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "invalid match regular expression: %v", err)
+		}
+		if in.EverySec == 0 {
+			in.EverySec = 30
+		}
+		if in.EverySec < 1 || in.EverySec > 86400 {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "every_sec must be between 1 and 86400")
+		}
+	} else if in.Command != "" || in.Match != "" || in.EverySec != 0 {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "command, match, and every_sec require kind=command")
 	}
 	if in.ForSec == 0 {
 		in.ForSec = int(domain.WatchDefaultDuration / time.Second)
@@ -169,7 +191,11 @@ func (s *WatchService) Start(ctx context.Context, by Actor, in WatchStart, dry b
 	if in.Task != "" && in.Task == in.Target {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "watch cannot wait on its own associated task")
 	}
-	if in.Project != "" && in.Kind != "workflow" {
+	if in.Kind == "command" {
+		w.Command, w.Match, w.EverySec = in.Command, in.Match, in.EverySec
+		w.MachineID, w.Environment, w.Workdir = by.Agent.MachineID, by.Agent.Binding.Environment, by.Agent.Binding.Workdir
+	}
+	if in.Project != "" && (in.Kind == "task" || in.Kind == "reply") {
 		m, err := s.messages.messages.Get(ctx, in.Target)
 		if err != nil {
 			return nil, err
@@ -199,6 +225,9 @@ func (s *WatchService) Start(ctx context.Context, by Actor, in WatchStart, dry b
 	return w, nil
 }
 func (s *WatchService) condition(ctx context.Context, w *domain.Watch) (bool, string, time.Time, error) {
+	if w.Kind == "command" {
+		return false, "waiting for runner check", time.Time{}, nil
+	}
 	if w.Kind == "workflow" {
 		a, err := s.agents.Get(ctx, domain.AgentName(w.Agent))
 		if err != nil {
@@ -252,11 +281,17 @@ func (s *WatchService) condition(ctx context.Context, w *domain.Watch) (bool, st
 func (s *WatchService) wake(w *domain.Watch) *domain.Message {
 	now := s.clock.Now()
 	body := "Watch condition met: " + w.What + " (" + w.Target + ")."
+	if w.Kind == "command" {
+		body = "Watch condition met: " + w.What + "."
+	}
 	if w.State == domain.WatchExpired {
 		body = fmt.Sprintf("盯了 %d 分钟没等到：%s。请决定接下来怎么做。\nWatch expired: %s. Decide what to do next.", int(now.Sub(w.StartedAt)/time.Minute), w.What, w.What)
 	}
 	if w.State == domain.WatchStopped {
 		body = "Watch stopped: " + w.What + ". " + w.Outcome
+	}
+	if w.Kind == "command" && w.LastResult != "" {
+		body += "\nLast check: " + domain.SanitizeWatchResult(w.LastResult)
 	}
 	id := s.ids.New("msg")
 	return &domain.Message{ID: id, From: domain.AgentName(w.Agent), To: domain.AgentName(w.Agent), ThreadID: id, Type: domain.TypeEvent, Body: body, Status: domain.StatusQueued, CreatedAt: now, UpdatedAt: now, Project: w.Project}
@@ -304,6 +339,12 @@ func (s *WatchService) Tick(ctx context.Context) error {
 			} else if m.Status != domain.StatusHeld || m.Asking != "" || m.HoldUntil != "" && m.HoldUntil != domain.ManualHold && m.HoldUntil != w.Target {
 				state, outcome = domain.WatchStopped, "associated task resumed"
 			}
+		}
+		if state == domain.WatchWatching && w.Kind == "command" {
+			if now.Before(w.Deadline) {
+				continue
+			}
+			state, outcome = domain.WatchExpired, "deadline reached"
 		}
 		if state == domain.WatchWatching {
 			met, result, at, e := s.condition(ctx, w)

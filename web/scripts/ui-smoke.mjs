@@ -4253,6 +4253,7 @@ async function runMatrix(browser, size, scheme) {
       await two.locator(".watch-what", { hasText: "正在盯 2 件事" }).waitFor({ timeout: 10_000 });
       await two.locator(".watch-toggle").click();
       await two.locator(".watch-item", { hasText: "构建流水线跑完" }).waitFor({ timeout: 5_000 });
+      await two.locator(".watch-item", { hasText: "构建流水线跑完" }).locator(".watch-result code", { hasText: "build: pending" }).waitFor({ timeout: 5_000 });
       if ((await two.locator(".watch-item").count()) !== 2) throw new Error("展开后应列出两件");
       await settle(page, 300);
       await shot(page, size, scheme, "chat-watching-two");
