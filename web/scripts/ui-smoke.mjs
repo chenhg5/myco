@@ -4869,8 +4869,10 @@ async function runMatrix(browser, size, scheme) {
 
     await step("成员 · 模型和额度", async () => {
       // A manager picks a model and an effort: each goes to the App backend
-      // at once with both fields. The quota rows say how much each window
-      // used and when it resets; a nearly-used one is amber.
+      // at once with both fields. The quota rows say whose usage it is
+      // (provider · plan · computer), how much each window has left and
+      // when it resets; a nearly-used one is amber. The member cards carry
+      // the tightest window; a login to fix and a failed read say so.
       const lastBody = async (pred, what) => {
         for (let i = 0; i < 50; i++) {
           const r = await fetch(`http://${HOST}:${mockPort()}/app/mock/run-settings`);
@@ -4894,6 +4896,13 @@ async function runMatrix(browser, size, scheme) {
 
       const pm = page.locator(".mb-card", { hasText: "PM (Codex)" });
       await pm.scrollIntoViewIfNeeded();
+      const pmTag = pm.locator(".app-quota-tag");
+      await pmTag.waitFor({ timeout: 5_000 });
+      if ((await pmTag.locator(".app-quota-tag-text").innerText()).trim() !== "剩 5%" || (await pmTag.getAttribute("data-quota")) !== "tight") throw new Error(`成员卡片应写剩 5%（琥珀色），实际是「${await pmTag.innerText()}」`);
+      const pmTitle = await pmTag.getAttribute("title") || "";
+      if (!pmTitle.includes("Codex · ChatGPT 订阅 · Studio Mac") || !pmTitle.includes("小时后重置")) throw new Error(`悬停应写来源和重置：${pmTitle}`);
+      const mcpTag = page.locator(".mb-card", { hasText: "MCP Claude" }).locator(".app-quota-tag");
+      if ((await mcpTag.locator(".app-quota-tag-text").innerText()).trim() !== "需重新登录") throw new Error(`登录过期应写需重新登录，实际是「${await mcpTag.innerText()}」`);
       await pm.click();
       await page.locator(".ms").waitFor({ timeout: 10_000 });
       await clickVisible(page, page.locator(".ms .ms-fold"));
@@ -4919,17 +4928,19 @@ async function runMatrix(browser, size, scheme) {
       const five = body.locator(".app-quota", { hasText: "5 小时" });
       await five.waitFor({ timeout: 5_000 });
       const fiveText = compactText(await five.innerText());
-      if (!fiveText.includes("95%") || !fiveText.includes("重置")) {
-        throw new Error(`5 小时窗口应写已用 95% 和重置时间，实际是「${fiveText}」`);
+      if (!fiveText.includes("剩 5%") || !fiveText.includes("小时后重置")) {
+        throw new Error(`5 小时窗口应写剩 5% 和几小时后重置，实际是「${fiveText}」`);
       }
+      const source = compactText(await body.locator(".app-quota-source").innerText());
+      if (!source.includes("Codex · ChatGPT 订阅 · Studio Mac")) throw new Error(`应写来源 · 套餐 · 电脑，实际是「${source}」`);
       if (!(await five.getAttribute("class") || "").includes("is-tight")) {
         throw new Error("用了 95% 的窗口应标成琥珀色");
       }
       const amber = await color("--amber");
       const fiveColor = await five.locator(".app-kv-value").evaluate((el) => getComputedStyle(el).color);
       if (fiveColor !== amber) throw new Error(`用了 95% 的窗口应显示成琥珀色，实际是 ${fiveColor}`);
-      const sevenText = compactText(await body.locator(".app-quota", { hasText: "7 天" }).innerText());
-      if (!sevenText.includes("62%")) throw new Error(`7 天窗口应写已用 62%，实际是「${sevenText}」`);
+      const sevenText = compactText(await body.locator(".app-quota", { hasText: "每周" }).innerText());
+      if (!sevenText.includes("剩 38%")) throw new Error(`每周窗口应写剩 38%，实际是「${sevenText}」`);
       await five.scrollIntoViewIfNeeded();
       await settle(page, 200);
       await shot(page, size, scheme, "member-run");
@@ -4949,9 +4960,45 @@ async function runMatrix(browser, size, scheme) {
       const red = await color("--red");
       const spentColor = await spent.locator(".app-kv-value").evaluate((el) => getComputedStyle(el).color);
       if (spentColor !== red) throw new Error(`用完的窗口应显示成红色，实际是 ${spentColor}`);
-      await page.locator(".ms .ms-fold-body .app-quota-stale", { hasText: "的数据" }).waitFor({ timeout: 5_000 });
+      await page.locator(".ms .ms-fold-body .app-quota-stale", { hasText: "取到的数据" }).waitFor({ timeout: 5_000 });
+      await page.locator(".ms .ms-fold-body .app-quota-status", { hasText: "获取失败" }).waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "member-quota-spent");
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+
+      // A sign-in that expired: told to sign in again, the last numbers
+      // kept and marked old (never shown as a full quota).
+      const mcp = page.locator(".mb-card", { hasText: "MCP Claude" });
+      await mcp.scrollIntoViewIfNeeded();
+      await mcp.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const mcpBody = page.locator(".ms .ms-fold-body");
+      await mcpBody.locator(".app-quota-status.is-action", { hasText: "需要在 CLI 重新登录" }).waitFor({ timeout: 5_000 });
+      const mcpWeek = compactText(await mcpBody.locator(".app-quota", { hasText: "每周" }).innerText());
+      if (!mcpWeek.includes("剩 45%")) throw new Error(`登录过期时应保留上次的数字，实际是「${mcpWeek}」`);
+      if (!(await mcpBody.locator(".app-quota", { hasText: "每周" }).getAttribute("class") || "").includes("is-stale")) throw new Error("保留的旧数字应标成旧的");
+      await mcpBody.locator(".app-quota-stale", { hasText: "取到的数据" }).waitFor({ timeout: 5_000 });
+      await mcpBody.locator(".app-quota-status").scrollIntoViewIfNeeded();
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-quota-login");
+      await page.keyboard.press("Escape");
+      await page.locator(".ms").waitFor({ state: "hidden" });
+
+      // A model's own bucket folds under the windows.
+      const docs = page.locator(".mb-card", { hasText: "docs-claude" });
+      await docs.scrollIntoViewIfNeeded();
+      await docs.click();
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".ms .ms-fold"));
+      const docsBody = page.locator(".ms .ms-fold-body");
+      const fold = docsBody.locator(".app-quota-more", { hasText: "按模型的 1 个窗口" });
+      await fold.waitFor({ timeout: 5_000 });
+      if (await docsBody.locator(".app-quota", { hasText: "Opus" }).count()) throw new Error("按模型的窗口应先收起");
+      await fold.click();
+      const opus = compactText(await docsBody.locator(".app-quota", { hasText: "每周（Opus）" }).innerText());
+      if (!opus.includes("剩 29%")) throw new Error(`展开后应看到 Opus 的窗口，实际是「${opus}」`);
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
 
@@ -5095,9 +5142,9 @@ async function runMatrix(browser, size, scheme) {
       await go(page, "电脑", narrow);
       // A card each: what it is, whether it is on, what runs there.
       await page.locator(".pc-card").first().waitFor({ timeout: 20_000 });
-      // An agent on that computer has nearly used its quota: its card says
-      // so, quietly.
-      await page.locator(".pc-card .pc-quota", { hasText: "额度 95%" }).first().waitFor({ timeout: 10_000 });
+      // An agent on that computer must sign in again to read its quota:
+      // its card says so, quietly (before another's nearly used window).
+      await page.locator(".pc-card", { hasText: "Studio Mac" }).locator(".pc-quota", { hasText: "需重新登录" }).waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "computers");
       const back = () => navBackClick(page);

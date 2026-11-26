@@ -2,12 +2,12 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { appApi, isOldHub } from "@/appapi";
 import type { RunSettings, Runtime, RuntimeAccess, RuntimeModel } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { accessLabel, agentKind, canManage, isCloud, isInbox, machineOfRow, modelSourceLabel } from "@/app/nodes";
-import { ChevronDown, Shield, ShieldOff } from "lucide-react";
+import { accessLabel, agentKind, canManage, isCloud, isInbox, machineOfRow, machinesOfHub, modelSourceLabel } from "@/app/nodes";
+import { ChevronDown, ChevronRight, Shield, ShieldOff, TriangleAlert } from "lucide-react";
 import { hubAfter0194 } from "@/app/hubVersion";
 import { ConfirmDialog, ErrorText } from "@/app/dialogs";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
-import { quotaSpent, quotaStaleNote, quotaTight, quotaWindowLabel, quotaWindowText } from "@/app/quota";
+import { quotaHasNumbers, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaTight, quotaWindowLabel, quotaWindowText } from "@/app/quota";
 import { cn } from "@/lib/utils";
 import { L, lang } from "@/lib/i18n";
 
@@ -255,19 +255,8 @@ export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
   }
 
   const quota = rt?.quota;
-  const stale = quota ? quotaStaleNote(quota, now) : undefined;
-  const quotaRows = (
-    <>
-      {quota?.windows?.map((w) => (
-        <div key={w.name} className={cn("app-kv app-quota", quotaSpent(w) ? "is-over" : quotaTight(w) && "is-tight")}>
-          <span className="app-kv-label">{quotaWindowLabel(w)}</span>
-          <span className="app-kv-value">{quotaWindowText(w, now)}</span>
-        </div>
-      ))}
-      {stale && <div className="app-quota-stale">{stale}</div>}
-    </>
-  );
-  if (part === "quota") return quota?.windows?.length ? quotaRows : null;
+  const quotaRows = quota ? <QuotaRows quota={quota} row={row} now={now} /> : null;
+  if (part === "quota") return quotaRows;
 
   return (
     <>
@@ -605,3 +594,53 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
     </span>
   );
 }
+
+/** An account's usage: whose it is (provider · plan · computer), what went
+ *  wrong when the last read failed, then each window left and when it
+ *  resets. A failure keeps the last numbers with their age and never shows
+ *  as a full quota; a model's own buckets fold away. */
+function QuotaRows({ quota, row, now }: { quota: NonNullable<Runtime["quota"]>; row: AgentRow; now: number }) {
+  const [more, setMore] = useState(false);
+  const has = quotaHasNumbers(quota);
+  const status = quotaStatusText(quota);
+  const stale = quotaStaleNote(quota, now);
+  const source = quotaSourceText(quota, machinesOfHub(row.hub));
+  const windows = has ? quota.windows : [];
+  const main = windows.filter((w) => !w.model_scope);
+  const scoped = windows.filter((w) => !!w.model_scope);
+  const one = (w: (typeof windows)[number]) => (
+    <div key={`${w.name}/${w.model_scope || ""}`} className={cn("app-kv app-quota", quotaSpent(w) ? "is-over" : quotaTight(w) && "is-tight", (stale || status) && "is-stale")}>
+      <span className="app-kv-label">{quotaWindowLabel(w)}</span>
+      <span className="app-kv-value">{quotaWindowText(w, now)}</span>
+    </div>
+  );
+  const action = quota.status === "auth_required" || quota.status === "no_credentials";
+  return (
+    <>
+      {source && (
+        <div className="app-kv app-quota-source">
+          <span className="app-kv-label">{L("来源", "Source")}</span>
+          <span className="app-kv-value">{source}</span>
+        </div>
+      )}
+      {(status || !has) && (
+        <div className={cn("app-quota-status", action && "is-action")} role="status">
+          <TriangleAlert aria-hidden />
+          <span>{status || L("还没有额度数据", "No usage yet")}{has ? L("，下面是上次取到的。", "; below is the last read.") : L("，所以不显示数字。", ", so no numbers are shown.")}</span>
+        </div>
+      )}
+      {(main.length ? main : scoped).map(one)}
+      {main.length > 0 && scoped.length > 0 && (
+        <>
+          <button type="button" className="app-quota-more" aria-expanded={more} onClick={() => setMore((v) => !v)}>
+            <ChevronRight aria-hidden className={cn(more && "is-open")} />
+            {L(`按模型的 ${scoped.length} 个窗口`, `${scoped.length} per-model windows`)}
+          </button>
+          {more && scoped.map(one)}
+        </>
+      )}
+      {stale && <div className="app-quota-stale">{stale}</div>}
+    </>
+  );
+}
+

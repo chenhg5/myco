@@ -1192,7 +1192,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
       );
   // The card's 设置 tab: how it runs (model, effort, access, quota,
   // provider, how it receives), then whose it is and who sees it.
-  const hasQuota = !!rt?.quota?.windows?.length && !isInbox(ag);
+  const hasQuota = !!rt?.quota && !isInbox(ag);
   const sec_run = (
         <>
           <section className="app-group">

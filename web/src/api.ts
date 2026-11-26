@@ -13,17 +13,39 @@ export type ProviderSource = "pinned" | "machine" | "env_file" | "missing";
 export interface QuotaWindow {
   name: string;
   label?: string;
-  /** 0..1 */
+  /** share used, 0..1 (remaining is 1 - used) */
   used: number;
-  resets_at: string;
+  /** absent when the source does not say */
+  resets_at?: string;
   /** "allowed" while there is room; anything else means the window is spent. */
   status?: string;
+  /** the window's length (5 hours: 18000; a week: 604800) */
+  duration_sec?: number;
+  /** the models it counts, when it is one model's bucket (e.g. "opus") */
+  model_scope?: string;
 }
-/** A CLI's own usage report (Claude or Codex), as its local files hold it. */
+/** Why the last read failed (or "ok"); absent from older hubs. */
+export type QuotaStatus = "ok" | "unsupported" | "no_credentials" | "auth_required" | "throttled" | "transient_error" | "schema_changed";
 export interface Quota {
-  source: "claude" | "codex";
+  source: "claude" | "codex" | string;
+  /** the last successful read; zero (year 1) when there never was one */
   at: string;
+  /** empty when there never was a successful read */
   windows: QuotaWindow[];
+  /** whose usage: codex, claude, opencode_go, minimax */
+  provider?: string;
+  /** an opaque reference to the login on that computer (no path, account or token) */
+  profile_ref?: string;
+  /** the computer it was read on */
+  machine_id?: string;
+  /** how it was read: native, event, cache, official_api */
+  source_kind?: string;
+  status?: QuotaStatus | string;
+  /** when it was last tried (at is the last success) */
+  checked_at?: string;
+  error_code?: string;
+  /** chatgpt_subscription, claude_subscription, go, coding_plan */
+  plan?: string;
 }
 /** What the node runs unless told otherwise; absent on nodes reported by old runners. */
 export interface EncryptedProvider { id: string; from: string; body: string }

@@ -568,7 +568,9 @@ const deletableAgents = () => [
   makeAgent({
     name: "temp-codex", owner: "alice", owner_id: "mem_alice", display_name: "临时 Codex",
     description: "临时机器上的 Codex，用来演示删除机器。", kind: "agent", machine_id: "m_delete",
-    runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", access: "workspace", max_access: "full" },
+    // A provider key it can't find: no numbers at all (never a full quota).
+    runtime: { cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", access: "workspace", max_access: "full",
+      quota: { source: "minimax", provider: "minimax", plan: "coding_plan", machine_id: "m_delete", status: "no_credentials", at: "0001-01-01T00:00:00Z", checked_at: iso(120), windows: [] } },
     binding: { harness: "codex", environment: "macOS 26.1", workdir: "~/code/temp" },
     labels: ["machine=temp-mac"],
   }),
@@ -773,10 +775,11 @@ const state = {
             // a custom address (Settings: 自定义地址)
             provider: "api.example-llm.com", provider_host: "api.example-llm.com", provider_source: "env_file",
             quota: {
-              source: "codex", at: iso(120),
+              source: "codex", provider: "codex", plan: "chatgpt_subscription", machine_id: "m_studio", source_kind: "native",
+              status: "ok", at: iso(120), checked_at: iso(120),
               windows: [
-                { name: "five_hour", used: 0.95, resets_at: iso(-(3 * 3600 + 40 * 60)) },
-                { name: "seven_day", used: 0.62, resets_at: iso(-(3 * 86_400)) },
+                { name: "primary", duration_sec: 18_000, used: 0.95, resets_at: iso(-(3 * 3600 + 40 * 60)) },
+                { name: "secondary", duration_sec: 604_800, used: 0.62, resets_at: iso(-(3 * 86_400)) },
               ],
             },
           },
@@ -800,6 +803,16 @@ const state = {
           // Its runner lets the App switch its provider from here (remote_provider)
           // and lists the cc-switch providers on its computer (never a key).
           runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools", "remote_provider"],
+            // Its Claude sign-in expired: the last numbers stay, marked old,
+            // and the person is told to sign in again.
+            quota: {
+              source: "claude", provider: "claude", plan: "claude_subscription", machine_id: "m_studio", source_kind: "cache",
+              status: "auth_required", error_code: "oauth_expired", at: iso(26 * 3600), checked_at: iso(300),
+              windows: [
+                { name: "five_hour", duration_sec: 18_000, used: 0.3 },
+                { name: "seven_day", duration_sec: 604_800, used: 0.55, resets_at: iso(-(4 * 86_400)) },
+              ],
+            },
             provider: "DeepSeek", provider_host: "api.deepseek.com", provider_source: "machine",
             providers: [
               { ref: "cc-switch:deepseek", name: "DeepSeek", host: "api.deepseek.com", model: "deepseek-v4" },
@@ -832,11 +845,14 @@ const state = {
             // follows this computer, which sends it through a local gateway
             effort: "low", effort_source: "app", access: "readonly", max_access: "workspace", provider: "magpie 网关", provider_host: "127.0.0.1:3425", provider_source: "machine", features: ["mcp_tools"],
             away: "stopped",
+            // a weekly bucket of its own for Opus (folded under the windows)
             quota: {
-              source: "claude", at: iso(600),
+              source: "claude", provider: "claude", plan: "claude_subscription", machine_id: "m_studio", source_kind: "event",
+              status: "ok", at: iso(600), checked_at: iso(600),
               windows: [
-                { name: "five_hour", used: 0.4, resets_at: iso(-(2 * 3600)) },
-                { name: "seven_day", used: 0.18, resets_at: iso(-(2 * 86_400)) },
+                { name: "five_hour", duration_sec: 18_000, used: 0.4, resets_at: iso(-(2 * 3600)) },
+                { name: "seven_day", duration_sec: 604_800, used: 0.18, resets_at: iso(-(2 * 86_400)) },
+                { name: "seven_day_opus", duration_sec: 604_800, model_scope: "opus", used: 0.71, resets_at: iso(-(2 * 86_400)) },
               ],
             },
           },
@@ -877,9 +893,11 @@ const state = {
           kind: "agent",
           runtime: {
             cli: "codex-cloud", model: "gpt-6-sol", model_source: "observed", access: "readonly",
-            // Out of quota two hours ago: red, and the numbers are stale.
+            // Out of quota two hours ago, and reading it since failed: red,
+            // the numbers kept with their age.
             quota: {
-              source: "codex", at: iso(2 * 3600),
+              source: "codex", provider: "codex", plan: "chatgpt_subscription", status: "transient_error",
+              at: iso(2 * 3600), checked_at: iso(60),
               windows: [{ name: "five_hour", used: 1, resets_at: iso(-(40 * 60)), status: "rejected" }],
             },
           },

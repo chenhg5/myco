@@ -6840,6 +6840,63 @@ body.is-resizing {
   font-size: 11.5px;
   color: var(--muted);
 }
+/* Kept from before a failed read: the numbers are not fresh. */
+.app-quota.is-stale .app-kv-value { opacity: .7; }
+.app-quota-source .app-kv-value { color: var(--muted); }
+/* Why the last read failed; a login or key to fix is amber. */
+.app-quota-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.app-quota-status svg { flex: none; width: 13px; height: 13px; margin-top: 2px; }
+.app-quota-status.is-action { color: var(--amber); }
+/* A model's own buckets, folded. */
+.app-quota-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 8px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.app-quota-more:hover { color: var(--fg); background: var(--pill-hover); }
+.app-quota-more svg { width: 12px; height: 12px; transition: transform .15s; }
+.app-quota-more svg.is-open { transform: rotate(90deg); }
+/* A member's quota in a list: the tightest window left. */
+.app-quota-tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 17px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.app-quota-tag svg { width: 10px; height: 10px; }
+.app-quota-tag.is-tight { color: var(--amber); }
+.app-quota-tag.is-spent { color: var(--red); }
+.app-quota-tag.is-action { color: var(--amber); }
+.app-quota-tag.is-stale:not(.is-action) { opacity: .75; }
+.sp-member-meta:has(.sp-member-quota) { display: flex; align-items: center; gap: 6px; }
+.sp-member-meta .sp-member-quota { margin-left: auto; }
+.sp-member-meta-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-clean .app-quota-tag { padding: 0; background: none; }
+.ui-clean .app-quota-tag svg { display: none; }
 
 /* Node details: changes to its card */
 .app-history {
