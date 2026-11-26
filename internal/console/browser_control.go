@@ -20,8 +20,9 @@ import (
 )
 
 const (
-	browserControlIdle = 5 * time.Minute
-	browserControlPoll = 2 * time.Second
+	browserControlIdle       = 5 * time.Minute
+	browserControlPoll       = 2 * time.Second
+	browserControlGrantGrace = 30 * time.Second
 )
 
 type browserControlSession struct {
@@ -320,8 +321,9 @@ func browserControlReason(reason string) string {
 	}
 }
 
-func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession, id string, host *api.ActionHost, openJob string) {
+func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession, id string) {
 	ctx := s.ctx
+	grantCheck := browserControlGrantCheck{}
 	tick := time.NewTicker(browserControlPoll)
 	defer tick.Stop()
 	after := 0
@@ -370,13 +372,12 @@ func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession
 			return
 		}
 		check, cancel = context.WithTimeout(ctx, 5*time.Second)
-		// Check only this session's grant through its original owned job.
-		// OwnerActionGrants refreshes every grant: an unrelated stale target or
-		// a list timeout must not be mistaken for this grant being revoked.
-		// Stop describes the completed OPEN JOB, not the live session grant.
-		state, err := c.ActionHostJob(check, openJob, host.ID, host.Generation, 0)
+		// A session outlives host generations and completed jobs. Existing
+		// Hubs expose owner grants only as a list; inspect this grant's ID,
+		// including terminal states, independently of any host/job identity.
+		grants, err := c.OwnerActionGrants(check, "")
 		cancel()
-		if reason := browserControlGrantReason(state, err); reason != "" {
+		if reason := grantCheck.reason(time.Now(), s.grant, s.expires, grants, err); reason != "" {
 			b.closeBrowserControl(s, reason, false)
 			return
 		}
@@ -390,22 +391,44 @@ func (b *Backend) watchBrowserControl(c *client.Client, s *browserControlSession
 	}
 }
 
-// A transport/permission error is fail-closed, but is not evidence of revocation.
-func browserControlGrantReason(state *api.ActionHostJobState, err error) string {
-	if err != nil || state == nil {
-		return "grant_check_failed"
-	}
-	if state.GrantState == api.GrantExpired {
+type browserControlGrantCheck struct {
+	failedSince time.Time
+}
+
+func (g *browserControlGrantCheck) reason(now time.Time, id string, expires time.Time, grants []api.ActionGrant, err error) string {
+	// The local grant deadline always wins, even during a Hub outage.
+	if !now.Before(expires) {
 		return "grant_expired"
 	}
-	if state.GrantState != api.GrantActive {
-		return "grant_ended"
+	if err == nil {
+		for _, grant := range grants {
+			if grant.ID != id {
+				continue
+			}
+			switch grant.State {
+			case api.GrantExpired:
+				return "grant_expired"
+			case api.GrantRevoked, api.GrantEnded, api.GrantDenied:
+				return "grant_ended"
+			case api.GrantActive:
+				if grant.ExpiresAt != nil {
+					if !now.Before(*grant.ExpiresAt) {
+						return "grant_expired"
+					}
+					g.failedSince = time.Time{}
+					return ""
+				}
+			}
+			break
+		}
 	}
-	if state.GrantExpiresAt == nil {
+	// Absence, malformed data and HTTP failures are not proof of revocation.
+	// Bound consecutive uncertainty; a successful check resets this window.
+	if g.failedSince.IsZero() {
+		g.failedSince = now
+	}
+	if now.Sub(g.failedSince) >= browserControlGrantGrace {
 		return "grant_check_failed"
-	}
-	if !time.Now().Before(*state.GrantExpiresAt) {
-		return "grant_expired"
 	}
 	return ""
 }
@@ -452,7 +475,7 @@ func (b *Backend) runBrowserControlJob(hostCtx context.Context, c *client.Client
 	defer stop()
 
 	if op == "open" {
-		return b.openBrowserControl(hostCtx, jobCtx, c, host, hj, h, p, args)
+		return b.openBrowserControl(hostCtx, jobCtx, c, hj, h, p, args)
 	}
 	s := b.ownedBrowserControl(args.String("session"), h.ID, g.Agent, g.ID, p.Policy.Profile, p.Policy.Binding)
 	if s == nil {
@@ -552,7 +575,7 @@ func (b *Backend) runBrowserControlJob(hostCtx context.Context, c *client.Client
 	return done
 }
 
-func (b *Backend) openBrowserControl(hostCtx, jobCtx context.Context, c *client.Client, host *api.ActionHost, hj api.ActionHostJob, h Hub, p browserHostPolicy, args api.BrowserControlArgs) api.ActionJobComplete {
+func (b *Backend) openBrowserControl(hostCtx, jobCtx context.Context, c *client.Client, hj api.ActionHostJob, h Hub, p browserHostPolicy, args api.BrowserControlArgs) api.ActionJobComplete {
 	g := hj.Grant
 	key := "pending:" + hj.Job.ID
 	s := b.reserveBrowserControl(hostCtx, h, p, g, key)
@@ -617,7 +640,7 @@ func (b *Backend) openBrowserControl(hostCtx, jobCtx context.Context, c *client.
 	s.mu.Lock()
 	s.host = auditHost
 	s.mu.Unlock()
-	go b.watchBrowserControl(c, s, id, host, hj.Job.ID)
+	go b.watchBrowserControl(c, s, id)
 	return api.ActionJobComplete{State: api.JobSucceeded, Result: result, BrowserHost: auditHost}
 }
 

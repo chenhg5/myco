@@ -31,7 +31,7 @@ type controlFixtureComponent struct {
 }
 
 func (f *controlFixtureComponent) Call(ctx context.Context, scope, method, path string, in, out any) error {
-	if !strings.HasPrefix(scope, "agent-") {
+	if !strings.HasPrefix(scope, "agent-") && !(scope == "control-discovery" && method == "GET" && path == "/status") {
 		return errors.New("wrong control scope")
 	}
 	f.mu.Lock()
@@ -104,10 +104,22 @@ func TestBrowserControlHostLifecycle(t *testing.T) {
 	expiry := time.Now().Add(time.Minute)
 	revoked := make(chan api.ActionGrantRevoke, 1)
 	var openCompleted atomic.Bool
-	watchedGrant := make(chan struct{}, 1)
+	var registration atomic.Int32
+	var generation atomic.Value
+	generation.Store("initial")
+	watchedGrant := make(chan int, 8)
+	var grantLookups atomic.Int32
 
 	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/action-hosts"):
+			var input api.ActionHostRegister
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Error(err)
+			}
+			generation.Store(input.Generation)
+			registration.Add(1)
+			_ = json.NewEncoder(w).Encode(api.ActionHost{ID: "host", MachineID: input.MachineID, Generation: input.Generation, Provider: "browser", Resource: input.Resource})
 		case strings.HasSuffix(r.URL.Path, "/revoke"):
 			var input api.ActionGrantRevoke
 			_ = json.NewDecoder(r.Body).Decode(&input)
@@ -116,24 +128,38 @@ func TestBrowserControlHostLifecycle(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/artifacts"):
 			_ = json.NewEncoder(w).Encode(api.ActionArtifact{ID: "art_fixture", MediaType: "image/png", ExpiresAt: expiry})
 		case strings.HasSuffix(r.URL.Path, "/action-grants"):
-			// Another grant's failed refresh used to abort the entire list and
-			// incorrectly end this still-active control session.
-			t.Error("control watcher requested the global grant list")
-			w.WriteHeader(http.StatusInternalServerError)
+			if r.URL.Query().Get("state") != "" {
+				t.Error("terminal grant states must be visible")
+			}
+			lookup := int(grantLookups.Add(1))
+			defer func() { watchedGrant <- lookup }()
+			switch lookup {
+			case 1:
+				w.WriteHeader(http.StatusNotFound)
+			case 2:
+				w.WriteHeader(http.StatusInternalServerError)
+			case 3:
+				_ = json.NewEncoder(w).Encode(api.ActionGrantList{Grants: []api.ActionGrant{}})
+			default:
+				_ = json.NewEncoder(w).Encode(api.ActionGrantList{Grants: []api.ActionGrant{{ID: "grant", State: api.GrantActive, ExpiresAt: &expiry}}})
+			}
 
 		default:
+			if strings.Contains(r.URL.Path, "/action-jobs/") && r.URL.Query().Get("generation") != generation.Load().(string) {
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
 			if r.URL.Query().Get("wait") == "30" {
 				<-r.Context().Done()
 				return
 			}
-			stopped := strings.HasSuffix(r.URL.Path, "/action-jobs/job1") && openCompleted.Load()
-			if stopped {
-				select {
-				case watchedGrant <- struct{}{}:
-				default:
-				}
+			// A refreshed host generation cannot inspect the old job, which
+			// can also disappear once completed. Neither owns the session.
+			if strings.HasSuffix(r.URL.Path, "/action-jobs/job1") && openCompleted.Load() {
+				w.WriteHeader(http.StatusNotFound)
+				return
 			}
-			_ = json.NewEncoder(w).Encode(api.ActionHostJobState{Job: api.ActionJob{State: api.JobSucceeded}, Stop: stopped, GrantState: api.GrantActive, GrantExpiresAt: &expiry})
+			_ = json.NewEncoder(w).Encode(api.ActionHostJobState{Job: api.ActionJob{State: api.JobSucceeded}, GrantState: api.GrantActive, GrantExpiresAt: &expiry})
 		}
 	}))
 	defer hub.Close()
@@ -152,10 +178,12 @@ func TestBrowserControlHostLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := browserHostPolicy{scope, policy}
-	resource := &api.ActionResource{Provider: "browser", ID: "work", Binding: policy.Binding, Name: "Work"}
-	host := &api.ActionHost{ID: "host", MachineID: "machine", Generation: "gen", Provider: "browser", Resource: resource}
+	host, err := b.registerBrowserHost(ctx, c, "machine", p)
+	if err != nil {
+		t.Fatal(err)
+	}
 	grant := api.ActionGrant{ID: "grant", Agent: "browser-agent", State: api.GrantActive, ExpiresAt: &expiry,
-		Permissions: []string{"browser.control"}, Target: api.ActionTarget{Kind: "machine", ID: "machine", Resource: resource}}
+		Permissions: []string{"browser.control"}, Target: api.ActionTarget{Kind: "machine", ID: "machine", Resource: host.Resource}}
 	index := 0
 	call := func(action, args string, g api.ActionGrant) api.ActionJobComplete {
 		index++
@@ -176,16 +204,33 @@ func TestBrowserControlHostLifecycle(t *testing.T) {
 		t.Fatalf("open = %+v", done)
 	}
 	openCompleted.Store(true)
+	previousGeneration := host.Generation
+	host, err = b.registerBrowserHost(ctx, c, "machine", p)
+	if err != nil || host.Generation == previousGeneration || registration.Load() != 2 {
+		t.Fatalf("host was not replaced: %+v %v", host, err)
+	}
+	if _, err := c.ActionHostJob(ctx, "job1", "host", previousGeneration, 0); err == nil {
+		t.Fatal("old generation unexpectedly remained valid")
+	}
+	if _, err := c.ActionHostJob(ctx, "job1", "host", host.Generation, 0); err == nil {
+		t.Fatal("old completed job unexpectedly remained available")
+	}
 	replayArgs := `{"session":"session1","graph":{"nodes":[{"id":"note","type":"note"}],"edges":[]}}`
 	if done := call("run", replayArgs, grant); done.State != api.JobSucceeded {
 		t.Fatal("replay failed", done)
 	}
-	select {
-	case <-watchedGrant:
-	case <-time.After(8 * time.Second):
-		t.Fatal("grant watcher did not check completed open job")
+	for want := 1; want <= 5; want++ {
+		select {
+		case got := <-watchedGrant:
+			if got != want {
+				t.Fatalf("grant lookup order: %d, want %d", got, want)
+			}
+		case <-time.After(8 * time.Second):
+			t.Fatal("session stopped during host replacement or transient grant lookup failure")
+		}
 	}
-	// A completed job's Stop:true never means that its grant has ended.
+	// Two real registrations, a missing job, HTTP 404/500 and a temporary
+	// missing grant must not end this session before successful verification.
 	if done := call("screenshot", session, grant); done.State != api.JobSucceeded {
 		t.Fatal("successful replay ended the session", done)
 	}
