@@ -522,6 +522,16 @@ async function runMatrix(browser, size, scheme) {
       // The project's head says where you are: the chat has no second header.
       if (await page.locator(".sp-home .conv-head").count()) throw new Error("项目首页的对话不该再有自己的标题栏（和项目标题重复）");
       if (!(await page.locator(".sp-home .conv-compose").first().isVisible())) throw new Error("项目首页应能直接和协调者说话");
+      // The chat's own ⋯ (background, goal, files, find…) is in the
+      // project's header, as in any chat.
+      await page.locator(".sp-home [data-testid=home-more]").click();
+      for (const item of ["文件和应用", "聊天背景", "在这段对话里找", "导出这段对话"]) {
+        await page.locator(".conv-menu").getByRole("menuitem", { name: item }).waitFor({ timeout: 5_000 });
+      }
+      await settle(page, 200);
+      await shot(page, size, scheme, "project-home-more");
+      await page.keyboard.press("Escape");
+      await page.locator(".conv-menu").waitFor({ state: "hidden", timeout: 5_000 });
       await page.locator(".sp-home .handoff").first().waitFor({ timeout: 20_000 });
       const card = compactText(await page.locator(".sp-home .handoff").first().innerText());
       if (!card.startsWith("派给")) throw new Error(`派活卡片应写明派给谁，实际是「${card}」`);
@@ -3049,9 +3059,20 @@ async function runMatrix(browser, size, scheme) {
       await doc.locator(".fp-code", { hasText: "<h1>新版首页</h1>" }).waitFor({ timeout: 5_000 });
       await page.keyboard.press("Escape");
       await doc.waitFor({ state: "hidden", timeout: 5_000 });
-      // A log reads as plain text.
+      // A log reads as plain text. While it comes (slowly here), the
+      // mushroom with its magnifying glass looks for it.
+      const slowFile = async (route) => {
+        if (route.request().url().includes("as=text")) await new Promise((ok) => setTimeout(ok, 1500));
+        await route.continue();
+      };
+      await page.route("**/files/**", slowFile);
       await page.locator(".conv-detail button.conv-attach:not(.is-image)", { hasText: "build.log" }).last().click();
+      const fileLoading = doc.locator("[data-testid=file-loading]");
+      await fileLoading.waitFor({ timeout: 5_000 });
+      if (!(await fileLoading.locator("svg.seek-sprite").count())) throw new Error("打开文件时应有拿放大镜找东西的蘑菇");
+      await shot(page, size, scheme, "file-loading");
       await doc.locator(".fp-code", { hasText: "BUILD SUCCESSFUL" }).waitFor({ timeout: 5_000 });
+      await page.unroute("**/files/**", slowFile);
       await page.keyboard.press("Escape");
       await doc.waitFor({ state: "hidden", timeout: 5_000 });
       // Every one of them answered before the next step uses this chat.

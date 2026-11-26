@@ -8,6 +8,7 @@ import { bytes } from "@/app/attach";
 import { handleLinkClick } from "@/app/links";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { SeekMushroom } from "@/app/Working";
 
 /*
  * A file someone sent, read in the App: Markdown rendered as a document,
@@ -358,7 +359,7 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
         </button>
       )}>
       {error ? <p className="fp-note">{error}</p>
-        : text === null ? <p className="fp-note">{L("正在打开…", "Opening…")}</p>
+        : text === null ? <FileLoading name={file.name} />
         : changes ? (
           <pre className="fp-diff">{changes.map((l, k) => (
             <span key={k} className={cn("fp-line", `is-${l.kind}`)}>{l.kind === "add" ? "+ " : l.kind === "del" ? "− " : "  "}{l.text}{"\n"}</span>
@@ -373,3 +374,29 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
     </DockPanel>
   );
 }
+
+/** While a file is fetched for the preview: the mushroom with its
+ *  magnifying glass pacing (as search does), a line that changes every few
+ *  seconds, and a hint when it takes long. */
+function FileLoading({ name }: { name: string }) {
+  const [t, setT] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    const id = window.setInterval(() => setT(Date.now() - started), 600);
+    return () => window.clearInterval(id);
+  }, []);
+  const lines: [string, string][] = [
+    [`正在翻找「${name}」…`, `Looking for "${name}"…`],
+    ["从工作区里把它搬过来", "Carrying it over from the workspace"],
+    ["拍拍灰，马上就好", "Dusting it off, nearly there"],
+    ["一页一页理整齐", "Putting the pages in order"],
+  ];
+  const [zh, en] = t > 10_000 ? ["大文件要多等一会儿", "A big file takes a little longer"] : lines[Math.floor(t / 2200) % lines.length];
+  return (
+    <div className="fp-loading" role="status" aria-live="polite" data-testid="file-loading">
+      <div className="seek-track"><span className="seek-walker"><SeekMushroom /></span></div>
+      <span key={zh} className="work-verb fp-loading-line">{L(zh, en)}</span>
+    </div>
+  );
+}
+

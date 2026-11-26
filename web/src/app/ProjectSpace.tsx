@@ -853,6 +853,7 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
   // Only between agents: a person is someone you talk to, not a handoff.
   const person = (n: string) => { const r = rowOf(n); return !!r && agentKind(r.st.agent) === "human"; };
   const stale = (id: string) => rows.some((x) => x.hub.id === hubId && (x.st.stale_tasks || []).includes(id));
+  const more = useRef<((anchor: HTMLElement) => void) | null>(null);
   const inserts = withStale(handoffsOfHome(items, coordinator, (n) => isMe(n, you) || (!!peer && n === peer) || person(n)), stale).map((h) => ({
     id: h.id,
     at: h.at,
@@ -876,6 +877,12 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
             </button>
           )}
           {fullToggle}
+          {/* the chat's own ⋯ (background, goal, files, find, export…): the
+              same as in any chat, here in the project's header */}
+          <button type="button" className="app-btn app-btn-plain" data-testid="home-more" onClick={(e) => more.current?.(e.currentTarget)}
+            title={L("更多", "More")} aria-label={L("更多", "More")} aria-haspopup="menu">
+            <MoreHorizontal />
+          </button>
         </span>
       </header>
       <div className="sp-intro"><IntroCard id="projects" {...introOf("projects")} /></div>
@@ -889,6 +896,7 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
         projectTitle={project.title || project.name}
         inserts={inserts}
         bare
+        moreRef={more}
         onBack={() => undefined}
         onNewConversation={() => undefined}
         onRefresh={onRefresh}
