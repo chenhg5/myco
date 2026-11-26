@@ -272,6 +272,13 @@ public final class WorkspaceSession {
     /// Looks in a row that failed.
     private var failures = 0
 
+    /// The names a person says here: agents and members (as shown and by
+    /// name), projects (title and name).
+    var speechNames: [String] {
+        statuses.flatMap { [$0.agent.displayName ?? "", $0.agent.name] }.filter { !$0.isEmpty }
+            + projects.flatMap { [$0.title, $0.name] }
+    }
+
     public func refresh() async {
         do {
             if me.isEmpty || whoami == nil {
@@ -287,6 +294,8 @@ public final class WorkspaceSession {
             machines = o.machines
             self.projects = p.filter { $0.archived != true }
             self.recent = r
+            // Speech recognition listens for this workspace's names.
+            SpeechVocabulary.shared.setWorkspace(speechNames)
             loadedAt = Date()
             failures = 0
             problem = nil
