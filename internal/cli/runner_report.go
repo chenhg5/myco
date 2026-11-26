@@ -69,6 +69,9 @@ type runtimeReporter struct {
 	target      providerTarget
 	hasTarget   bool
 	refresh     chan struct{}
+	// modelsDone is closed when the models loop has stopped (tests wait
+	// for it before their temporary directories go).
+	modelsDone chan struct{}
 	refreshSeen bool
 	refreshLast string
 }
