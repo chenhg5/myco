@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.21
+
+- Hub: much faster on large workspaces. The overview, agent list, conversations and per-pair views no longer scan every message (on 100,000 messages, conversations went from 40–70 ms to under 1 ms), and long chats open without asking the hub for every run.
+- Hub: slow requests, failed requests and slow SQL statements are logged with their request id, and `myco hub perf` shows per-endpoint and per-statement timings; hub and runner log files are kept for two weeks.
+- Quota: the App shows the Claude quota that a cloud session reports for itself (agents without a runner).
+- App: the sidebar says which entries you hid, the App starts from its saved data even after an update, and what you add while a run works stays a separate message.
+
+**中文**
+
+- Hub：大工作区明显变快。概览、agent 列表、会话列表和两人对话不再扫描全部消息（10 万条消息时会话列表从 40–70 毫秒降到 1 毫秒以内），长会话打开时也不再逐个向 Hub 查询。
+- Hub：慢请求、失败请求和慢 SQL 都会连同请求编号写进日志，`myco hub perf` 可以查看各接口和各语句的耗时；Hub 和 runner 的日志保留两周。
+- 额度：App 能显示云端会话自己上报的 Claude 额度（没有 runner 的 agent）。
+- 桌面应用：侧栏会写明隐藏了哪些项；更新后也会先用已保存的数据启动；运行过程中补充的话会单独成一条消息。
+
 ## v0.22.20
 
 - App: a livelier "Sending" indicator shown once, All activity as a group chat, and an addition that quotes its task only when that could be mistaken.
