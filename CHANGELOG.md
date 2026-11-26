@@ -4,6 +4,18 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.20
+
+- App: a livelier "Sending" indicator shown once, All activity as a group chat, and an addition that quotes its task only when that could be mistaken.
+- App: app OS permissions are kept when the hub page lookup fails instead of being dropped.
+- Browser automation: JSON returned as a string stays whole in run output (browser component 0.6.2).
+
+**中文**
+
+- 桌面应用：「发送中」提示更自然且只显示一次，全部动态以群聊形式呈现，附加消息仅在有歧义时引用其任务。
+- 桌面应用：Hub 页面查询失败时不再丢失应用的系统权限。
+- 网页自动化：运行结果中以字符串返回的 JSON 不再被截断（浏览器组件 0.6.2）。
+
 ## v0.22.19
 
 - Chat apps (preview): give an agent its own Feishu/Lark bot by scanning a QR code, or a Slack bot, from the agent's details (Name and access › Chat apps), and talk to it there; a bot is offline while its computer sleeps.
