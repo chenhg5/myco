@@ -4,6 +4,14 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## Unreleased
+
+- Chat apps (preview): give an agent its own Feishu/Lark or Slack bot from its details in the App (Name and access › Chat apps). Feishu is a QR code scanned with the phone app; Slack is an app made from a filled-in manifest and its two tokens. What you send the bot becomes a task for that agent; progress updates one card, its questions come to the chat, and its answer comes back there. The bot runs on the computer it was bound on and is offline while that computer sleeps. Also `myco im` on the command line.
+
+**中文**
+
+- 聊天软件（预览）：在 App 里 agent 资料的「名字和接入 › 聊天软件」给它绑定自己的飞书 / Lark 或 Slack 机器人。飞书用手机 App 扫码；Slack 用预填好的 manifest 建应用，再粘两个令牌。发给机器人的话就是交给这个 agent 的任务：进度在一张卡片上更新，它的提问发到聊天里，结果也回到聊天里。机器人跑在绑定它的那台电脑上，电脑睡眠时机器人离线。命令行是 `myco im`。
+
 ## v0.22.18
 
 - Browser control: a blocked navigation is stopped before the page returns to the allowed one, background recording no longer disturbs the page you are driving, and the bundled browser component is 0.6.1.

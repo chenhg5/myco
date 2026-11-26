@@ -79,8 +79,8 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
           {bridges && !has("slack") && <button type="button" className="app-kv-link" onClick={() => setAdding("slack")}>{L("绑定 Slack", "Bind Slack")}</button>}
         </span>
         <span className="app-kv-help">
-          {L(`给它一个飞书或 Slack 机器人：在聊天软件里发消息，就是交给 ${name} 做事，进度和结果都回到聊天里。机器人跑在这台电脑上。`,
-            `Give it a Feishu or Slack bot: what you send the bot goes to ${name}, and its progress and answer come back in the chat. The bot runs on this computer.`)}
+          {L(`给它一个飞书或 Slack 机器人：在聊天软件里发消息，就是交给 ${name} 做事，进度和结果都回到聊天里。（预览）机器人跑在这台电脑上，电脑睡眠时它会离线。`,
+            `Give it a Feishu or Slack bot: what you send the bot goes to ${name}, and its progress and answer come back in the chat. (Preview) The bot runs on this computer, and is offline while it sleeps.`)}
         </span>
         {bridges?.filter((b) => b.claim).map((b) => (
           <span key={b.name} className="im-claim">

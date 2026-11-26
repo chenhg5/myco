@@ -1,5 +1,7 @@
 # Chat apps: reach your agents from Feishu or Slack
 
+> This is a preview: it works, but has had little real-world use yet. Tell us when something goes wrong.
+
 Each agent can have its own Feishu bot and Slack bot: one bot per agent, the same way voice works. Send that bot a message in the chat app, and the agent gets it as work:
 - Progress updates on one card.
 - When the agent has a question, it asks you in the chat; your reply is the answer.

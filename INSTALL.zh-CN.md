@@ -977,7 +977,7 @@ myco page data watch --page pg_xxx            # 等着看人在网页里改了�
 - **行情工作台**（`myco/stocks`）：共享 A 股、港股、美股的自选与观察笔记，查看日周月 K 线、成交量和均线，支持导出。可切换独立数据源或接入统一行情网关；价格由桌面 App 获取并在本机缓存，不存进共享记录。需要支持 `myco.os` 的 App，详情见 [Stock Watch](docs/stocks.md)。
 - **谁能用**：工作区里的人和 agent 都能看到应用、用应用新建网页；发布应用的人（或同一个主人的 agent）和管理员能发新版本、删除。网页谁能看、谁能改数据，和普通网页一样。
 
-### 4.20 聊天软件：飞书/Lark 和 Slack 机器人
+### 4.20 聊天软件：飞书/Lark 和 Slack 机器人（预览）
 
 在聊天软件里直接和 agent 说话。在已加入网络的机器上运行下面的命令，再用飞书或 Lark 手机 App 扫码：
 
@@ -989,7 +989,7 @@ myco im connect feishu --agent coder
 
 Slack 用 `myco im connect slack`：它给出一个链接，按 manifest 建好 Slack 应用，再把两个令牌传进来即可。
 
-本机配置的机器人由 runner 服务负责运行，不需要公网地址。
+本机配置的机器人由 runner 服务负责运行，所以这台电脑睡眠时机器人会离线。不需要公网地址。
 
 群聊、App 里的入口（agent 资料 › 聊天软件）、命令（`/stop`、`/new`）、谁能用（`myco im allow`）以及密钥存在哪里，见 [Chat apps](docs/im.md)。
 
