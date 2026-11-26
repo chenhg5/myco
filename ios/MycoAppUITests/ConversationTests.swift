@@ -24,12 +24,8 @@ final class ConversationTests: XCTestCase {
     /// Swipes from the left edge to the right: the system's "back".
     @MainActor
     private func swipeBack(_ app: XCUIApplication) {
-        // (From a little way in: on iOS 26 a page goes back from a swipe
-        // anywhere on it, and a synthetic touch at the very edge is not
-        // always taken for one.)
-        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.5))
-        from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)),
-                   withVelocity: .fast, thenHoldForDuration: 0)
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+        from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)))
     }
 
     @MainActor
@@ -583,10 +579,7 @@ final class ConversationTests: XCTestCase {
         let title = app.buttons["conversation.title"]
         XCTAssertTrue(title.waitForExistence(timeout: 5), "the member's page is on top")
 
-        snap("swipe-before")
         swipeBack(app)
-        Thread.sleep(forTimeInterval: 1)
-        snap("swipe-after")
         XCTAssertTrue(member.waitForExistence(timeout: 5), "one swipe: back on the project")
         XCTAssertFalse(title.exists, "the member's page is gone")
 
