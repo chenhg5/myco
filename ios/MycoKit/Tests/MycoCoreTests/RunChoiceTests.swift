@@ -157,7 +157,7 @@ struct ProviderModelsTests {
     }
 
     @Test func listingAgainAsksItsRunner() async throws {
-        let hub = FakeHub(scenario: .demo)
+        let hub = FakeHub(scenario: .team)
         // (the demo's list is ten minutes old; listed again, it is new)
         let agent = try await hub.listModelsAgain(of: "studio-claude-55d0")
         #expect(agent.runtime?.modelsFrom == "provider")

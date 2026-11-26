@@ -34,15 +34,20 @@ public struct RunWindows: Sendable, Hashable {
 
     /// - Parameters:
     ///   - tasks: what I asked the agent, in this conversation.
+    ///   - additions: what I added to a task later, drawn where I sent it
+    ///     (other messages came between): the steps since go on under it,
+    ///     as the desktop app's steer windows.
     ///   - answered: the tasks it has replied to.
     ///   - reported: the tasks it has sent an update on.
-    public init(tasks: [Message], answered: Set<String>, reported: Set<String>) {
-        let mine = tasks.sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
+    public init(tasks: [Message], additions: [Message] = [], answered: Set<String>, reported: Set<String>) {
+        let mine = (tasks + additions).sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
         for (i, task) in mine.enumerated() {
-            let earlier = mine[..<i].filter { $0.isOpen && !answered.contains($0.id) }
+            // (only tasks lend their steps: an addition has none of its own)
+            let earlier = mine[..<i].filter { $0.type != "steer" && $0.isOpen && !answered.contains($0.id) }
             guard let last = earlier.last else { continue }
-            // Taken up: it began on it, or said something about it.
-            let taken = ["acked", "held", "done"].contains(task.status) || reported.contains(task.id)
+            // Taken up: it began on it, or said something about it. An
+            // addition is part of the run it was added to.
+            let taken = task.type == "steer" || ["acked", "held", "done"].contains(task.status) || reported.contains(task.id)
             var window = windows[task.id] ?? Window()
             window.lenders = earlier.map(\.id)
             window.since = task.createdAt

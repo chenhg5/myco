@@ -632,12 +632,22 @@ public final class ConversationModel {
         // came after (see RunWindows).
         let reports = Dictionary(grouping: all.values.filter { $0.type == "progress" }, by: { $0.replyTo ?? $0.threadId })
         let behind = Set(ConversationBuilder.queuedBehind(Array(all.values)).map(\.id))
+        let tasks = all.values.filter { $0.type == "task" && $0.from == me && $0.to == agent && $0.e2e != true && !behind.contains($0.id) }
+        let taskIDs = Set(tasks.map(\.id))
+        let everything = Array(all.values)
+        // What I added to a task with other messages since: its steps go
+        // on under the addition, where I sent it.
+        let additions = all.values.filter { m in
+            m.type == "steer" && m.from == me && m.to == agent && taskIDs.contains(m.replyTo ?? "")
+                && !ConversationBuilder.steerIsInItsRun(m, among: everything)
+        }
         let windows = RunWindows(
-            tasks: all.values.filter { $0.type == "task" && $0.from == me && $0.to == agent && $0.e2e != true && !behind.contains($0.id) },
+            tasks: tasks, additions: additions,
             answered: Set(all.values.filter { $0.type == "reply" }.compactMap(\.replyTo)),
             reported: Set(reports.keys))
         var shownProcesses = processes
-        for taskID in windows.windows.keys where traces[taskID] != nil || processes[taskID] != nil {
+        for (taskID, window) in windows.windows where traces[taskID] != nil || processes[taskID] != nil
+            || window.lenders.contains(where: { traces[$0] != nil }) {
             shownProcesses[taskID] = RunProcess(events: windows.events(of: taskID, traces: traces))
         }
         // A message not taken up yet that shows what the earlier task did since.
@@ -688,7 +698,9 @@ public final class ConversationModel {
         var runs: [String: [RunPart]] = [:]
         for (taskID, process) in shownProcesses where process.hasSteps {
             let extras = ConversationBuilder.runExtras(of: taskID, agent: agent, messages: Array(all.values), windows: windows)
-            runs[taskID] = process.parts(reports: extras.reports, added: extras.added, live: all[taskID]?.isOpen ?? false)
+            // (an addition's run is live while the task it was added to is open)
+            let live = all[taskID].map { $0.type == "steer" ? (all[$0.replyTo ?? ""]?.isOpen ?? false) : $0.isOpen } ?? false
+            runs[taskID] = process.parts(reports: extras.reports, added: extras.added, live: live)
         }
         if runs != self.runs {
             self.runs = runs
