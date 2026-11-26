@@ -319,11 +319,11 @@ const NEXT_KEY = process.platform === "darwin" ? "Meta+Enter" : "Control+Enter";
 
 /** A message written from "another device": straight to the mock, so two
  *  tasks can be on their way at once (the box adds to the running one now). */
-async function sendFromElsewhere(hubId, agent, body) {
+async function sendFromElsewhere(hubId, agent, body, extra = {}) {
   const r = await fetch(`http://${HOST}:${mockPort()}/app/hubs/${hubId}/messages`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ to: agent, body }),
+    body: JSON.stringify({ to: agent, body, ...extra }),
   });
   if (!r.ok) throw new Error(`直接发一条失败：HTTP ${r.status}`);
   return r.json();
@@ -570,6 +570,42 @@ async function runMatrix(browser, size, scheme) {
       }
       await settle(page);
       await shot(page, size, scheme, "project-home");
+      // A card right after your own message keeps clear of the time and
+      // buttons that float under your bubble while the pointer is on it.
+      // (A card as it would come there: a copy of one, put after your last
+      // message, then taken out again.)
+      const placed = await page.evaluate(() => {
+        const tl = document.querySelector(".sp-home .conv-timeline");
+        // (one whose time floats: shown only with the pointer on it)
+        const me = [...(tl?.querySelectorAll(":scope > .conv-msg.is-me") || [])].filter((m) => m.querySelector(":scope > .conv-msg-meta:not(.is-shown)")).pop();
+        const card = tl?.querySelector(":scope > .handoff");
+        if (!me || !card) return false;
+        const copy = card.cloneNode(true);
+        copy.setAttribute("data-smoke-copy", "1");
+        me.after(copy);
+        me.setAttribute("data-smoke-me", "1");
+        return true;
+      });
+      if (placed) {
+        try {
+          const me = page.locator(".sp-home [data-smoke-me] .conv-bubble").first();
+          await me.scrollIntoViewIfNeeded();
+          await me.hover();
+          await settle(page, 250);
+          const clear = await page.evaluate(() => {
+            const meta = document.querySelector(".sp-home [data-smoke-me] .conv-msg-meta");
+            const card = document.querySelector(".sp-home [data-smoke-copy]");
+            return meta && card ? Math.round(card.getBoundingClientRect().top - meta.getBoundingClientRect().bottom) : null;
+          });
+          if (clear === null || clear < 6) throw new Error(`你的消息后面紧跟卡片时，时间和按钮下面应留出空隙，实际只有 ${clear}px`);
+        } finally {
+          await page.evaluate(() => {
+            document.querySelector(".sp-home [data-smoke-copy]")?.remove();
+            document.querySelector(".sp-home [data-smoke-me]")?.removeAttribute("data-smoke-me");
+          });
+          await page.mouse.move(0, 0);
+        }
+      }
     });
 
     // A link in a chat opens in the default browser (the desktop app's web
@@ -2866,6 +2902,33 @@ async function runMatrix(browser, size, scheme) {
       }, ["再检查旧任务的链接", reply.id]);
       if (!below) throw new Error("新任务回答之后才补充的话，应排在那条回答下面");
       await shot(page, size, scheme, "conversation-supplement-older-open");
+      // What the older task does after that (a long session goes on filing
+      // its steps under it) goes on under what you added, never back up
+      // above it, in the newer task's run (where it showed before).
+      const after = new Date(Date.now() + 500).toISOString();
+      const traceURL = `**/app/hubs/hub_studio/messages/${older.id}/trace*`;
+      await page.route(traceURL, async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        const seq = Math.max(0, ...(json.events || []).map((e) => e.seq)) + 1;
+        json.events = [...(json.events || []),
+          { seq, kind: "step", at: after, data: { kind: "text", text: "补充之后接着查旧任务的链接" } },
+          { seq: seq + 1, kind: "step", at: after, data: { kind: "tool", tool: "Bash", id: "after-steer", input: "curl -I https://example.com" } }];
+        await route.fulfill({ response, json });
+      });
+      try {
+        const later = page.locator(".conv-detail .trace-say", { hasText: "补充之后接着查旧任务的链接" });
+        await later.first().waitFor({ timeout: 15_000 });
+        const order = await page.evaluate(([a]) => {
+          const add = [...document.querySelectorAll(".conv-detail .conv-msg.is-me")].filter((e) => e.textContent.includes(a)).pop();
+          const says = [...document.querySelectorAll(".conv-detail .trace-say")].filter((e) => e.textContent.includes("补充之后接着查旧任务的链接"));
+          return { n: says.length, below: !!add && says.every((x) => !!(add.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING)) };
+        }, ["再检查旧任务的链接"]);
+        if (order.n !== 1 || !order.below) throw new Error(`补充之后旧任务做的事应接在补充下面，只出现一处（实际 ${order.n} 处，${order.below ? "在下面" : "有在上面的"}）`);
+        await shot(page, size, scheme, "conversation-supplement-older-goes-on");
+      } finally {
+        await page.unroute(traceURL);
+      }
       await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/messages/${older.id}/stop`, { method: "POST" });
       await noRound(page);
       await clickVisible(page, page.locator(".conv-head button").first());
@@ -2874,6 +2937,54 @@ async function runMatrix(browser, size, scheme) {
     // A chat with nothing in it yet: the agent, large, and a question.
     // What was typed and not sent stays with its chat when you go to
     // another and come back; an empty box is one line, whatever its hint.
+    // A note in your name (a workflow sends one when it is done) that comes
+    // while your task is still at work: what the agent does after it goes
+    // on under the note, never above it.
+    await step("单聊 · 运行中来的备注", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("保留任务：运行中来一条备注");
+      await box.press("Enter");
+      const mine = page.locator(".conv-detail .conv-msg.is-me", { hasText: "保留任务：运行中来一条备注" }).last();
+      await mine.waitFor({ timeout: 10_000 });
+      await page.waitForFunction(() => {
+        const els = [...document.querySelectorAll(".conv-detail .conv-msg.is-me[data-msg]")].filter((e) => e.textContent.includes("保留任务：运行中来一条备注"));
+        return els.length && !els[els.length - 1].getAttribute("data-msg").startsWith("pending");
+      }, null, { timeout: 10_000 });
+      const task = { id: await mine.getAttribute("data-msg") };
+      await sleep(600);
+      const note = await sendFromElsewhere("hub_studio", "review-cloud", "[工作流「发版演练」完成了] 运行 run_smoke", { type: "note", of: task.id });
+      const noteEl = page.locator(`.conv-detail [data-msg="${note.id}"]`);
+      await noteEl.waitFor({ timeout: 15_000 });
+      const after = new Date(new Date(note.created_at).getTime() + 500).toISOString();
+      const traceURL = `**/app/hubs/hub_studio/messages/${task.id}/trace*`;
+      await page.route(traceURL, async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        const seq = Math.max(0, ...(json.events || []).map((e) => e.seq)) + 1;
+        json.events = [...(json.events || []),
+          { seq, kind: "step", at: after, data: { kind: "text", text: "备注之后接着做的事" } },
+          { seq: seq + 1, kind: "step", at: after, data: { kind: "tool", tool: "Bash", id: "after-note", input: "git status" } }];
+        await route.fulfill({ response, json });
+      });
+      try {
+        await page.locator(".conv-detail .trace-say", { hasText: "备注之后接着做的事" }).first().waitFor({ timeout: 15_000 });
+        const order = await page.evaluate((id) => {
+          const n = document.querySelector(`.conv-detail [data-msg="${id}"]`);
+          const says = [...document.querySelectorAll(".conv-detail .trace-say")].filter((e) => e.textContent.includes("备注之后接着做的事"));
+          return { n: says.length, below: !!n && says.every((x) => !!(n.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING)) };
+        }, note.id);
+        if (order.n !== 1 || !order.below) throw new Error(`备注之后对方做的事应接在备注下面，只出现一处（实际 ${order.n} 处，${order.below ? "在下面" : "有在上面的"}）`);
+        await settle(page, 200);
+        await shot(page, size, scheme, "chat-note-mid-run");
+      } finally {
+        await page.unroute(traceURL);
+        await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/messages/${task.id}/stop`, { method: "POST" });
+      }
+      await noRound(page);
+    });
+
     await step("单聊 · 发文件", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const box = page.locator(".conv-compose-box");

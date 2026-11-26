@@ -101,6 +101,7 @@ const NEW_CLIS: { value: SpawnCli; label: string }[] = [
   { value: "cline", label: "Cline" },
   { value: "grok", label: "Grok" },
   { value: "antigravity", label: "Antigravity" },
+  { value: "atomcode", label: "AtomCode" },
 ];
 
 /** What a computer told about itself, as the dialog keeps it. */

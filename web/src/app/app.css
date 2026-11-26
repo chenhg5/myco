@@ -3637,6 +3637,12 @@ textarea.app-input {
   white-space: nowrap;
   pointer-events: none;
 }
+/* What comes right after your bubble in the middle or across the chat (a
+   handoff card, a line saying what ended) keeps clear of that floating
+   time and its buttons, as an agent's turn below it does on the left. */
+.conv-msg.is-me + :is(.handoff, .conv-handover, .watch-ended, .goal-ended) {
+  margin-top: 18px;
+}
 /* ...and takes the pointer only while it shows (to copy), touching the
    bubble so moving onto it keeps it shown. */
 .conv-msg.is-me:hover .conv-msg-meta:not(.is-shown) {

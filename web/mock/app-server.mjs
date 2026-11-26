@@ -35,13 +35,13 @@ const CLI_MODELS = {
   claude: "claude-opus-5-5", codex: "gpt-6-sol", pi: "pi-3", kiro: "kiro-2",
   cursor: "cursor-auto", gemini: "gemini-3-pro", opencode: "claude-opus-5-5",
   qoder: "qoder-auto", qwen: "qwen3-coder", kimi: "kimi-k3", goose: "goose", copilot: "copilot",
-  auggie: "auggie", codebuddy: "codebuddy", kilo: "kilo", cline: "cline", grok: "grok-5", antigravity: "gemini-3-pro",
+  auggie: "auggie", codebuddy: "codebuddy", kilo: "kilo", cline: "cline", grok: "grok-5", antigravity: "gemini-3-pro", atomcode: "atomcode",
 };
 const CLI_VERSIONS = {
   claude: "2.1.240", codex: "0.52.0", pi: "1.8.0", kiro: "0.4.2",
   cursor: "0.48.0", gemini: "0.12.0", opencode: "0.6.1",
   qoder: "0.3.0", qwen: "0.9.0", kimi: "1.2.0", goose: "1.9.0", copilot: "0.0.400",
-  auggie: "0.8.0", codebuddy: "1.1.0", kilo: "1.0.0", cline: "1.0.0", grok: "0.2.0", antigravity: "0.1.0",
+  auggie: "0.8.0", codebuddy: "1.1.0", kilo: "1.0.0", cline: "1.0.0", grok: "0.2.0", antigravity: "0.1.0", atomcode: "5.2.3",
 };
 
 function makeAgent(over) {
@@ -3581,6 +3581,15 @@ const server = http.createServer(async (req, res) => {
           : `th_c_${state.counter += 1}`;
       const atts = (Array.isArray(body.attachments) ? body.attachments : []).map((id) => uploads.get(id)).filter(Boolean);
       if (Array.isArray(body.attachments) && atts.length !== body.attachments.length) return fail(res, 404, "not_found", "附件不存在");
+      // (a note in your name, as a workflow sends one: nothing to answer)
+      if (body.type === "note") {
+        // (in the thread of the message it names, when it names one)
+        const of = typeof body.of === "string" ? Object.values(hub.threads || {}).flat().find((m) => m.id === body.of) : null;
+        const note = makeMessage({ thread_id: of ? of.thread_id : threadId, from: CONSOLE, to, type: "note", status: "done", body: text, created_at: iso(0), updated_at: iso(0) });
+        if (!hub.threads) hub.threads = {};
+        (hub.threads[note.thread_id] ||= []).push(note);
+        return send(res, 201, note);
+      }
       const msg = makeMessage({
         thread_id: threadId, from: CONSOLE, to, type: "task", status: afterTask ? "held" : "queued",
         body: text, created_at: iso(0), updated_at: iso(0),

@@ -79,10 +79,10 @@ func TestRecentListsReadIndexesInOrder(t *testing.T) {
 		{"conversations", func() {
 			r.ListRecentThreads(ctx, domain.RecentFilter{SenderPrefix: console, Skip: []domain.AgentName{"n"}, Limit: 30})
 		},
-			[]string{"idx_messages_updated", "idx_messages_thread", "idx_messages_from", "idx_messages_inbox"}},
+			[]string{"idx_messages_updated", "idx_messages_thread", "idx_messages_from", "idx_messages_inbox", "idx_messages_from_updated", "idx_messages_to_updated"}},
 		{"conversations of an agent", func() {
 			r.ListRecentThreads(ctx, domain.RecentFilter{SenderPrefix: console, Match: []domain.AgentName{"a"}, Limit: 30})
-		}, []string{"idx_messages_thread", "idx_messages_from", "idx_messages_inbox"}},
+		}, []string{"idx_messages_thread", "idx_messages_from", "idx_messages_inbox", "idx_messages_from_updated", "idx_messages_to_updated"}},
 		{"pairs", func() {
 			r.ListRecentPairs(ctx, domain.RecentFilter{AllPairs: true, Skip: []domain.AgentName{"admin"}, Limit: 30})
 		},

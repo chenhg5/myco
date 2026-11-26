@@ -2052,19 +2052,59 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // what it does after goes on under that addition (with its loading),
   // not above it. Each addition's window runs to the next one, or to your
   // next task (untilOf).
+  // The run that shows a task's steps at a time: its own, until your next
+  // task; after that, the latest of your tasks that borrows them (a long
+  // session goes on filing them under the older task). An addition to an
+  // older task sent after a newer one cuts that newer run, or what the
+  // older task does after it would go on growing above it.
+  const hostOf = (taskId: string, at: string): string | undefined => {
+    const u = untilOf.get(taskId);
+    if (!u || at < u) return taskId;
+    let host: string | undefined;
+    for (const [id, b] of borrowOf) {
+      if (b.ids.includes(taskId) && b.since <= at && (!host || b.since > borrowOf.get(host)!.since)) host = id;
+    }
+    return host;
+  };
   const laterSteers = new Map<string, Message[]>();
   for (const m of shown || []) {
     if (m.type !== "steer" || m.answers || !m.reply_to || !isMe(m.from, row?.hub)) continue;
     const task = byId.get(m.reply_to);
     if (!task || !inRun(task) || runSteers.get(task.id)?.includes(m) || steersOf.get(task.id)?.includes(m)) continue;
-    const u = untilOf.get(task.id);
-    if (u && m.created_at >= u) continue;
-    laterSteers.set(task.id, [...(laterSteers.get(task.id) || []), m].sort((a, b) => a.created_at.localeCompare(b.created_at)));
+    const host = hostOf(task.id, m.created_at);
+    if (!host || !inRun(byId.get(host))) continue;
+    laterSteers.set(host, [...(laterSteers.get(host) || []), m].sort((a, b) => a.created_at.localeCompare(b.created_at)));
   }
-  const steerWindow = new Map<string, { task: Message; from: string; until?: string; last: boolean }>();
-  for (const [tid, list] of laterSteers) {
-    const task = byId.get(tid)!;
-    list.forEach((s, i) => steerWindow.set(s.id, { task, from: s.created_at, until: list[i + 1]?.created_at ?? untilOf.get(tid), last: i === list.length - 1 }));
+  // A note of yours (one a workflow sends in your name, say) that comes
+  // while a task of yours is still at work cuts its run the same way: what
+  // it does after goes on under the note, not above it. (Not a decision
+  // you made: that is one quiet line.)
+  const partTask = new Map<string, string>();
+  for (const m of shown || []) {
+    if (m.type !== "note" || !isMe(m.from, row?.hub) || decisionOf(m.body)) continue;
+    let task: Message | undefined;
+    for (const x of shown || []) {
+      if (x.type !== "task" || !inRun(x) || x.created_at >= m.created_at) continue;
+      const ans = answerOf.get(x.id);
+      if (ans ? ans.created_at <= m.created_at : !isOpen(x.status)) continue;
+      if (!task || x.created_at > task.created_at) task = x;
+    }
+    if (!task) continue;
+    const host = hostOf(task.id, m.created_at);
+    if (!host || !inRun(byId.get(host))) continue;
+    partTask.set(m.id, task.id);
+    laterSteers.set(host, [...(laterSteers.get(host) || []), m].sort((a, b) => a.created_at.localeCompare(b.created_at)));
+  }
+  // Each addition's part: the task it adds to, from when it was sent; and
+  // the run it cut (host), when that is another task, whose own steps go on
+  // there too.
+  const steerWindow = new Map<string, { task: Message; host?: Message; from: string; until?: string; last: boolean }>();
+  for (const [hid, list] of laterSteers) {
+    const hostTask = byId.get(hid)!;
+    list.forEach((s, i) => {
+      const task = byId.get(partTask.get(s.id) || s.reply_to!)!;
+      steerWindow.set(s.id, { task, host: hostTask.id !== task.id ? hostTask : undefined, from: s.created_at, until: list[i + 1]?.created_at ?? untilOf.get(hid), last: i === list.length - 1 });
+    });
   }
   // Where a run's own part ends: the first addition drawn later, else your
   // next task.
@@ -2331,16 +2371,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {/* What you added later, drawn where you sent it: the task's steps
             and progress since then go on under it (its loading too, while
             this is the last part). */}
-        {m.type === "steer" && steerWindow.has(m.id) && (() => {
+        {(m.type === "steer" || m.type === "note") && steerWindow.has(m.id) && (() => {
           const w = steerWindow.get(m.id)!;
           const t = w.task;
           const live = w.last && !w.until;
-          const said = (progressOf.get(t.id) || []).filter((x) => x.created_at >= w.from && (!w.until || x.created_at < w.until));
+          // (the run it cut, still open: what that one does goes on here too)
+          const also = w.host && isOpen(w.host.status) && !answerOf.has(w.host.id) ? w.host : undefined;
+          const said = [t, ...(also ? [also] : [])].flatMap((x) => progressOf.get(x.id) || [])
+            .filter((x) => x.created_at >= w.from && (!w.until || x.created_at < w.until))
+            .sort((a, b) => a.created_at.localeCompare(b.created_at));
           return (
             <TraceView hubId={target.hubId} task={t} cli={rowOf(t.to)?.st.agent.runtime?.cli} onStatus={live ? onTraceStatus : undefined} onGrow={followBottom} onPlan={onPlan}
-              answered={answerOf.has(t.id)} quiet={!live || t.id !== liveId} footed={live && t.id === liveId && liveFoot}
+              answered={answerOf.has(t.id)} quiet={!live || (t.id !== liveId && also?.id !== liveId)} footed={live && (t.id === liveId || also?.id === liveId) && liveFoot}
               onPaused={live ? onPaused : undefined} onActivity={live ? onActivity : undefined}
               from={w.from} until={w.until} said={said.length ? said : undefined}
+              borrow={also ? { ids: [also.id], since: w.from } : undefined}
               answers={answerTo} canAnswer={isMe(t.from, row?.hub)} onAnswer={answerAsk(t)} />
           );
         })()}
