@@ -1719,6 +1719,21 @@ async function runMatrix(browser, size, scheme) {
       if (await page.locator(".sp-group .sp-compose").count()) throw new Error("全部动态是记录，不该有输入框");
       await settle(page);
       await shot(page, size, scheme, "project-activity");
+      // As a group chat: a line per task and per answer, "@" whom it was
+      // for, in time; a click opens the thread. The choice is kept.
+      await page.locator(".sp-head").getByRole("tab", { name: "群聊" }).click();
+      const chat = page.locator("[data-testid=activity-chat]");
+      await chat.waitFor({ timeout: 5_000 });
+      const lines = chat.locator(".sp-gchat-line");
+      if ((await lines.count()) < 2) throw new Error("群聊视图应有好几行");
+      if (!(await chat.locator(".sp-gchat-at").first().innerText()).startsWith("@")) throw new Error("每一行应写明 @ 谁");
+      if (!(await chat.locator(".sp-gchat-quote").count())) throw new Error("回复应引用它答的那一条");
+      const times = await lines.evaluateAll((els) => els.map((e) => e.querySelector(".sp-gchat-when")?.textContent || ""));
+      if (!times.every(Boolean)) throw new Error("每一行应有时间");
+      await settle(page);
+      await shot(page, size, scheme, "project-activity-chat");
+      await page.locator(".sp-head").getByRole("tab", { name: "卡片" }).click();
+      await page.locator(".sp-group .sp-card").first().waitFor({ timeout: 5_000 });
       await clickVisible(page, page.locator(".sp-head button[aria-label='返回']"));
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
