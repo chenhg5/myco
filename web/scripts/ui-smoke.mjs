@@ -2773,7 +2773,8 @@ async function runMatrix(browser, size, scheme) {
       const bar = page.locator(".conv-detail [data-testid=plan-bar]");
       await bar.waitFor({ timeout: 10_000 });
       await page.waitForFunction(() => /计划 2\/3/.test(document.querySelector(".conv-detail [data-testid=plan-bar]")?.textContent || ""), null, { timeout: 10_000 });
-      if (!/正在：跑测试/.test(await bar.innerText())) throw new Error(`置顶的计划应说正在做哪一步，实际「${await bar.innerText()}」`);
+      // (正在 while it runs; 下一步 once the mock's short task is over)
+      if (!/(正在|下一步)：跑测试/.test(await bar.innerText())) throw new Error(`置顶的计划应说做到哪一步，实际「${await bar.innerText()}」`);
       const barTop = await bar.evaluate((el) => el.getBoundingClientRect().top);
       const scrollTop = await page.locator(".conv-detail .conv-scroll").evaluate((el) => el.getBoundingClientRect().top);
       if (barTop > scrollTop) throw new Error("置顶的计划应在聊天内容上面，不随聊天滚动");
@@ -2783,6 +2784,12 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "chat-plan-bar");
       await bar.locator(".plan-bar-toggle").click();
       await bar.locator(".trace-plan").waitFor({ state: "detached", timeout: 5_000 });
+      // Once the task is over with a step still open, the plan stays
+      // pinned, saying what is next (a coordinator's board outlives a task).
+      await page.waitForFunction(() => /下一步：跑测试/.test(document.querySelector(".conv-detail [data-testid=plan-bar]")?.textContent || ""), null, { timeout: 20_000 })
+        .catch(() => { throw new Error("任务结束后还有没做完的计划，应继续置顶并写「下一步：…」"); });
+      await page.waitForTimeout(9000);
+      if (!(await bar.count())) throw new Error("没做完的计划不该自己消失");
       await bar.locator(".plan-bar-close").click();
       await bar.waitFor({ state: "detached", timeout: 5_000 });
       await page.waitForTimeout(2500);

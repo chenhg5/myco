@@ -1469,9 +1469,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     for (const p of runPlans.values()) if (p.taskId === taskId && (!best || p.at >= best.at)) best = p;
     return best;
   };
-  const [planTask, setPlanTask] = useState("");
-  const atWorkPlan = atWorkId ? planOf(atWorkId) : null;
-  useEffect(() => { if (atWorkId && atWorkPlan) setPlanTask(atWorkId); }, [atWorkId, !!atWorkPlan]);
+  // With nothing at work: the newest plan written in the chat (a
+  // coordinator's board of what is left outlives the task that wrote it);
+  // PlanBar lets one that is all done go.
+  const newestPlanTask = (() => {
+    let best: { taskId: string; at: string } | null = null;
+    for (const p of runPlans.values()) if (!best || p.at > best.at) best = p;
+    return best?.taskId || "";
+  })();
+  const planTask = atWorkId && planOf(atWorkId) ? atWorkId : newestPlanTask;
   const pinnedPlan = planTask ? planOf(planTask) : null;
   // A task of yours not opened yet, or set aside: a few words under it,
   // like a receipt, not a line of its own (it is a message, not a state).
