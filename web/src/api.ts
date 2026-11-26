@@ -496,6 +496,8 @@ export interface AgentStatus { agent: Agent; state: State; queued: number; in_pr
   /** what it is watching for in the background (myco watch; absent on
    *  older hubs): counted apart from held and queued */
   watching?: number;
+  /** its goal at work (myco goal; absent on older hubs) */
+  goal?: GoalBrief;
   /** held tasks waiting on a question to their sender (absent on older hubs) */
   asking?: number;
   /** acked tasks that show no life (the agent is away, or none was touched
@@ -606,3 +608,5 @@ export interface PageAttachmentList { attachments_version: number; attachments: 
  *  met, or when the time is up. (web/src/lib/watch.ts, shared with the
  *  backend's contract) */
 export type { Watch, WatchList, WatchStartRequest } from "@/lib/watch";
+export type { Goal, GoalRound, GoalList, GoalStartRequest, GoalPatchRequest, GoalBrief } from "@/lib/goal";
+import type { GoalBrief } from "@/lib/goal";

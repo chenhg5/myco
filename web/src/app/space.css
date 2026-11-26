@@ -780,6 +780,9 @@
   line-height: 16px;
 }
 .sp-watch-tag svg { width: 10px; height: 10px; }
+/* (only the icons and a count: the name keeps the room; the words are on hover) */
+.sp-goal-tag { padding: 0 4px; }
+.sp-goal-tag svg { color: var(--accent); }
 .sp-member-sub.is-working {
   color: var(--fg-2);
 }
@@ -3819,6 +3822,7 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
   color: var(--faint);
 }
 .ui-clean .sp-watch-tag svg { display: none; }
+.ui-clean .sp-goal-tag svg { display: none; }
 /* the mushroom at work: a dot breathing in its place */
 .ui-clean svg.work-sprite {
   width: 8px !important;

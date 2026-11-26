@@ -1,5 +1,5 @@
 import type { UsageResponse } from "@/lib/usage";
-import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList } from "@/api";
+import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList, Goal, GoalList, GoalStartRequest, GoalPatchRequest } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -1082,6 +1082,15 @@ export const appApi = {
     request<OsBatch>("GET", `app/os/jobs/${enc(id)}?after=${after}&wait=${waitMs}`, undefined, undefined, waitMs + 15_000),
   osInput: (id: string, data: string, close: boolean) => request<{ ok: boolean }>("POST", `app/os/jobs/${enc(id)}/input`, { data, close }),
   osCancel: (id: string) => request<{ ok: boolean }>("DELETE", `app/os/jobs/${enc(id)}`),
+  // Goals (myco goal; older hubs answer 404): a goal set on a chat, the
+  // agent woken on a schedule to push it until it is done.
+  goals: (hubId: string, q: { agent?: string; project?: string; state?: "active" | "all" } = {}) =>
+    request<GoalList>("GET", `app/hubs/${enc(hubId)}/goals?${new URLSearchParams(Object.entries(q).filter(([, v]) => !!v) as [string, string][]).toString()}`),
+  goal: (hubId: string, id: string) => request<Goal>("GET", `app/hubs/${enc(hubId)}/goals/${enc(id)}`),
+  startGoal: (hubId: string, input: GoalStartRequest) => request<Goal>("POST", `app/hubs/${enc(hubId)}/goals`, input),
+  goalAction: (hubId: string, id: string, action: "pause" | "resume" | "stop", reason?: string) =>
+    request<Goal>("POST", `app/hubs/${enc(hubId)}/goals/${enc(id)}/${action}`, reason ? { reason } : {}),
+  patchGoal: (hubId: string, id: string, input: GoalPatchRequest) => request<Goal>("PATCH", `app/hubs/${enc(hubId)}/goals/${enc(id)}`, input),
   // Watches (myco watch; older hubs answer 404): what agents wait for in
   // the background. state: active (default) or all (ended ones too).
   watches: (hubId: string, q: { agent?: string; project?: string; state?: "active" | "all" } = {}) =>

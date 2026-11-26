@@ -1249,6 +1249,14 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                 {(row.st.watching || 0) > 0 && <span className="is-watching">{L("盯着", "Watching")}<b>{row.st.watching}</b></span>}
                 {stuck.total > 0 && <span className="is-stuck">{L("可能卡住", "May be stuck")}<b>{stuck.total}</b></span>}
               </div>
+              {row.st.goal && (
+                <div className="app-goal-now" data-testid="agent-goal">
+                  <span>{row.st.goal.state === "paused" ? L("目标（已暂停）", "Goal (paused)") : L("当前目标", "Current goal")}</span>
+                  <b>{row.st.goal.objective}</b>
+                  <small>{[L(`第 ${row.st.goal.round}${row.st.goal.max_rounds ? `/${row.st.goal.max_rounds}` : ""} 轮`, `round ${row.st.goal.round}${row.st.goal.max_rounds ? ` of ${row.st.goal.max_rounds}` : ""}`),
+                    row.st.goal.next_wake_at ? L(`下次唤醒 ${new Date(row.st.goal.next_wake_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}`, `next ${new Date(row.st.goal.next_wake_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}`) : ""].filter(Boolean).join(" · ")}</small>
+                </div>
+              )}
               {current.length === 0 && <div className="app-empty-note">{row.st.queued + row.st.in_progress + row.st.held > 0
                 ? L("这些消息不在你能看到的范围里。", "These messages are not visible to you.")
                 : L("暂无未完成的任务", "Nothing open")}</div>}

@@ -414,6 +414,21 @@ export const scenes = [
       await bar.locator(".watch-result").waitFor();
     },
   },
+  {
+    id: "goal",
+    title: "给会话一个目标 / A goal for a chat",
+    zh: "设定一个目标和完成标准，Agent 空闲时按节奏被唤醒，一轮一轮往前推，每轮做了什么都看得到。",
+    en: "Set a goal and when it counts as done; the agent is woken on schedule while idle and pushes it forward round by round, every round on record.",
+    tags: ["自动化", "可见性"], themes: ["light", "dark"],
+    description: "Agent 会话顶部的目标条（第几轮、下次唤醒、已进行多久，展开：终止条件、上一轮、下一步、每轮记录），以及成员栏的「目标中」",
+    prepare: async ({ page, T }) => {
+      await member(page, T);
+      const bar = page.locator(".conv-detail:visible [data-testid=goal-bar]").last();
+      await bar.waitFor();
+      await bar.locator(".watch-toggle").click();
+      await bar.locator(".goal-round").first().waitFor();
+    },
+  },
 ];
 
 scenes.push(...interactionScenes);

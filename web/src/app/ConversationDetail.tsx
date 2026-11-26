@@ -1,6 +1,6 @@
 import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Focus as FocusIcon, AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Trash2, WifiOff, X } from "lucide-react";
+import { Focus as FocusIcon, AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Loader2, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Target, Trash2, WifiOff, X } from "lucide-react";
 import { ExportChat } from "@/app/ExportChat";
 import { appApi, isTransient } from "@/appapi";
 import type { Agent, Message } from "@/api";
@@ -45,6 +45,7 @@ import { noteChat } from "@/app/recentChats";
 import { PinBar, pinThing, pinsChanged, titleOfMessage, usePins } from "@/app/pins";
 import { PlanBar } from "@/app/PlanBar";
 import { useWatches, WatchBar, WatchEnded } from "@/app/Watches";
+import { GoalBar, GoalDialog, GoalEnded, useGoals } from "@/app/Goals";
 import { useContextMenu, type MenuItem } from "@/app/ContextMenu";
 import { isPicture } from "@/app/attachments";
 
@@ -415,6 +416,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // What it waits for in the background (myco watch): at the top while it
   // watches, a grey line in the chat once that ends.
   const watches = useWatches(target.hubId, target.agent);
+  // Its goal (myco goal): at the top while it runs, a grey line once it ends.
+  const goals = useGoals(target.hubId, target.agent);
+  const [goalOpen, setGoalOpen] = useState(false);
   // What was typed and not sent stays with the conversation (drafts.ts).
   const draftKey = chatDraftKey(target.hubId, target.agent);
   const [draft, setDraft] = useState(() => draftOf(draftKey));
@@ -1306,7 +1310,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const watchLines = watches.ended.map((w) => ({
     id: "wat_" + w.id, at: w.ended_at!, node: <WatchEnded w={w} nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))} />,
   }));
-  const allInserts = handoverLines.length || watchLines.length ? [...(baseInserts || []), ...handoverLines, ...watchLines] : baseInserts;
+  const goalLines = goals.ended.map((g) => ({
+    id: "gol_" + g.id, at: g.ended_at!, node: <GoalEnded g={g} nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))} />,
+  }));
+  const allInserts = handoverLines.length || watchLines.length || goalLines.length ? [...(baseInserts || []), ...handoverLines, ...watchLines, ...goalLines] : baseInserts;
 
   // What each task got, by the task's id. Answers and progress updates
   // point at their task (reply_to). One without it (older runners) answers
@@ -2356,6 +2363,9 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       "sep" as const,
     ] : []),
     ...(!termMode && pins ? [{ label: L("置顶一个网址", "Pin an address"), icon: PinIcon, onSelect: () => setPinAdding(true) }] : []),
+    // 设定目标 (myco goal): woken on schedule to push it, until it is done.
+    ...(!termMode && !observed && goals.supported && !goals.current && agent && agentKind(agent) === "agent"
+      ? [{ label: L("设定目标…", "Set a goal…"), icon: Target, onSelect: () => setGoalOpen(true) }] : []),
     // 专注模式 (AppMode): this chat alone, full screen, centred.
     { label: L("专注模式", "Focus mode"), icon: FocusIcon, hint: focusKey(), onSelect: () => toggleFocus(rootRef.current) },
     ...(hoEntry.show ? [{ label: hoEntry.why ? L("换一个来接着做（现在不行）", "Hand over (not now)") : L("换一个来接着做", "Hand over to another session"), icon: ArrowRightLeft, disabled: !!hoEntry.why, onSelect: () => openHandover({ hubId: target.hubId, name: target.agent }) }] : []),
@@ -2450,9 +2460,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           onJump={(id) => setSeek({ id, tries: 0 })} adding={pinAdding} onAdding={setPinAdding} />
       )}
       {pinnedPlan && <PlanBar key={planTask} taskId={planTask} items={pinnedPlan.items} live={planTask === atWorkId} />}
+      <GoalBar hubId={target.hubId} goal={goals.current} onChanged={goals.put} />
       <WatchBar hubId={target.hubId} watches={watches.active} onChanged={watches.put} />
       {pinMenu.element}
       {headMenu.element}
+      <GoalDialog open={goalOpen} onOpenChange={setGoalOpen} hubId={target.hubId} agent={target.agent} name={agentName}
+        project={target.project} onStarted={goals.put} />
       {!termMode && <ChatBgDialog open={bgOpen} onClose={() => setBgOpen(false)} chat={chatKey(target.hubId, target.agent)} name={agentName} />}
       <ChatFiles open={filesOpen} onOpenChange={setFilesOpen} hubId={target.hubId} items={chatFiles} apps={chatApps} now={now}
         nameOf={(n) => (isMe(n, row?.hub) ? L("你", "You") : nameOf(n))}

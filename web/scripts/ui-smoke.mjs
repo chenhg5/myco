@@ -4231,6 +4231,67 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "chat-watching-two");
     });
 
+    // 目标 (myco goal): a goal set on a chat is a bar at the top (round,
+    // next wake-up, how long), with 暂停/继续, 改间隔 and 停止; opened, what
+    // done means and every round; ended ones are a grey line; ⋯ sets one.
+    await step("单聊 · 目标", async () => {
+      await openMember(page, narrow, "聊天", "legacy-codex");
+      const bar = page.locator(".conv-detail [data-testid=goal-bar]");
+      await bar.waitFor({ timeout: 10_000 });
+      const line = (await bar.locator(".watch-line").innerText()).replace(/\s+/g, "");
+      for (const t of ["目标：把旧版runner的日志格式", "第3/16轮", "下次唤醒", "还有1", "已进行1小时"]) if (!line.includes(t)) throw new Error(`目标条应有「${t}」，实际「${line}」`);
+      await bar.locator(".watch-toggle").click();
+      await bar.locator(".goal-facts dd", { hasText: "文档覆盖全部 3 种日志格式" }).waitFor({ timeout: 5_000 });
+      if ((await bar.locator(".goal-round").count()) !== 3) throw new Error("展开后应列出 3 轮");
+      if (!(await bar.locator(".goal-round.is-stuck", { hasText: "没进展" }).count())) throw new Error("没进展的那轮应标出来");
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-goal");
+      // An earlier goal, achieved: a grey line that opens to how it ended.
+      const done = page.locator(".conv-detail .goal-ended", { hasText: "目标达成：把 runner 的启动脚本改成能重入" });
+      await done.waitFor({ timeout: 5_000 });
+      await done.locator(".goal-ended-line").click();
+      await done.locator(".goal-ended-detail", { hasText: "重复启动只会留一个进程" }).waitFor({ timeout: 5_000 });
+      // Every hour now; paused, then on again.
+      await bar.getByRole("button", { name: "改间隔" }).click();
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "1 小时" }).click();
+      await page.waitForFunction(() => /还有(1小时|59分钟)/.test((document.querySelector(".conv-detail [data-testid=goal-bar] .watch-line")?.textContent || "").replace(/\s+/g, "")), null, { timeout: 5_000 });
+      await bar.getByRole("button", { name: "暂停" }).click();
+      await bar.locator(".goal-note.is-paused").waitFor({ timeout: 5_000 });
+      await bar.getByRole("button", { name: "继续" }).click();
+      await bar.locator(".goal-note").waitFor({ state: "detached", timeout: 5_000 });
+      // Stopped, after asking: the bar goes, a grey line stays.
+      await bar.getByRole("button", { name: "停止" }).click();
+      const ask = page.locator(".app-confirm");
+      await ask.waitFor({ timeout: 5_000 });
+      await ask.getByRole("button", { name: "停止", exact: true }).click();
+      await bar.waitFor({ state: "detached", timeout: 5_000 });
+      await page.locator(".conv-detail .goal-ended", { hasText: "你停止了目标" }).waitFor({ timeout: 5_000 });
+      // A new one from the chat's ⋯.
+      await page.locator(".conv-head").getByRole("button", { name: "更多" }).click();
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "设定目标…" }).click();
+      const dlg = page.locator(".goal-dialog");
+      await dlg.waitFor({ timeout: 5_000 });
+      const start = dlg.getByRole("button", { name: "开始", exact: true });
+      if (await start.isEnabled()) throw new Error("没填目标和终止条件不该能开始");
+      await dlg.locator("textarea").nth(0).fill("把第三种日志格式也整理进去");
+      await dlg.locator("textarea").nth(1).fill("docs/legacy.md 里有第三种格式和示例");
+      await dlg.getByRole("tab", { name: "15 分钟" }).click();
+      await settle(page, 200);
+      await shot(page, size, scheme, "chat-goal-set");
+      await start.click();
+      await dlg.waitFor({ state: "detached", timeout: 5_000 });
+      await bar.locator(".watch-what", { hasText: "目标：把第三种日志格式也整理进去" }).waitFor({ timeout: 10_000 });
+      // Paused to ask you, and waiting longer after rounds without progress.
+      await openMember(page, narrow, "聊天", "Myco (Grok)");
+      await page.locator(".conv-detail [data-testid=goal-bar] .goal-note.is-paused", { hasText: "等你决定" }).waitFor({ timeout: 10_000 });
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await page.locator(".conv-detail [data-testid=goal-bar] .goal-note.is-backoff", { hasText: "间隔放宽到 1 小时" }).waitFor({ timeout: 10_000 });
+      if (!narrow) {
+        await page.locator(".sp-side .sp-member", { hasText: "Myco (Grok)" }).locator(".sp-goal-tag", { hasText: "目标暂停" }).waitFor({ timeout: 10_000 });
+        await page.locator(".sp-side .sp-member", { hasText: "Review (Codex 云端)" }).locator(".sp-goal-tag", { hasText: "目标中" }).waitFor({ timeout: 10_000 });
+      }
+    });
+
     // 清爽 (界面风格): Settings → Appearance turns the decoration off at once
     // for the whole App: no faces in the lists and titles, no chat picture,
     // a dot for the walking mushroom; back to 标准 puts them back.

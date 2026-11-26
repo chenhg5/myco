@@ -1773,6 +1773,44 @@ function watchesOf(h) {
   return watchStore.get(h.id);
 }
 
+// 目标 (myco goal): a goal set on a chat, its agent woken on a schedule.
+// The studio hub: legacy-codex at round 3 of 16 (and an earlier goal
+// achieved), Myco (Grok) paused to ask, Review (Codex 云端) waiting
+// longer after two rounds without progress. The showcase: neutral names.
+const goalStore = new Map();
+function goalsOf(h) {
+  if (!goalStore.has(h.id)) {
+    const min = (n) => n * 60;
+    const soon = (m) => new Date(Date.now() + m * 60_000).toISOString();
+    const round = (goal, n, ago, summary, progressed = true, extra = {}) => ({ goal, round: n, started_at: iso(min(ago)), ended_at: iso(min(ago - 6)), summary, progressed, ...extra });
+    const base = (o) => ({ every_sec: 1800, base_every_sec: 1800, max_rounds: 16, no_progress: 0, created_by: CONSOLE, deadline: soon(400), ...o });
+    let list = [];
+    if (process.env.MOCK_SHOWCASE) {
+      const T = (zh, en) => (process.env.MOCK_SHOWCASE === "en" ? en : zh);
+      if ((h.agents || []).some((a) => a.name === "build-backend")) list = [
+        base({ id: "gol_api", agent: "build-backend", project: "website", objective: T("把套餐接口的测试覆盖率提到 80%", "Get the plans API test coverage to 80%"), done_when: T("CI 的覆盖率报告 ≥ 80%，全部测试通过", "The CI coverage report shows ≥ 80% and every test passes"), round: 3, state: "active", started_at: iso(min(80)), next_wake_at: soon(12),
+          last_summary: T("补了价格计算和年付折扣的测试，覆盖率 71% → 76%", "Added tests for pricing and the yearly discount: coverage 71% → 76%"), next_step: T("补错误分支：未知套餐、货币不支持", "Cover the error paths: unknown plan, unsupported currency"),
+          rounds: [round("gol_api", 1, 80, T("读了现有测试，列出缺的分支", "Read the existing tests and listed the missing branches")), round("gol_api", 2, 50, T("补了套餐列表的测试，覆盖率 64% → 71%", "Added tests for the plan list: 64% → 71%")), round("gol_api", 3, 20, T("补了价格计算和年付折扣的测试，覆盖率 71% → 76%", "Added tests for pricing and the yearly discount: 71% → 76%"))] }),
+        base({ id: "gol_docs", agent: "build-backend", project: "website", objective: T("把接口文档补全到每个端点都有示例", "Give every endpoint in the API docs an example"), done_when: T("每个端点都有请求和响应示例", "Every endpoint has a request and a response example"), round: 5, state: "achieved", started_at: iso(min(420)), ended_at: iso(min(300)), outcome: T("第 5 轮：每个端点都有示例了", "Round 5: every endpoint has its examples"), last_summary: T("补完最后 3 个端点的示例", "Added the examples for the last 3 endpoints") }),
+      ];
+      if ((h.agents || []).some((a) => a.name === "mbp-reviewer")) list.push(
+        base({ id: "gol_review", agent: "mbp-reviewer", project: "website", objective: T("清空待审的 PR", "Clear the review queue"), done_when: T("没有超过一天没审的 PR", "No pull request waits more than a day"), round: 6, no_progress: 2, every_sec: 3600, state: "active", started_at: iso(min(200)), next_wake_at: soon(38), last_summary: T("队列里剩的两个都在等作者改", "The two left are waiting on their authors") }));
+    } else if (h.id === "hub_studio") {
+      list = [
+        base({ id: "gol_tests", agent: "legacy-codex", objective: "把旧版 runner 的日志格式都整理进 docs/legacy.md", done_when: "文档覆盖全部 3 种日志格式，每种有示例", round: 3, state: "active", started_at: iso(min(80)), next_wake_at: soon(12),
+          last_summary: "整理了前两种格式和示例", next_step: "补第三种（带时间戳前缀的）",
+          rounds: [round("gol_tests", 1, 80, "列出了 3 种日志格式"), round("gol_tests", 2, 50, "没找到第三种的样本，先跳过", false), round("gol_tests", 3, 20, "整理了前两种格式和示例")] }),
+        base({ id: "gol_old", agent: "legacy-codex", objective: "把 runner 的启动脚本改成能重入", done_when: "重复启动不会起两个进程", round: 4, state: "achieved", started_at: iso(min(600)), ended_at: iso(min(480)), outcome: "第 4 轮：重复启动只会留一个进程", last_summary: "加了锁文件和测试" }),
+        base({ id: "gol_ios", agent: "grok-agent-7c2e", objective: "让 iOS 端的 UI 测试在 CI 里跑通", done_when: "CI 的 iOS 任务连续两次通过", round: 4, no_progress: 4, state: "paused", started_at: iso(min(150)), outcome: "连续 4 轮没有进展：CI 里没有可用的 macOS 构建机", last_summary: "还是排不到 macOS 构建机",
+          rounds: [round("gol_ios", 1, 150, "找出了失败的 3 个用例"), round("gol_ios", 2, 120, "排不到 macOS 构建机", false), round("gol_ios", 3, 90, "排不到 macOS 构建机", false, { blocked: true })] }),
+        base({ id: "gol_review", agent: "review-cloud", objective: "把积压的审查意见处理完", done_when: "没有超过一天没回复的审查意见", round: 5, no_progress: 2, every_sec: 3600, state: "active", started_at: iso(min(240)), next_wake_at: soon(41), last_summary: "剩下的两条都在等作者改" }),
+      ];
+    }
+    goalStore.set(h.id, list);
+  }
+  return goalStore.get(h.id);
+}
+
 function agentStatus(a) {
   // The legacy node has a task it picked up and never reported back on.
   const stuck = stuckCurrent.get(a.name);
@@ -1833,7 +1871,12 @@ function overviewFor(h) {
     viewer: { kind: "admin" },
     online_window_seconds: 120,
     totals: totals(h.agents),
-    agents: h.agents.map((a) => { const st = agentStatus(a); const n = watchesOf(h).filter((w) => w.agent === a.name && w.state === "watching").length; return n ? { ...st, watching: n } : st; }),
+    agents: h.agents.map((a) => {
+      const st = agentStatus(a);
+      const n = watchesOf(h).filter((w) => w.agent === a.name && w.state === "watching").length;
+      const g = goalsOf(h).find((x) => x.agent === a.name && (x.state === "active" || x.state === "paused"));
+      return { ...st, ...(n ? { watching: n } : {}), ...(g ? { goal: { id: g.id, objective: g.objective, round: g.round, max_rounds: g.max_rounds, next_wake_at: g.next_wake_at, state: g.state } } : {}) };
+    }),
     // Real machines only; cloud sessions are not machines.
     machines: (h.machines || []).map((m) => ({
       ...m,
@@ -4147,6 +4190,47 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { messages: hub.threads[parts[4]] || [] });
     }
 
+    // /app/hubs/{id}/goals — goals set on chats (myco goal; MOCK_OLD_HUB:
+    // none): list, read (with its rounds), start, pause / resume / stop, change.
+    if (parts[3] === "goals") {
+      if (process.env.MOCK_OLD_HUB) return fail(res, 404, "", "404 page not found");
+      if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
+      const list = goalsOf(hub);
+      const live = (g) => g.state === "active" || g.state === "paused";
+      if (parts.length === 4 && method === "GET") {
+        const agent = url.searchParams.get("agent"), state = url.searchParams.get("state") || "active";
+        return send(res, 200, { goals: list.filter((g) => (!agent || g.agent === agent) && (state === "all" || live(g))).map(({ rounds, ...g }) => g) });
+      }
+      if (parts.length === 4 && method === "POST") {
+        const body = await readBody(req);
+        if (!body?.agent || !body?.objective || !body?.done_when) return fail(res, 400, "invalid_argument", "agent, objective and done_when are required");
+        if (list.some((g) => g.agent === body.agent && live(g))) return fail(res, 409, "conflict", "it already has a goal at work");
+        const every = Number(body.every_sec) || 1800;
+        const g = { id: `gol_${Date.now().toString(36)}`, agent: body.agent, project: body.project, objective: body.objective, done_when: body.done_when, every_sec: every, base_every_sec: every,
+          max_rounds: Number(body.max_rounds) || 16, deadline: new Date(Date.now() + (Number(body.for_sec) || 8 * 3600) * 1000).toISOString(), round: 0, no_progress: 0,
+          next_wake_at: new Date(Date.now() + 60_000).toISOString(), state: "active", started_at: iso(0), created_by: CONSOLE, rounds: [] };
+        list.push(g);
+        return send(res, 201, g);
+      }
+      const g = list.find((x) => x.id === parts[4]);
+      if (!g) return fail(res, 404, "not_found", "no such goal");
+      if (parts.length === 5 && method === "GET") return send(res, 200, { rounds: [], ...g });
+      if (parts.length === 5 && method === "PATCH") {
+        const body = await readBody(req);
+        if (!live(g)) return fail(res, 409, "conflict", `already ${g.state}`);
+        if (body?.every_sec) Object.assign(g, { every_sec: Number(body.every_sec), base_every_sec: Number(body.every_sec), no_progress: 0, next_wake_at: new Date(Date.now() + Number(body.every_sec) * 1000).toISOString() });
+        if (body?.max_rounds) g.max_rounds = Number(body.max_rounds);
+        return send(res, 200, g);
+      }
+      if (parts.length === 6 && method === "POST" && ["pause", "resume", "stop"].includes(parts[5])) {
+        if (!live(g)) return fail(res, 409, "conflict", `already ${g.state}`);
+        if (parts[5] === "pause") Object.assign(g, { state: "paused", outcome: "你暂停了" });
+        if (parts[5] === "resume") Object.assign(g, { state: "active", no_progress: 0, every_sec: g.base_every_sec, outcome: undefined, next_wake_at: new Date(Date.now() + 60_000).toISOString() });
+        if (parts[5] === "stop") Object.assign(g, { state: "stopped", ended_at: iso(0), ended_by: CONSOLE, outcome: "你停止了", next_wake_at: undefined });
+        return send(res, 200, g);
+      }
+      return fail(res, 404, "not_found", "no such route");
+    }
     // /app/hubs/{id}/watches — what agents wait for in the background
     // (myco watch; MOCK_OLD_HUB: none). stop / extend change one.
     if (parts[3] === "watches") {
