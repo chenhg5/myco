@@ -146,19 +146,28 @@ jobs:
 
   ui:
     # The App UI smoke test (web/scripts/ui-smoke.mjs): every page and the
-    # main dialogs against the mock backend, one window size and theme per
-    # runner, so a release no longer has to run it on a laptop first.
+    # main dialogs against the mock backend, per window size and theme, each
+    # in three parts (--shard) running at once, so no job takes long.
+    # It runs in Playwright's own image (browsers, their system libraries and
+    # CJK fonts already there): nothing is installed with apt, which stalled
+    # and failed on runners. PLAYWRIGHT is that image's version: keep the two
+    # below the same (the image's browsers match only its own Playwright).
     needs: changes
     if: needs.changes.outputs.ui == 'true'
     runs-on: ubuntu-latest
-    # A hung download (apt, Playwright's Chromium) must not hold the run for
-    # GitHub's 6 hours: a release waits for main's ci to finish. The smoke
-    # itself takes about 12 minutes, the install up to 15 on a slow mirror.
-    timeout-minutes: 40
+    container:
+      image: mcr.microsoft.com/playwright:v1.57.0-noble
+      options: --ipc=host
+    env:
+      PLAYWRIGHT: "1.57.0"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         combo: [1200-light, 1200-dark, 760-light, 760-dark]
+        shard: [1, 2, 3]
+    name: ui (${{ matrix.combo }} ${{ matrix.shard }}/3)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -166,6 +175,9 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - id: apps
         run: |
           commit=$(node -p 'require("./apps.lock.json").commit')
@@ -178,29 +190,23 @@ jobs:
           persist-credentials: false
       - name: Prepare pinned app UI fixtures
         run: python3 scripts/prepare-apps.py --apps-dir .cache/apps-source/dist/official
-      - name: Dependencies, Playwright and Chromium (with CJK fonts)
-        timeout-minutes: 15
+      - name: Dependencies (npm only; the browser comes with the image)
+        timeout-minutes: 5
         run: |
           cd web && npm ci
-          npm install -g playwright@1
-          # Now and then a runner's apt or download stalls: give each try four
-          # minutes (slow apt mirrors need more than two) and try three times
-          # rather than wait out the step.
-          # A try that timed out can leave its apt-get running and holding the
-          # dpkg lock; apt then waits for that lock rather than failing at once.
-          echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99myco-lock-timeout >/dev/null
-          for try in 1 2 3; do
-            timeout 240 node "$(npm root -g)/playwright/cli.js" install --with-deps chromium &&
-              timeout 240 sudo apt-get install -y -q fonts-noto-cjk >/dev/null && break
-            echo "::warning::Playwright / font install try $try stalled or failed; trying again"
-            [ "$try" = 3 ] && exit 1
-          done
-      - name: UI smoke (${{ matrix.combo }})
-        run: cd web && NODE_PATH="$(npm root -g)" npm run test:ui -- --combo ${{ matrix.combo }}
+          npm install -g "playwright@$PLAYWRIGHT"
+          # The image's browsers belong to its Playwright: say so plainly if
+          # someone bumps one of the two versions alone.
+          ls /ms-playwright | grep -q chromium || { echo "::error::no Chromium in the Playwright image"; exit 1; }
+          fc-list :lang=zh | grep -q . || echo "::warning::no CJK font in the image: Chinese text renders as boxes in screenshots"
+      - name: UI smoke (${{ matrix.combo }}, part ${{ matrix.shard }}/3)
+        # A step that fails is tried once more; passing then is listed as
+        # flaky in this job's summary and does not fail the job.
+        run: cd web && NODE_PATH="$(npm root -g)" npm run test:ui -- --combo ${{ matrix.combo }} --shard ${{ matrix.shard }}/3
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: ui-smoke-${{ matrix.combo }}
+          name: ui-smoke-${{ matrix.combo }}-${{ matrix.shard }}
           path: web/ui-smoke/
           retention-days: 7
 

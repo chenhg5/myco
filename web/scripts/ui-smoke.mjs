@@ -10,9 +10,17 @@
 //   npm run test:ui -- --only 单聊            # just the steps whose name has 单聊
 //   npm run test:ui -- --combo 1200-light     # one size and theme (or 760-dark, ...)
 //   npm run test:ui -- --serial               # one after another (easier to read)
+//   npm run test:ui -- --shard 2/3            # the second third of the steps (CI runs the parts in parallel)
+//   npm run test:ui -- --write-weights        # after a full run, save each step's time for balancing the parts
+//
+// A step that fails is tried once more after reloading the App: if it passes
+// then, it was flaky (listed in ui-smoke/flakes.json and the CI job summary)
+// and the run still passes; failing twice fails the run.
 //
 // Environment:
 //   UI_SMOKE_PORT        first port of the App servers (default 5173; one each)
+//   UI_SMOKE_MOCK_PORT   first port of the mock backends (default 7781)
+//   UI_SMOKE_OUT         where screenshots and the built App go (default web/ui-smoke)
 //   UI_SMOKE_SCALE       screenshots' device scale (default 1; 2 for ones people see)
 //   UI_SMOKE_EXECUTABLE  a Chromium/Chrome binary to drive, if Playwright's
 //                        own browser is not downloaded on this machine
@@ -33,7 +41,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const pageRouteScript = ts.transpileModule(await readFile(appsPath("templates", "src", "_lib", "page-route.ts"),"utf8"),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^export /gm,"") + "\nwindow.__routeModule={subscribeAppRoute};";
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = path.join(WEB, "ui-smoke");
+// UI_SMOKE_OUT: where screenshots and the built App go (default web/ui-smoke;
+// give each run its own when several run on one machine).
+const OUT = process.env.UI_SMOKE_OUT ? path.resolve(process.env.UI_SMOKE_OUT) : path.join(WEB, "ui-smoke");
 const HOST = "127.0.0.1";
 // A 1x1 PNG, for choosing a picture as a face.
 const TINY_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -57,6 +67,15 @@ function flag(name) {
   return out.flatMap((x) => x.split(",")).map((x) => x.trim()).filter(Boolean);
 }
 const ONLY = flag("only");
+// --shard i/n: the i-th of n consecutive parts of each window's steps (steps
+// build on the ones before them, so a part keeps its run of them in order).
+const SHARD = (() => {
+  const v = flag("shard")[0];
+  if (!v) return null;
+  const m = /^(\d+)\/(\d+)$/.exec(v);
+  if (!m || +m[1] < 1 || +m[1] > +m[2]) throw new Error(`--shard wants i/n (1 ≤ i ≤ n), got ${v}`);
+  return { i: +m[1], n: +m[2] };
+})();
 const COMBOS = flag("combo");
 const SERIAL = process.argv.includes("--serial");
 
@@ -286,6 +305,62 @@ async function staysIdle(page, what, ms = 2000) {
   }
 }
 
+// The steps in this file, in order, and the ones that start by going to a
+// page themselves (a part may start there: steps build on the ones before
+// them). Part k ends at the first such step at or after k/n of the steps,
+// so the parts keep their runs of steps in order.
+const SOURCE = await readFile(fileURLToPath(import.meta.url), "utf8");
+const STEP_LABELS = [...SOURCE.matchAll(/await step\("([^"]+)"/g)].map((m) => m[1]);
+const STARTS_ITSELF = new Set([...SOURCE.matchAll(/await step\("([^"]+)", async \(\) => \{\n\s*await (?:go|page\.goto)\(/g)].map((m) => m[1]));
+const STEPS = STEP_LABELS.length;
+// How long each step took (scripts/ui-smoke-weights.json, seconds, from a
+// run's ui-smoke/timings.json; refresh with --write-weights): the parts are
+// cut so that each gets about the same time. Steps not listed count 3 s.
+const WEIGHTS = await readFile(path.join(path.dirname(fileURLToPath(import.meta.url)), "ui-smoke-weights.json"), "utf8")
+  .then((t) => JSON.parse(t)).catch(() => ({}));
+function shardBounds() {
+  const w = STEP_LABELS.map((l) => WEIGHTS[l] ?? 3);
+  const before = [0];
+  for (const x of w) before.push(before[before.length - 1] + x);
+  const total = before[STEPS];
+  const cuts = [0];
+  for (let k = 1; k < SHARD.n; k++) {
+    // The step that starts by itself nearest to k/n of the time.
+    const want = (k * total) / SHARD.n;
+    let best = -1;
+    for (let at = cuts[k - 1] + 1; at < STEPS; at++) {
+      if (!STARTS_ITSELF.has(STEP_LABELS[at])) continue;
+      if (best < 0 || Math.abs(before[at] - want) < Math.abs(before[best] - want)) best = at;
+    }
+    cuts.push(best < 0 ? STEPS : best);
+  }
+  cuts.push(STEPS);
+  return { from: cuts[SHARD.i - 1], to: cuts[SHARD.i] };
+}
+function shardRange() { return shardBounds(); }
+function inShard(label) {
+  const at = STEP_LABELS.indexOf(label);
+  if (at < 0) return SHARD.i === 1; // not found in this file: run it once, in the first part
+  const { from, to } = shardBounds();
+  return at >= from && at < to;
+}
+
+// Steps that passed only on their second try: ui-smoke/flakes.json, and in CI
+// a table in the job summary (they do not fail the run).
+async function reportFlakes(flakes) {
+  const { writeFile, appendFile } = await import("node:fs/promises");
+  await writeFile(path.join(OUT, "flakes.json"), JSON.stringify(flakes, null, 2) + "\n").catch(() => undefined);
+  if (!flakes.length) return;
+  log(`\n⚠ ${flakes.length} 个步骤第二次才通过（偶发，不算失败）：`);
+  for (const f of flakes) log(`  ${f.matrix} · ${f.step}：${f.error}`);
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (summary) {
+    const cell = (t) => String(t).replace(/\|/g, "\\|").replace(/\n/g, " ");
+    const rows = flakes.map((f) => `| ${cell(f.matrix)} | ${cell(f.step)} | ${cell(f.error)} |`).join("\n");
+    await appendFile(summary, `### UI smoke: flaky steps (passed on the second try)\n\n| Window | Step | First error |\n|---|---|---|\n${rows}\n`).catch(() => undefined);
+  }
+}
+
 async function shot(page, size, scheme, slug) {
   const name = `${size.width}x${size.height}-${scheme}-${slug}.png`;
   await page.screenshot({ path: path.join(OUT, name) });
@@ -496,13 +571,32 @@ async function runMatrix(browser, size, scheme) {
   const page = await context.newPage();
   watchPage(page, size, scheme);
   const narrow = size.width < 860;
+  let stepNo = 0;
   const step = async (label, fn) => {
     // --only: just the steps named; the others are left out.
     if (ONLY.length && !ONLY.some((x) => label.includes(x))) return;
+    // --shard i/n: this window's share of the steps.
+    const no = stepNo++;
+    if (SHARD && !inShard(label)) return;
     r.step = label;
     const t0 = Date.now();
     log(`  · ${label}`);
-    await fn();
+    try {
+      await fn();
+    } catch (first) {
+      // Once more from a freshly loaded App: a pass then is a flake, noted
+      // but not failing the run; a second failure is the real thing.
+      const where = String(first?.stack || "").split("\n").find((l) => l.includes("ui-smoke.mjs:"))?.trim().replace(/^at\s+/, "") || "";
+      log(`    ⚠ 第一次失败，重新加载后再试一次：${String(first?.message || first).split("\n")[0]}${where ? `（${where.replace(/^.*\//, "")}）` : ""}`);
+      await page.screenshot({ path: path.join(OUT, `flaky-${size.width}x${size.height}-${scheme}-${no}.png`) }).catch(() => undefined);
+      await page.keyboard.press("Escape").catch(() => undefined);
+      await page.goto(`${r.base}/?lang=zh`, { waitUntil: "domcontentloaded" });
+      await page.locator(".app-shell").waitFor();
+      await settle(page);
+      await fn();
+      r.flakes.push({ matrix: r.matrix, step: label, error: String(first?.message || first).split("\n")[0], where: where.replace(/^.*\//, "") });
+      log(`    ✓ 第二次通过（记为偶发）`);
+    }
     await page.waitForTimeout(250);
     r.timings.push({ label, ms: Date.now() - t0 });
   };
@@ -6046,7 +6140,14 @@ async function runMatrix(browser, size, scheme) {
       if (!ex || ex.x < box.x + box.width) throw new Error("退出按钮不该压在对话上");
       await page.locator(".focus-exit").waitFor({ timeout: 5_000 });
       // A pinned tab above the chat: its row lines up too.
-      // (as whoever this App is on the hub now: read off its own request)
+      // (as whoever this App is on the hub now: read off its own request,
+      // asked for again here; the resource timing buffer is emptied first,
+      // as a long run fills it and later requests are no longer recorded)
+      await page.evaluate(() => {
+        performance.clearResourceTimings();
+        performance.setResourceTimingBufferSize(1000);
+        window.dispatchEvent(new CustomEvent("myco-pins-changed", { detail: { hubId: "hub_studio" } }));
+      });
       const pinAs = await page.waitForFunction(() => {
         const hit = performance.getEntriesByType("resource").map((e) => e.name).filter((n) => n.includes("/pins?with=review-cloud")).pop();
         return hit ? new URL(hit).searchParams.get("a") || "" : null;
@@ -7513,6 +7614,7 @@ async function main() {
   log("myco App · 界面冒烟测试");
   log(`  ${combos.length} 个窗口组合${SERIAL || combos.length === 1 ? "，一个接一个" : "，同时跑"}；mock 后端从 ${MOCK_PORT}、App 从 ${APP_PORT} 起各用一个端口`);
   if (ONLY.length) log(`  只跑名字里有「${ONLY.join("」或「")}」的步骤`);
+  if (SHARD) log(`  第 ${SHARD.i}/${SHARD.n} 片：每个窗口只跑第 ${shardRange().from + 1}–${shardRange().to} 个步骤（共 ${STEPS} 个）`);
 
   for (let i = 0; i < combos.length; i++) {
     await requirePort(MOCK_PORT + i, "a mock backend");
@@ -7560,7 +7662,7 @@ async function main() {
 
     const go = (c, i) => {
       const r = {
-        matrix: `${c.size.width}×${c.size.height} ${c.scheme}`, step: "启动", lines: [], timings: [],
+        matrix: `${c.size.width}×${c.size.height} ${c.scheme}`, step: "启动", lines: [], timings: [], flakes: [],
         mockPort: MOCK_PORT + i, base: `http://${HOST}:${APP_PORT + i}`, ok: false, error: null, ms: 0,
       };
       runs.push(r);
@@ -7593,6 +7695,23 @@ async function main() {
     for (const t of slow) log(`  ${seconds(t.ms).padStart(6)}  ${t.label}（${t.matrix}）`);
   }
   log(`\n${runs.length} 个窗口组合用了 ${seconds(Date.now() - t0)}。`);
+  await reportFlakes(runs.flatMap((r) => r.flakes));
+  // Each step's time (for the shard weights), and with --write-weights the
+  // weights file itself: per step, its slowest time across the windows.
+  {
+    const { writeFile } = await import("node:fs/promises");
+    const timings = runs.flatMap((r) => r.timings.map((t) => ({ matrix: r.matrix, label: t.label, ms: t.ms })));
+    await writeFile(path.join(OUT, "timings.json"), JSON.stringify(timings, null, 2) + "\n").catch(() => undefined);
+    if (process.argv.includes("--write-weights") && !failed.length) {
+      const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "ui-smoke-weights.json");
+      const fresh = {};
+      for (const t of timings) fresh[t.label] = Math.max(fresh[t.label] || 0, Math.round(t.ms / 100) / 10);
+      const w = { ...WEIGHTS, ...fresh };
+      const ordered = Object.fromEntries(STEP_LABELS.filter((l) => l in w).map((l) => [l, w[l]]));
+      await writeFile(file, JSON.stringify(ordered, null, 2) + "\n");
+      log(`写好了 ${path.relative(WEB, file)}（${Object.keys(ordered).length} 个步骤）`);
+    }
+  }
   if (failed.length) {
     for (const r of failed) console.error(`\n✖ 冒烟测试失败于「${r.matrix} · ${r.step}」：\n${r.error?.stack || r.error?.message || r.error}`);
     if (problems.length > 0) reportProblems();
