@@ -6,12 +6,12 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 ## v0.23.0
 
-- App: an addition to an older open task no longer cuts the run that shows its steps.
+- App: when you add to an older task that is still open, what the agent does after that now shows under your addition. Before, those steps kept growing above it, or did not show at all.
 - App: the composer's pill menus stay inside the chat column.
 
 **中文**
 
-- 桌面应用：给较早的未完成任务补充内容时，不会再中断展示其步骤的运行。
+- 桌面应用：给较早的、还没结束的任务补充内容后，agent 之后做的步骤会显示在你的补充下面。以前这些步骤会继续长在补充上方，或者干脆不显示。
 - 桌面应用：输入框的胶囊菜单不会再超出聊天栏。
 
 ## v0.22.21
