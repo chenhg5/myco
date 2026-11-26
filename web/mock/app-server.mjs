@@ -283,11 +283,24 @@ if (OS_URL) madeFiles.set("pg_os", { "index.html": readFileSync(new URL("./os-pa
 madeFiles.set("pg_consent", { "index.html": `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>提醒我</title></head>
 <body style="font:14px -apple-system,sans-serif;padding:48px 64px">
 <button id="go" type="button">提醒我</button> <span id="out"></span>
+<p><button id="shot" type="button">截屏</button> <span id="shot-out"></span></p>
+<p><button id="run" type="button">运行命令</button> <span id="run-out"></span></p>
 <script>
 document.getElementById("go").onclick = async () => {
   const out = document.getElementById("out");
   try { await window.myco.os.notify({ title: "到点了" }); out.textContent = "已提醒"; }
   catch (e) { out.textContent = "没提醒：" + (e.code || e.message); }
+};
+// the screen may be allowed always; commands only for this run
+document.getElementById("shot").onclick = async () => {
+  const out = document.getElementById("shot-out");
+  try { await window.myco.os.screen.capture({}); out.textContent = "已截屏"; }
+  catch (e) { out.textContent = "没截屏：" + (e.code || e.message); }
+};
+document.getElementById("run").onclick = async () => {
+  const out = document.getElementById("run-out");
+  try { await window.myco.os.exec.run({ shell: "ls" }); out.textContent = "已运行"; }
+  catch (e) { out.textContent = "没运行：" + (e.code || e.message); }
 };
 </script></body></html>` });
 const pageFilesOf = (id, n) => madeFiles.has(id) ? madeFiles.get(id) : (id === "pg_live" ? { "index.html": livePage } : id === "pg_checklist" ? { "index.html": checklistPage, "style.css": checklistCss, "app.js": checklistJs } : id === "pg_table" ? tableFiles : pageFiles(n));
@@ -2576,7 +2589,7 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       let g = osGrants.find((x) => x.hub === b.hub && x.page === b.page);
       if (!g) osGrants.push(g = { hub: b.hub, page: b.page, name: b.name, always: [], once: [], denied: [], hosts: [] });
-      const answer = b.answer === "always" && ["exec", "files.delete", "screen"].includes(b.group) ? "once" : b.answer;
+      const answer = b.answer === "always" && ["exec", "files.delete"].includes(b.group) ? "once" : b.answer;
       for (const k of ["always", "once", "denied"]) g[k] = (g[k] || []).filter((x) => x !== b.group);
       g[answer === "deny" ? "denied" : answer].push(b.group);
       return send(res, 200, { group: b.group, answer });
@@ -2592,11 +2605,12 @@ const server = http.createServer(async (req, res) => {
     // a notification (提醒我): asked for first, as the App backend does
     if (parts[2] === "call" && method === "POST") {
       const b = await readBody(req);
-      if (b.name === "notify") {
+      const group = b.name === "notify" ? "notify" : b.name?.startsWith("screen.") ? "screen" : b.name?.startsWith("exec.") ? "exec" : "";
+      if (group) {
         const g = osGrants.find((x) => x.hub === b.page?.hub && x.page === b.page?.id) || {};
-        if ((g.denied || []).includes("notify")) return fail(res, 403, "permission_denied", "the person did not allow this app: notify");
-        if ([...(g.always || []), ...(g.once || [])].includes("notify")) return send(res, 200, { value: true });
-        return send(res, 403, { error: "consent_required", message: "ask the person first", group: "notify", declared: true, once_only: false });
+        if ((g.denied || []).includes(group)) return fail(res, 403, "permission_denied", "the person did not allow this app: " + group);
+        if ([...(g.always || []), ...(g.once || [])].includes(group)) return send(res, 200, { value: true });
+        return send(res, 403, { error: "consent_required", message: "ask the person first", group, declared: true, once_only: group === "exec" });
       }
     }
     return fail(res, 501, "unsupported", "the mock App does not use this computer");

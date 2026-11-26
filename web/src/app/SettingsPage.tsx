@@ -1712,7 +1712,7 @@ function AppPermissionsSection({ hubs }: { hubs: Hub[] }) {
       {!rows.length && <div className="app-empty-note">{L("还没有应用用过这台电脑。应用第一次要读文件、录音、联网这些时，App 会先问你。", "No app has used this computer yet. The first time one wants to read files, record, use the network and the like, the App asks you.")}</div>}
       {rows.map((r) => {
         const items: { key: string; group: string; host?: string; note: string; denied?: boolean }[] = [
-          ...(r.always || []).map((g) => ({ key: `a${g}`, group: g, note: L("一直允许", "Always") })),
+          ...(r.always || []).map((g) => ({ key: `a${g}`, group: g, note: L("始终允许，以后不再问", "Always allowed: not asked again") })),
           ...(r.once || []).filter((g) => !(r.always || []).includes(g)).map((g) => ({ key: `o${g}`, group: g, note: L("这次允许，App 关掉就失效", "This time, until the App quits") })),
           ...(r.hosts || []).map((h) => ({ key: `h${h}`, group: "network", host: h, note: L("允许", "Allowed") })),
           ...(r.denied || []).map((g) => ({ key: `d${g}`, group: g, note: L("不允许", "Refused"), denied: true })),

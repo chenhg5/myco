@@ -3880,8 +3880,9 @@ async function runMatrix(browser, size, scheme) {
 
     // 只看进度: runs show what the agent reported, not its steps.
     // Before a page uses this computer the App asks the person (one
-    // question; 一直允许 is kept); Settings › 应用权限 lists what pages may
-    // do and takes it back, after which the page is asked again.
+    // question; 始终允许 is kept, and the screen may be allowed always while
+    // commands are only ever for this run); Settings › 应用权限 lists what
+    // pages may do and takes it back, after which the page is asked again.
     await step("网页 · 用电脑前先问", async () => {
       await go(page, "官网改版", narrow);
       await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-open-page", { detail: { kind: "page", hubId: "hub_studio", id: "pg_consent" } })));
@@ -3896,13 +3897,30 @@ async function runMatrix(browser, size, scheme) {
       if (!(await ask.innerText()).includes("「提醒我」")) throw new Error(`应写明是哪个应用要用：${await ask.innerText()}`);
       if (!(await ask.getByRole("button", { name: "这次允许" }).count())) throw new Error("应能只允许这一次");
       await settle(page, 200);
+      if (!(await ask.innerText()).includes("以后这个应用不再问")) throw new Error(`应说明始终允许以后不再问：${await ask.innerText()}`);
       await shot(page, size, scheme, "page-os-consent");
-      await ask.getByRole("button", { name: "一直允许" }).click();
+      await ask.getByRole("button", { name: "始终允许" }).click();
       await frame.locator("#out", { hasText: "已提醒" }).waitFor({ timeout: 10_000 });
       // the second time: no question
       await frame.locator("#go").dispatchEvent("click");
       await settle(page, 400);
-      if (await ask.count()) throw new Error("一直允许后不该再问");
+      if (await ask.count()) throw new Error("始终允许后不该再问");
+      // the screen: may be allowed always
+      await frame.locator("#shot").dispatchEvent("click");
+      const askScreen = page.locator(".pg-ask", { hasText: "截取或录制屏幕" });
+      await askScreen.waitFor({ timeout: 10_000 });
+      await askScreen.getByRole("button", { name: "始终允许" }).click();
+      await frame.locator("#shot-out", { hasText: "已截屏" }).waitFor({ timeout: 10_000 });
+      // commands: only this run, and the dialog says why
+      await frame.locator("#run").dispatchEvent("click");
+      const askRun = page.locator(".pg-ask", { hasText: "运行命令" });
+      await askRun.waitFor({ timeout: 10_000 });
+      if (await askRun.getByRole("button", { name: "始终允许" }).count()) throw new Error("运行命令不该有始终允许");
+      if (!(await askRun.innerText()).includes("撤不回")) throw new Error(`应说明为什么没有始终允许：${await askRun.innerText()}`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "page-os-consent-once");
+      await askRun.getByRole("button", { name: "这次允许" }).click();
+      await frame.locator("#run-out", { hasText: "已运行" }).waitFor({ timeout: 10_000 });
       // (the page panel goes away first: in a narrow window it covers the sidebar)
       const panel = page.locator(".pg-panel:visible");
       if (await panel.count()) {
@@ -3914,11 +3932,16 @@ async function runMatrix(browser, size, scheme) {
       const card = page.locator(".app-setting-card[data-setting='app-permissions']");
       const row = card.locator(".app-perm-page", { hasText: "提醒我" });
       await row.waitFor({ timeout: 10_000 });
-      if (!(await row.innerText()).includes("发系统通知") || !(await row.innerText()).includes("一直允许")) throw new Error(`应用权限应列出它：${await row.innerText()}`);
-      if (!(await card.locator(".app-perm-page", { hasText: "空间清理" }).innerText()).includes("这次允许")) throw new Error("应分清一直允许和这次允许");
+      const rowText = await row.innerText();
+      if (!rowText.includes("发系统通知") || !rowText.includes("始终允许") || !rowText.includes("截取或录制屏幕")) throw new Error(`应用权限应列出它：${rowText}`);
+      if (!/运行命令[^\n]*\n[^\n]*这次允许/.test(rowText)) throw new Error(`运行命令应是这次允许：${rowText}`);
+      if (!(await card.locator(".app-perm-page", { hasText: "空间清理" }).innerText()).includes("这次允许")) throw new Error("应分清始终允许和这次允许");
       await settle(page, 200);
       await shot(page, size, scheme, "settings-app-permissions");
-      await row.locator(".app-perm-item", { hasText: "发系统通知" }).getByRole("button", { name: "收回" }).click();
+      for (const what of ["发系统通知", "截取或录制屏幕", "运行命令"]) {
+        await row.locator(".app-perm-item", { hasText: what }).getByRole("button", { name: "收回" }).click();
+        await row.locator(".app-perm-item", { hasText: what }).waitFor({ state: "detached", timeout: 5_000 });
+      }
       await row.waitFor({ state: "detached", timeout: 5_000 });
     });
 

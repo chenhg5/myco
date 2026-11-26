@@ -937,12 +937,12 @@ function PageView({ target, open, active, reload, onMeta }: {
       title={consent ? L(`允许「${consent.name || "这个应用"}」${osWant(consent.group, consent.host).zh}吗？`, `Let "${consent.name || "this app"}" ${osWant(consent.group, consent.host).en}?`) : ""}
       description={consent ? [
         consent.declared ? "" : L("这个应用没有在说明里声明要用这一项。", "This app does not declare that it uses this."),
-        consent.once_only ? L("这一项只能这次允许：下次打开 App 会再问你。", "This can only be allowed for now: the App asks again next time.") : L("「一直允许」可以在设置 → 应用权限里收回。", "You can take back \"Always\" in Settings → App permissions."),
+        consent.once_only ? osOnceWhy(consent.group) : L("选「始终允许」，以后这个应用不再问（升级后也不问，只问新版本新加的）；可以在设置 → 应用权限里收回。", "With \"Always allow\", this app won't ask again, not even after an update (only for what a new version adds). You can take it back in Settings → App permissions."),
       ].filter(Boolean).join(" ") : ""}>
       <div className="app-modal-actions">
         <button type="button" className="app-btn" onClick={() => consent?.answer("deny")}>{L("不允许", "Don't allow")}</button>
         {consent && !consent.once_only && <button type="button" className="app-btn" onClick={() => consent?.answer("once")}>{L("这次允许", "Allow this time")}</button>}
-        <button type="button" className="app-btn app-btn-primary" onClick={() => consent?.answer(consent.once_only ? "once" : "always")}>{consent?.once_only ? L("允许", "Allow") : L("一直允许", "Always allow")}</button>
+        <button type="button" className="app-btn app-btn-primary" onClick={() => consent?.answer(consent.once_only ? "once" : "always")}>{consent?.once_only ? L("这次允许", "Allow this time") : L("始终允许", "Always allow")}</button>
       </div>
     </Modal>
     <Modal open={!!asking} onOpenChange={(o) => { if (!o) asking?.answer(false); }} className="pg-ask"
@@ -994,6 +994,13 @@ function PageLoading({ name, seed, who }: { name: string; seed: string; who: str
 
 
 /** What a group of the computer's capabilities lets a page do, said plainly. */
+/** Why a group may only be allowed for this run (never "always"). */
+function osOnceWhy(group: string): string {
+  return group === "files.delete"
+    ? L("删掉的文件找不回来，所以这一项没有「始终允许」：每次打开 App 后第一次用都会问你。", "Deleted files can't be brought back, so there is no \"Always allow\" for this: the App asks the first time it's used each time you open the App.")
+    : L("命令能改动或删掉电脑上的东西，事后撤不回，所以这一项没有「始终允许」：每次打开 App 后第一次用都会问你。", "Commands can change or delete things on this computer that can't be undone, so there is no \"Always allow\" for this: the App asks the first time it's used each time you open the App.");
+}
+
 export function osWant(group: string, host?: string): { zh: string; en: string } {
   switch (group) {
     case "files": return { zh: "读这台电脑上的文件", en: "read files on this computer" };
