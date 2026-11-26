@@ -4,6 +4,30 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.0
+
+- App: an addition to an older open task no longer cuts the run that shows its steps.
+- App: the composer's pill menus stay inside the chat column.
+
+**中文**
+
+- 桌面应用：给较早的未完成任务补充内容时，不会再中断展示其步骤的运行。
+- 桌面应用：输入框的胶囊菜单不会再超出聊天栏。
+
+## v0.22.21
+
+- Hub: much faster on large workspaces. The overview, agent list, conversations and per-pair views no longer scan every message (on 100,000 messages, conversations went from 40–70 ms to under 1 ms), and long chats open without asking the hub for every run.
+- Hub: slow requests, failed requests and slow SQL statements are logged with their request id, and `myco hub perf` shows per-endpoint and per-statement timings; hub and runner log files are kept for two weeks.
+- Quota: the App shows the Claude quota that a cloud session reports for itself (agents without a runner).
+- App: the sidebar says which entries you hid, the App starts from its saved data even after an update, and what you add while a run works stays a separate message.
+
+**中文**
+
+- Hub：大工作区明显变快。概览、agent 列表、会话列表和两人对话不再扫描全部消息（10 万条消息时会话列表从 40–70 毫秒降到 1 毫秒以内），长会话打开时也不再逐个向 Hub 查询。
+- Hub：慢请求、失败请求和慢 SQL 都会连同请求编号写进日志，`myco hub perf` 可以查看各接口和各语句的耗时；Hub 和 runner 的日志保留两周。
+- 额度：App 能显示云端会话自己上报的 Claude 额度（没有 runner 的 agent）。
+- 桌面应用：侧栏会写明隐藏了哪些项；更新后也会先用已保存的数据启动；运行过程中补充的话会单独成一条消息。
+
 ## v0.22.20
 
 - App: a livelier "Sending" indicator shown once, All activity as a group chat, and an addition that quotes its task only when that could be mistaken.
@@ -18,14 +42,14 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 ## v0.22.19
 
-- Chat apps (preview): give an agent its own Feishu/Lark bot by scanning a QR code, or a Slack bot, from the agent's details (Name and access › Chat apps), and talk to it there; a bot is offline while its computer sleeps.
+- Chat apps (preview): connect Feishu/Lark and Slack bots from Settings > Chat apps and talk to agents there, one bot per agent, with a clear offline note while its computer sleeps.
 - Quota: a quota pill in the composer with a note when the account runs out, agents reading their owner's account quotas, and cloud sessions reporting their Claude quota.
 - App: choose which entries the sidebar shows, the chat's ... menu on a project's home, livelier file loading, and long chats that open without asking the hub for every run.
 - Browser automation: script results are awaited and exceptions classified, and screenshots explain why privacy blocked them instead of treating a URL fragment change as a new page.
 
 **中文**
 
-- 聊天软件（预览）：在 agent 资料的「名字和接入 › 聊天软件」里，扫码给它绑定飞书 / Lark 机器人，或绑定 Slack 机器人，然后直接在聊天里找它；电脑休眠时机器人离线。
+- 聊天应用（预览）：在「设置 › 聊天应用」连接飞书/Lark 与 Slack 机器人，在聊天里直接和 agent 对话；每个 agent 一个机器人，电脑休眠时明确显示机器人离线。
 - 额度：输入框显示额度状态，账号用尽时给出提示；agent 读取所属成员的账号额度，云端会话上报 Claude 额度。
 - 桌面应用：侧边栏可自选显示项，项目主页有聊天「⋯」菜单，文件加载更顺滑，长聊天打开时不再逐次向 Hub 查询。
 - 网页自动化：等待脚本结果并区分异常类型；截图被隐私检查拒绝时说明原因，同一页面仅片段变化不再当作新页面。
