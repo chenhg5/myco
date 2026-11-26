@@ -14,6 +14,8 @@ import { runnerQueueText } from "@/app/RunnerQueue";
 import { TraceView, type PlanItem } from "@/app/TraceView";
 import { WorkingLine } from "@/app/Working";
 import { AccessPill, RunPill } from "@/app/RunSettings";
+import { QuotaPill } from "@/app/QuotaTag";
+import { quotaOutNote } from "@/app/quota";
 import { forkAgent } from "@/app/Fork";
 import { HandoffCard, handoffsFrom, withStale } from "@/app/Handoff";
 import { TurnRail, type Turn } from "@/app/TurnRail";
@@ -1009,6 +1011,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const stopped = lastTask?.status === "failed" && lastTask.error === STOPPED;
   const failed = lastTask?.status === "failed" || afterTask.some((m) => m.type === "event");
   const busy = !!row && sessionBusy(row.st);
+  // Its account is out of quota: said before you send, not stopped.
+  const quotaOut = row?.st.agent.runtime?.quota ? quotaOutNote(row.st.agent.runtime.quota, now) : undefined;
   const offline = row?.st.state === "offline";
   // A task picked up long ago and quiet since: its result may never come
   // back. Said in the chat, with a way out, instead of a spinner.
@@ -2727,6 +2731,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         )}
         {busy && <ErrorText error={copyError} />}
+        {!shellMode && quotaOut && <div className="conv-busy conv-quota-out" role="status"><span className="dot over" /><span className="conv-busy-text">{quotaOut}</span></div>}
         {elsewhere.length > 0 && (
           <div className="conv-busy" data-testid="open-elsewhere">
             <span className="dot idle" />
@@ -2836,6 +2841,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               {/* its model and effort, small (RunSettings) */}
               {!shellMode && !observed && row && <RunPill row={row} onRefresh={async () => { await onRefresh?.(); }} />}
               {!shellMode && !observed && row && <AccessPill row={row} onRefresh={async () => { await onRefresh?.(); }} />}
+              {/* its account's tightest quota window (owner only) */}
+              {!shellMode && !observed && row && <QuotaPill row={row} now={now} />}
             </div>
             {/* Only what is not obvious: while it works, Enter adds to the
                 task and ⌘↩ queues the next one. */}

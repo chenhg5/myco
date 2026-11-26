@@ -219,3 +219,32 @@ export function agentQuotaHint(a: Agent, now = Date.now()): { level: "tight" | "
   if (s.level === "ok" || s.level === "failed") return undefined;
   return { level: s.level === "tight" ? "tight" : "spent", text: s.short, title: s.line };
 }
+
+/** A window's name in a few characters for the composer: "5h", "7d", "月". */
+export function quotaWindowShort(w: QuotaWindow): string {
+  const sec = w.duration_sec || (w.name === "five_hour" ? 5 * HOUR : w.name.startsWith("seven_day") || w.name === "weekly" ? 7 * DAY : w.name === "daily" ? DAY : 0);
+  if (w.name === "monthly" || (sec >= 28 * DAY && sec <= 31 * DAY)) return L("月", "mo");
+  if (!sec) return w.label || "";
+  if (sec < 2 * DAY) return `${Math.round(sec / HOUR)}h`;
+  return `${Math.round(sec / DAY)}d`;
+}
+
+/** The composer's colour for a window: grey, amber under 20% left, red
+ *  under 5% or spent. */
+export function quotaPillLevel(w: QuotaWindow): "ok" | "low" | "out" {
+  if (quotaSpent(w) || quotaLeft(w) < 5) return "out";
+  return quotaLeft(w) < 20 ? "low" : "ok";
+}
+
+/** "已用完，3:40 重置": what the composer says before a send while the
+ *  account is out (it does not stop the send). */
+export function quotaOutNote(q: Quota, now = Date.now()): string | undefined {
+  if (!quotaHasNumbers(q)) return undefined;
+  const w = quotaWorst(q);
+  if (!w || !quotaSpent(w)) return undefined;
+  const at = w.resets_at ? resetLabel(w.resets_at, now) : "";
+  return at && at !== "—"
+    ? L(`${quotaWindowLabel(w)}额度已用完，${at} 重置；现在发的消息可能要等到那时才会处理。`, `${quotaWindowLabel(w)} quota is used up; resets ${at}. What you send now may wait until then.`)
+    : L(`${quotaWindowLabel(w)}额度已用完；现在发的消息可能要等重置后才会处理。`, `${quotaWindowLabel(w)} quota is used up. What you send now may wait until it resets.`);
+}
+
