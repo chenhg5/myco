@@ -4128,6 +4128,9 @@ async function runMatrix(browser, size, scheme) {
       for (const v of [null, "not json", "{\"projects\":true}"]) {
         await page.evaluate((x) => { if (x === null) localStorage.removeItem("myco-nav-hidden"); else localStorage.setItem("myco-nav-hidden", x); }, v);
         await page.reload({ waitUntil: "domcontentloaded" });
+        // (the shell first: sidebar() reads it before it is there as hidden,
+        // and its click would then close the sidebar)
+        await page.locator(".app-crumbbar").waitFor({ timeout: 15_000 });
         await sidebar(page, true);
         await page.locator(".app-sidebar").getByText("官网改版", { exact: true }).first().waitFor({ timeout: 15_000 });
         await page.locator(".app-sidebar").getByText("PM (Codex)", { exact: true }).first().waitFor({ timeout: 5_000 });
