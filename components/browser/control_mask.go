@@ -24,15 +24,20 @@ type screenshotPrivacyPlan struct {
 	Epochs    map[proto.PageFrameID]uint64
 }
 
+// Reasons are fixed categories. They must never include page content or URLs.
+type screenshotPrivacyError string
+
+func (e screenshotPrivacyError) Error() string { return "sensitive_snapshot" }
+
 // Anchor the root in the live frame tree and discover child owners in the
 // current DOM. OOPIFs may be omitted from the root tree, while historical
 // advertising-frame events may still describe already detached documents.
 func (c *controlSession) screenshotPrivacy(ctx context.Context, p *rod.Page) (screenshotPrivacyPlan, error) {
 	plan := screenshotPrivacyPlan{Documents: map[proto.PageFrameID]string{}, Epochs: map[proto.PageFrameID]uint64{}}
-	deny := func() (screenshotPrivacyPlan, error) { return plan, errors.New("sensitive_snapshot") }
+	deny := func(reason screenshotPrivacyError) (screenshotPrivacyPlan, error) { return plan, reason }
 	var tree proto.PageGetFrameTreeResult
 	if c.call(ctx, c.browser.primarySession(p.TargetID), "Page.getFrameTree", nil, &tree) != nil || tree.FrameTree == nil || tree.FrameTree.Frame == nil {
-		return deny()
+		return deny("privacy_unavailable")
 	}
 	root := tree.FrameTree.Frame.ID
 	parents := map[proto.PageFrameID]proto.PageFrameID{root: ""}
@@ -42,7 +47,7 @@ func (c *controlSession) screenshotPrivacy(ctx context.Context, p *rod.Page) (sc
 		ready[frame.id] = frame
 	}
 	if _, ok := ready[root]; !ok {
-		return deny()
+		return deny("privacy_unavailable")
 	}
 	owners := map[proto.PageFrameID]controlRef{}
 	queue := []proto.PageFrameID{root}
@@ -59,12 +64,13 @@ func (c *controlSession) screenshotPrivacy(ctx context.Context, p *rod.Page) (sc
 		var doc proto.DOMGetDocumentResult
 		if c.call(ctx, frame.sid, "DOM.getDocument", map[string]any{"depth": -1, "pierce": true}, &doc) != nil {
 			if id == root {
-				return deny()
+				return deny("privacy_unavailable")
 			}
 			delete(ready, id)
 			delete(plan.Epochs, id)
 			continue
 		}
+		denial := screenshotPrivacyError("protected_content")
 		var safe func(*proto.DOMNode, proto.PageFrameID) bool
 		safe = func(n *proto.DOMNode, current proto.PageFrameID) bool {
 			if n == nil {
@@ -90,6 +96,7 @@ func (c *controlSession) screenshotPrivacy(ctx context.Context, p *rod.Page) (sc
 				plan.Documents[child] = ""
 				parent, ok := ready[current]
 				if !ok {
+					denial = "privacy_unavailable"
 					return false
 				}
 				owners[child] = controlRef{sid: frame.sid, frame: current, epoch: parent.epoch, tab: p.TargetID, backend: n.BackendNodeID}
@@ -113,7 +120,7 @@ func (c *controlSession) screenshotPrivacy(ctx context.Context, p *rod.Page) (sc
 			return safe(n.ContentDocument, child)
 		}
 		if !safe(doc.Root, id) {
-			return deny()
+			return deny(denial)
 		}
 	}
 	ids := []proto.PageFrameID{}
@@ -129,7 +136,7 @@ func (c *controlSession) screenshotPrivacy(ctx context.Context, p *rod.Page) (sc
 		for depth := 0; depth < 32; depth++ {
 			parent := parents[outer]
 			if parent == "" {
-				return deny()
+				return deny("privacy_unavailable")
 			}
 			if _, ok := ready[parent]; ok {
 				break
@@ -142,7 +149,7 @@ func (c *controlSession) screenshotPrivacy(ctx context.Context, p *rod.Page) (sc
 		masked[outer] = true
 		rect, err := c.unreadableFrameRect(ctx, p, outer, parents, ready, owners)
 		if err != nil {
-			return deny()
+			return deny("frame_unavailable")
 		}
 		if rect.Width > 0 && rect.Height > 0 {
 			plan.Masks = append(plan.Masks, rect)
@@ -199,6 +206,18 @@ func (c *controlSession) unreadableFrameRect(ctx context.Context, p *rod.Page, i
 }
 
 func sameScreenshotPrivacy(a, b screenshotPrivacyPlan) bool {
+	// A same-document fragment navigation can happen while pixels are captured.
+	// It does not replace the document; frame epochs and the DOM privacy scan
+	// below still detect changes that could expose sensitive content.
+	normalize := func(plan screenshotPrivacyPlan) screenshotPrivacyPlan {
+		documents := make(map[proto.PageFrameID]string, len(plan.Documents))
+		for id, document := range plan.Documents {
+			documents[id], _, _ = strings.Cut(document, "#")
+		}
+		plan.Documents = documents
+		return plan
+	}
+	a, b = normalize(a), normalize(b)
 	x, _ := json.Marshal(a)
 	y, _ := json.Marshal(b)
 	return bytes.Equal(x, y)

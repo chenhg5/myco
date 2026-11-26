@@ -590,6 +590,13 @@ and in the controller App.
 | `browser.page.close` | `{session}` | `steps,removed,next,done:true,reason:"closed"` |
 | `browser.page.run` | `{session,graph:{nodes,edges},tab?,timeout_ms?}` | `ok,state,error_node?,error?,steps,output,url,tabs` |
 
+A screenshot denied with `sensitive_snapshot` can include a fixed `reason`:
+`protected_content` (a sensitive field was found), `privacy_unavailable`
+(the document could not be checked), `frame_unavailable` (an unreadable frame
+could not be safely masked), or `privacy_changed` (the checked document or
+frame state changed during capture). The same reason appears in a failed
+`browser.page.run` screenshot node's `error`. No reason contains page content.
+
 `browser.page.run` verifies a literal draft in the same live session, under the
 same grant, profile, agent and allowed hosts. It does not need an approved M2
 script version. Both the App and component must support replay; older components

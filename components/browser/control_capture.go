@@ -97,7 +97,7 @@ func (c *controlSession) captureImage(ctx context.Context, p *rod.Page, in contr
 			return nil, err
 		}
 		if info.Sensitive {
-			return nil, errors.New("sensitive_snapshot")
+			return nil, screenshotPrivacyError("protected_content")
 		}
 		point, err := c.elementPoint(ctx, p, r, false)
 		if err != nil {
@@ -123,12 +123,15 @@ func (c *controlSession) captureImage(ctx context.Context, p *rod.Page, in contr
 		return nil, errors.New("component_unavailable")
 	}
 	after, err := c.screenshotPrivacy(ctx, p)
-	if err != nil || !sameScreenshotPrivacy(privacy, after) {
-		return nil, errors.New("sensitive_snapshot")
+	if err != nil {
+		return nil, err
+	}
+	if !sameScreenshotPrivacy(privacy, after) {
+		return nil, screenshotPrivacyError("privacy_changed")
 	}
 	shot.Data, err = maskScreenshot(shot.Data, privacy.Masks, view.PageX, view.PageY, clip)
 	if err != nil {
-		return nil, err
+		return nil, screenshotPrivacyError("frame_unavailable")
 	}
 	config, _, err := image.DecodeConfig(bytes.NewReader(shot.Data))
 	if err != nil {

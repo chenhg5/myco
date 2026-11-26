@@ -40,3 +40,12 @@ func TestBrowserOwnerWindowBusyReasonReachesAgentAndPage(t *testing.T) {
 		t.Fatal(body)
 	}
 }
+
+func TestBrowserScreenshotPrivacyReasonReachesAgent(t *testing.T) {
+	for _, reason := range []string{"protected_content", "privacy_unavailable", "frame_unavailable", "privacy_changed"} {
+		out := browserControlFailure(&browserautomation.ComponentError{Code: "sensitive_snapshot", Reason: reason}, false)
+		if out.Error.Code != "sensitive_snapshot" || out.Error.Reason != reason {
+			t.Fatalf("screenshot reason %s lost: %+v", reason, out.Error)
+		}
+	}
+}
