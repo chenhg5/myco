@@ -28,6 +28,7 @@ import (
 	"github.com/myco-ai/myco/internal/infra/sqlite"
 	"github.com/myco-ai/myco/internal/infra/tunnel"
 	"github.com/myco-ai/myco/internal/infra/wake"
+	"github.com/myco-ai/myco/internal/perf"
 	"github.com/myco-ai/myco/internal/release"
 	"github.com/myco-ai/myco/internal/transport/httpapi"
 	"github.com/myco-ai/myco/internal/transport/ingress"
@@ -59,6 +60,13 @@ type Options struct {
 	// warning (0: DefaultSlowRequest; negative: never). Long polls and
 	// streams, which wait on purpose, are left out.
 	SlowRequest time.Duration
+	// SlowStatement: a database statement taking this long or longer is
+	// logged as a warning, by name, with its rows (0:
+	// sqlite.DefaultSlowStatement; negative: never).
+	SlowStatement time.Duration
+	// Perf collects how long requests and statements take, for GET
+	// /v1/admin/perf (Run makes one when nil).
+	Perf *perf.Timings
 	// Ready, if set, receives the bound address once listening.
 	Ready func(addr string)
 	// Tunnel, if set, publishes the hub (listening on localhost) at a
@@ -143,7 +151,7 @@ func Build(o Options) (*Hub, error) {
 	if err := pagePolicy.Validate(); err != nil {
 		return nil, err
 	}
-	db, err := sqlite.Open(o.DBPath)
+	db, err := sqlite.OpenTimed(o.DBPath, sqlite.Timing{Log: o.Log, Slow: o.SlowStatement, Perf: o.Perf.StatementsOrNil()})
 	if err != nil {
 		return nil, err
 	}
@@ -367,6 +375,7 @@ func Build(o Options) (*Hub, error) {
 		o.Log.Warn("official templates", "err", err)
 	}
 	srv.SetTemplates(templateSvc)
+	srv.SetPerf(o.Perf)
 	handovers := app.NewHandoverService(sqlite.NewHandoverRepo(db), agentsRepo, msgRepo, security.Tokens{}, ids, clock)
 	handovers.SetContext(projectRepo, sqlite.NewMachineRepo(db), messages)
 	srv.SetHandovers(handovers)
@@ -396,6 +405,9 @@ func Build(o Options) (*Hub, error) {
 func Run(ctx context.Context, o Options) error {
 	if o.AdminToken == "" {
 		return errors.New("admin token is required")
+	}
+	if o.Perf == nil {
+		o.Perf = perf.NewTimings()
 	}
 	hub, err := Build(o)
 	if err != nil {
@@ -436,7 +448,7 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return err
 	}
-	srv := &http.Server{Handler: logRequests(h, o.Log, o.SlowRequest), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: logRequests(h, o.Log, o.SlowRequest, o.Perf.RequestsOrNil()), ReadHeaderTimeout: 10 * time.Second}
 	o.Log.Info("myco hub listening", "addr", ln.Addr().String(), "db", o.DBPath)
 	if ta, ok := ln.Addr().(*net.TCPAddr); ok && ta.IP.IsUnspecified() && o.Tunnel == nil {
 		// Reachable on the LAN: links made over localhost get the LAN address
@@ -522,14 +534,26 @@ func waitsOnPurpose(r *http.Request) bool {
 // longer as a warning ("slow request"), and one that failed on the hub's
 // side (5xx) as an error with what it answered ("request failed"), so a
 // hub run at the usual info level shows what is slow and what breaks.
-func logRequests(h http.Handler, log *slog.Logger, slow time.Duration) http.Handler {
+//
+// Each request is also added to rec (when set) under its route pattern,
+// e.g. "GET /v1/threads/{id}"; long polls and streams are left out.
+func logRequests(h http.Handler, log *slog.Logger, slow time.Duration, rec *perf.Recorder) http.Handler {
 	if slow == 0 {
 		slow = DefaultSlowRequest
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		rec := &statusRecorder{ResponseWriter: w, status: 200}
-		h.ServeHTTP(rec, r)
+		sr := &statusRecorder{ResponseWriter: w, status: 200}
+		r = r.WithContext(perf.WithRoute(r.Context()))
+		h.ServeHTTP(sr, r)
+		if rec != nil && !waitsOnPurpose(r) {
+			route := perf.Route(r.Context())
+			if route == "" {
+				route = r.Method + " (no route)"
+			}
+			rec.Add(route, time.Since(start), 0)
+		}
+		rec := sr
 		path := r.URL.Path
 		if strings.HasPrefix(path, "/r/") {
 			path = "/r/<redacted>" // agent recovery links carry a credential

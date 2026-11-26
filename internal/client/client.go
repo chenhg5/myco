@@ -1346,3 +1346,17 @@ func (c *Client) CreateWorkspace(ctx context.Context, name string, dryRun bool) 
 func (c *Client) RemoveWorkspace(ctx context.Context, name string) error {
 	return c.do(ctx, http.MethodDelete, "/v1/server/workspaces/"+esc(name), nil, nil, nil)
 }
+
+// Perf is GET /v1/admin/perf: how long the hub's requests and statements
+// took over the last minutes (1-60), at most limit of each, slowest first.
+func (c *Client) Perf(ctx context.Context, minutes, limit int) (*api.PerfReport, error) {
+	q := url.Values{}
+	if minutes > 0 {
+		q.Set("minutes", strconv.Itoa(minutes))
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	var out api.PerfReport
+	return &out, c.do(ctx, http.MethodGet, "/v1/admin/perf", q, nil, &out)
+}

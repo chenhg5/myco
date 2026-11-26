@@ -483,15 +483,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_idem ON messages(from_agent, idem
 `
 
 // Open opens (and migrates) a SQLite database. Use ":memory:" for tests.
-func Open(path string) (*sql.DB, error) {
+func Open(path string) (*sql.DB, error) { return open(path, nil) }
+
+func open(path string, t *Timing) (*sql.DB, error) {
 	dsn := path
 	if path != ":memory:" {
 		dsn = "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
 	}
-	db, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, err
-	}
+	db := openDB(dsn, t)
 	// A single writer connection serializes transactions and keeps
 	// ":memory:" databases shared across the pool.
 	db.SetMaxOpenConns(1)
@@ -589,6 +588,9 @@ func Open(path string) (*sql.DB, error) {
 			db.Close()
 			return nil, fmt.Errorf("migrate: %w", err)
 		}
+	}
+	if t != nil {
+		t.live.Store(true) // (from here on: the migrations are not timed)
 	}
 	return db, nil
 }
