@@ -338,7 +338,7 @@ func (e *engine) handler() http.Handler {
 // Neither errors from CDP (which may contain typed secrets) nor browser stderr
 // are returned to a page or written to logs.
 func publicError(err error) string {
-	for _, s := range []string{"sensitive_snapshot", "busy", "not_found", "browser_missing", "profile_locked", "invalid_argument", "unsupported_node", "invalid_graph", "storage_failed", "cancelled", "timeout", "target_not_found", "start_not_found", "sensitive_literal", "secret_required", "invalid_param", "unsupported_branch", "cycle", "many_starts"} {
+	for _, s := range []string{"sensitive_snapshot", "busy", "not_found", "browser_missing", "profile_locked", "invalid_argument", "unsupported_node", "invalid_graph", "storage_failed", "cancelled", "timeout", "target_not_found", "start_not_found", "sensitive_literal", "secret_required", "invalid_param", "unsupported_branch", "cycle", "many_starts", "script_error"} {
 		if strings.HasPrefix(err.Error(), s) {
 			return s
 		}
