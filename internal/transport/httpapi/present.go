@@ -290,7 +290,13 @@ func (s *Server) visibleQuota(r *http.Request, a *domain.Agent) *api.Quota {
 		owner = s.machines.QuotaOwner(r.Context(), a)
 	}
 	if caller, ok := r.Context().Value(callerAgentKey{}).(*domain.Agent); ok {
-		if caller.Name != a.Name || owner == "" || a.Owner != owner {
+		if owner == "" || a.Owner != owner {
+			return nil
+		}
+		// An agent sees its own account, and an agent a member owns sees that
+		// member's accounts: their coordinator plans how the quota is spent.
+		// Only numbers and window times are kept, never credentials.
+		if caller.Name != a.Name && caller.Owner != owner {
 			return nil
 		}
 	} else if s.isMasterAdmin(r) {
