@@ -1385,3 +1385,27 @@ to decide what to do next. Stopping also resumes an associated held task with
 the reason. An already completed associated task stops its watch without a
 new wake. Automatic hold watches retain legacy cross-project hold semantics;
 their label does not copy a delegated task's content across project boundaries.
+
+### Local browser profile deletion
+
+`myco.browser.profiles.remove?(id)` accepts `BrowserProfileRemoveInput` (`{id}`)
+at the local browser-call endpoint and returns `true`. It is optional and
+requires both the page's browser consent and a one-use, exact-profile owner
+confirmation from the trusted App UI. Agents cannot request this confirmation.
+The component advertises `profile_delete` and receives authenticated
+`DELETE /profiles/{id}`. Older components return `unsupported` through the App.
+Deletion removes that profile's local browser data, local downloads and proxy
+credentials, and the App removes its local script approvals in every workspace.
+A browser window, active recording/run/control, startup reservation or live
+process lease makes deletion return `busy`; it never stops a browser to delete it.
+Native dedicated agent profile identity is reused across workspaces. Each
+workspace/account still has independent enablement, bindings and approvals.
+
+`browser.control.open` can return `busy` with `reason: "owner_window_open"`:
+ask the owner to close this profile's browser window first. `profile_in_use`
+and `profile_starting` identify other live controllers and startup reservations.
+The public bridge preserves these reasons without exposing process paths.
+
+Deleting the last dedicated agent profile also disables its automatic recreation
+on this App configuration. Create a new personal profile and explicitly allow
+agent access if you want to use browser actions again.

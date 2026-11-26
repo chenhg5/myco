@@ -146,6 +146,10 @@ func (e *engine) configureProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.profileDeleting[r.PathValue("id")] {
+		fail(w, "busy", 409)
+		return
+	}
 	p, ok := e.profiles[r.PathValue("id")]
 	if !ok {
 		fail(w, "not_found", 404)

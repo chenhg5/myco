@@ -45,6 +45,11 @@ type BrowserProfileSettingsInput struct {
 	Args      []string                   `json:"args"`
 }
 
+// BrowserProfileRemoveInput identifies a local profile for owner-confirmed deletion.
+type BrowserProfileRemoveInput struct {
+	ID string `json:"id"`
+}
+
 const BrowserAgentProfile = "agent"
 
 type BrowserProfile struct {

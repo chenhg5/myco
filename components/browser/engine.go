@@ -29,6 +29,7 @@ type engine struct {
 	artifacts         map[string]artifact
 	controls          map[string]*controlSession
 	controlOpening    map[string]bool
+	profileDeleting   map[string]bool
 	controlRequests   map[string]*controlRequest
 	controlCacheBytes int
 	controlStop       chan struct{}
@@ -169,7 +170,7 @@ func (e *engine) handler() http.Handler {
 		}
 		sort.Strings(browsers)
 		machine, _ := os.Hostname()
-		jsonReply(w, map[string]any{"protocol": protocol, "version": version, "features": []string{"screenshot_clip", "agent_control"}, "browsers": browsers, "machine": machine, "profiles": profiles, "recordings": e.activeRecordings(scope(r)), "agent_actions": []string{}})
+		jsonReply(w, map[string]any{"protocol": protocol, "version": version, "features": []string{"screenshot_clip", "agent_control", "profile_delete"}, "browsers": browsers, "machine": machine, "profiles": profiles, "recordings": e.activeRecordings(scope(r)), "agent_actions": []string{}})
 	})
 	m.HandleFunc("POST /profiles", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
@@ -190,6 +191,24 @@ func (e *engine) handler() http.Handler {
 		}
 		e.mu.Lock()
 		defer e.mu.Unlock()
+		if in.Kind == "agent" {
+			var canonical string
+			for id, p := range e.profiles {
+				if p.Kind == "agent" && (canonical == "" || id < canonical) {
+					canonical = id
+				}
+			}
+			if canonical != "" {
+				if e.profileDeleting[canonical] {
+					fail(w, "busy", 409)
+					return
+				}
+				p := e.profiles[canonical]
+				p.Running = e.sessions[canonical] != nil
+				jsonReply(w, p)
+				return
+			}
+		}
 		if len(e.profiles) >= 32 {
 			fail(w, "profile_limit", 409)
 			return
@@ -204,6 +223,7 @@ func (e *engine) handler() http.Handler {
 		jsonReply(w, p)
 	})
 	m.HandleFunc("PATCH /profiles/{id}", e.configureProfile)
+	m.HandleFunc("DELETE /profiles/{id}", e.deleteProfile)
 	m.HandleFunc("POST /profiles/{id}/agents", func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Allowed bool `json:"allowed"`
@@ -215,6 +235,10 @@ func (e *engine) handler() http.Handler {
 		// M0/M1 never register agent actions, irrespective of the saved preference.
 		e.mu.Lock()
 		defer e.mu.Unlock()
+		if e.profileDeleting[r.PathValue("id")] {
+			fail(w, "busy", 409)
+			return
+		}
 		p, ok := e.profiles[r.PathValue("id")]
 		if !ok {
 			fail(w, "not_found", 404)

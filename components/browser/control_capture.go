@@ -10,7 +10,6 @@ import (
 	"image"
 	_ "image/png"
 	"strconv"
-	"strings"
 )
 
 func (c *controlSession) screenshot(ctx context.Context, p *rod.Page, in controlInput) (map[string]any, error) {
@@ -59,84 +58,9 @@ func (c *controlSession) screenshot(ctx context.Context, p *rod.Page, in control
 	return result, nil
 }
 
-// CDP pierces closed shadow roots. Missing documents fail closed.
-func (c *controlSession) safeScreenshot(ctx context.Context, p *rod.Page) error {
-	frames := c.framesFor(p)
-	if len(frames) == 0 || len(c.unavailableFrames(p, frames)) > 0 {
-		return errors.New("sensitive_snapshot")
-	}
-	seen := map[proto.PageFrameID]bool{}
-	for _, f := range frames {
-		seen[f.id] = true
-	}
-	var tree proto.PageGetFrameTreeResult
-	if err := c.call(ctx, c.browser.primarySession(p.TargetID), "Page.getFrameTree", nil, &tree); err != nil {
-		return errors.New("sensitive_snapshot")
-	}
-	var checkFrame func(*proto.PageFrameTree) bool
-	checkFrame = func(t *proto.PageFrameTree) bool {
-		if t == nil || t.Frame == nil || !seen[t.Frame.ID] {
-			return false
-		}
-		for _, child := range t.ChildFrames {
-			if !checkFrame(child) {
-				return false
-			}
-		}
-		return true
-	}
-	if !checkFrame(tree.FrameTree) {
-		return errors.New("sensitive_snapshot")
-	}
-	checked := map[proto.TargetSessionID]bool{}
-	for _, f := range frames {
-		if checked[f.sid] {
-			continue
-		}
-		checked[f.sid] = true
-		var doc proto.DOMGetDocumentResult
-		if c.call(ctx, f.sid, "DOM.getDocument", map[string]any{"depth": -1, "pierce": true}, &doc) != nil {
-			return errors.New("sensitive_snapshot")
-		}
-		var safe func(*proto.DOMNode) bool
-		safe = func(n *proto.DOMNode) bool {
-			if n == nil {
-				return true
-			}
-			attrs := map[string]string{"tag": n.NodeName}
-			for i := 0; i+1 < len(n.Attributes); i += 2 {
-				attrs[strings.ToLower(n.Attributes[i])] = strings.ToLower(n.Attributes[i+1])
-			}
-			if attrs["id"] == "__myco_recording_panel__" {
-				return true
-			}
-			if (n.NodeName == "IFRAME" || n.NodeName == "FRAME") && n.FrameID != "" && !seen[n.FrameID] {
-				return false
-			}
-			if sensitiveAttributes(attrs) {
-				return false
-			}
-
-			for _, child := range n.Children {
-				if !safe(child) {
-					return false
-				}
-			}
-			for _, child := range n.ShadowRoots {
-				if !safe(child) {
-					return false
-				}
-			}
-			return safe(n.ContentDocument)
-		}
-		if !safe(doc.Root) {
-			return errors.New("sensitive_snapshot")
-		}
-	}
-	return nil
-}
 func (c *controlSession) captureImage(ctx context.Context, p *rod.Page, in controlInput) (map[string]any, error) {
-	if err := c.safeScreenshot(ctx, p); err != nil {
+	privacy, err := c.screenshotPrivacy(ctx, p)
+	if err != nil {
 		return nil, err
 	}
 	sid := c.browser.primarySession(p.TargetID)
@@ -197,6 +121,14 @@ func (c *controlSession) captureImage(ctx context.Context, p *rod.Page, in contr
 	}
 	if len(shot.Data) == 0 {
 		return nil, errors.New("component_unavailable")
+	}
+	after, err := c.screenshotPrivacy(ctx, p)
+	if err != nil || !sameScreenshotPrivacy(privacy, after) {
+		return nil, errors.New("sensitive_snapshot")
+	}
+	shot.Data, err = maskScreenshot(shot.Data, privacy.Masks, view.PageX, view.PageY, clip)
+	if err != nil {
+		return nil, err
 	}
 	config, _, err := image.DecodeConfig(bytes.NewReader(shot.Data))
 	if err != nil {
