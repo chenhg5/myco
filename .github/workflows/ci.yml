@@ -148,19 +148,16 @@ jobs:
     # The App UI smoke test (web/scripts/ui-smoke.mjs): every page and the
     # main dialogs against the mock backend, per window size and theme, each
     # in three parts (--shard) running at once, so no job takes long.
-    # It runs in Playwright's own image (browsers, their system libraries and
-    # CJK fonts already there): nothing is installed with apt, which stalled
-    # and failed on runners. PLAYWRIGHT is that image's version: keep the two
-    # below the same (the image's browsers match only its own Playwright).
+    # The smoke runs in Playwright's own image (browsers, their system
+    # libraries and CJK fonts already there): nothing is installed with apt,
+    # which stalled and failed on runners. The rest is prepared on the runner.
+    # PLAYWRIGHT is the image's version, and the Playwright it runs with:
+    # the image's browsers match only its own Playwright.
     needs: changes
     if: needs.changes.outputs.ui == 'true'
     runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:v1.57.0-noble
-      options: --ipc=host
     env:
       PLAYWRIGHT: "1.57.0"
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -175,9 +172,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - name: Pull the Playwright image (meanwhile)
+        run: (docker pull -q "mcr.microsoft.com/playwright:v$PLAYWRIGHT-noble" > /tmp/pull.log 2>&1; echo $? > /tmp/pull.code) &
       - id: apps
         run: |
           commit=$(node -p 'require("./apps.lock.json").commit')
@@ -190,19 +186,24 @@ jobs:
           persist-credentials: false
       - name: Prepare pinned app UI fixtures
         run: python3 scripts/prepare-apps.py --apps-dir .cache/apps-source/dist/official
-      - name: Dependencies (npm only; the browser comes with the image)
+      - name: Dependencies (npm; the browser comes with the image)
         timeout-minutes: 5
         run: |
           cd web && npm ci
-          npm install -g "playwright@$PLAYWRIGHT"
-          # The image's browsers belong to its Playwright: say so plainly if
-          # someone bumps one of the two versions alone.
-          ls /ms-playwright | grep -q chromium || { echo "::error::no Chromium in the Playwright image"; exit 1; }
-          fc-list :lang=zh | grep -q . || echo "::warning::no CJK font in the image: Chinese text renders as boxes in screenshots"
+          # Playwright itself, at the image's version, where the smoke finds it.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save --no-audit --no-fund "playwright@$PLAYWRIGHT"
+          for i in $(seq 1 60); do [ -f /tmp/pull.code ] && break; sleep 2; done
+          if [ "$(cat /tmp/pull.code 2>/dev/null)" != 0 ]; then cat /tmp/pull.log; docker pull "mcr.microsoft.com/playwright:v$PLAYWRIGHT-noble"; fi
       - name: UI smoke (${{ matrix.combo }}, part ${{ matrix.shard }}/3)
         # A step that fails is tried once more; passing then is listed as
         # flaky in this job's summary and does not fail the job.
-        run: cd web && NODE_PATH="$(npm root -g)" npm run test:ui -- --combo ${{ matrix.combo }} --shard ${{ matrix.shard }}/3
+        run: |
+          summary_dir=$(dirname "$GITHUB_STEP_SUMMARY")
+          docker run --rm --ipc=host --init -u "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/w" -v "$summary_dir:$summary_dir" -w /w/web \
+            -e HOME=/tmp -e CI -e GITHUB_STEP_SUMMARY \
+            "mcr.microsoft.com/playwright:v$PLAYWRIGHT-noble" \
+            sh -c 'fc-list :lang=zh | grep -q . || echo "::warning::no CJK font in the Playwright image"; node scripts/ui-smoke.mjs --combo ${{ matrix.combo }} --shard ${{ matrix.shard }}/3'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
