@@ -8,12 +8,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/myco-ai/myco/internal/app"
 	. "github.com/myco-ai/myco/internal/cli/cmdkit"
 	"github.com/myco-ai/myco/internal/config"
 	"github.com/myco-ai/myco/internal/hubserver"
 	"github.com/myco-ai/myco/internal/infra/tunnel"
+	"github.com/myco-ai/myco/internal/logkeep"
 	"github.com/myco-ai/myco/internal/release"
 	"github.com/myco-ai/myco/internal/templates"
 )
@@ -34,6 +36,8 @@ func hubCommands() *Command {
 			{Name: "max-attempts", Kind: Int, Default: "5", Help: "Deliveries before an unacked message fails"},
 			{Name: "online-window", Kind: Duration, Default: "90s", Help: "Agents seen within this window count as online"},
 			{Name: "log-level", Kind: Enum, Values: []string{"debug", "info", "warn", "error"}, Default: "info", Help: "Log verbosity (stderr)"},
+			{Name: "slow-request", Kind: Duration, Default: "1s", Help: "Log requests that take this long or longer as \"slow request\" (0s: never; long polls are left out)"},
+			{Name: "slow-statement", Kind: Duration, Default: "50ms", Help: "Log database statements that take this long or longer as \"slow statement\", by name with their rows (0s: never)"},
 			{Name: "public-url", Kind: String, Help: "Hub URL as agents see it (included in wake messages)"},
 			{Name: "wake-cooldown", Kind: Duration, Default: "2m", Help: "Minimum time between wakes of the same push agent"},
 			{Name: "github-webhook-secret-file", Kind: String, Help: "Enable POST /v1/ingress/github with this webhook secret"},
@@ -100,6 +104,11 @@ func hubCommands() *Command {
 			// service manager starts the new binary): as on SIGTERM.
 			ctx, stop := context.WithCancel(in.Ctx)
 			defer stop()
+			// Installed as a service, its log is hub.log beside the database:
+			// kept to two weeks, trimmed daily or past 20 MB (logkeep).
+			if lp := filepath.Join(filepath.Dir(in.String("db")), "hub.log"); logkeep.IsStderr(lp) {
+				go logkeep.Run(lp, logkeep.Policy{}, ctx.Done())
+			}
 			storage, err := projectStoragePolicy(in)
 			if err != nil {
 				return err
@@ -115,6 +124,8 @@ func hubCommands() *Command {
 				Tunnel:          tun, Version: Version, UpdateCheck: check, Apps: apps,
 				Addr: in.String("addr"), DBPath: in.String("db"), AdminToken: tok, Policy: p,
 				OnlineWindow: in.Duration("online-window"), Log: newLogger(in.String("log-level")),
+				SlowRequest:         slowRequest(in.Duration("slow-request")),
+				SlowStatement:       slowRequest(in.Duration("slow-statement")),
 				Dispatch:            app.DispatchPolicy{Cooldown: in.Duration("wake-cooldown"), PublicURL: in.String("public-url")},
 				GitHubWebhookSecret: ghSecret, GitHubReplyFrom: in.List("github-reply-from"),
 				FilesDir: in.String("files-dir"), Backups: backupsKeep(in.Int("backups")),
@@ -122,7 +133,7 @@ func hubCommands() *Command {
 			})
 		},
 	}
-	return (&Command{Name: "hub", Summary: "Operate a hub server"}).Add(serve, hubUpCommand(), hubDownCommand(), hubListCommand(), hubSettingsCommand(), hubBackupCommand(), hubRestoreCommand())
+	return (&Command{Name: "hub", Summary: "Operate a hub server"}).Add(serve, hubUpCommand(), hubDownCommand(), hubListCommand(), hubSettingsCommand(), hubBackupCommand(), hubRestoreCommand(), hubPerfCommand())
 }
 
 // backupsKeep maps --backups to hubserver.Options.Backups (0 there means
@@ -191,4 +202,13 @@ func pageAttachmentPolicy(in *Invocation) (app.PageAttachmentPolicy, error) {
 		return p, errorf("invalid_argument", ExitUsage, "", "--page-bytes-max must be an integer byte count")
 	}
 	return p, p.Validate()
+}
+
+// slowRequest: the flag's duration, 0 meaning never (the hub's own 0 means
+// its default).
+func slowRequest(d time.Duration) time.Duration {
+	if d <= 0 {
+		return -1
+	}
+	return d
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/myco-ai/myco/internal/harness/builtin"
 	"github.com/myco-ai/myco/internal/harness/execnode"
 	"github.com/myco-ai/myco/internal/harness/machinenode"
+	"github.com/myco-ai/myco/internal/logkeep"
 	"github.com/myco-ai/myco/internal/quota"
 	"github.com/myco-ai/myco/internal/runner"
 )
@@ -75,6 +76,10 @@ notes are never auto-answered. Logs go to stderr.`,
 				e.in.Ctx = ctx
 			}
 			log := newLogger(e.in.String("log-level"))
+			// Its log file (--log-file, or runner.log the service writes its
+			// output to) is kept to two weeks, trimmed daily or past 20 MB.
+			keep := make(chan struct{})
+			defer close(keep)
 			if path := e.in.String("log-file"); path != "" {
 				f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 				if err != nil {
@@ -82,6 +87,9 @@ notes are never auto-answered. Logs go to stderr.`,
 				}
 				defer f.Close()
 				log = newLoggerTo(f, e.in.String("log-level"))
+				go logkeep.Run(path, logkeep.Policy{}, keep)
+			} else if lp := filepath.Join(config.Dir(e.defaultPath), "runner.log"); logkeep.IsStderr(lp) {
+				go logkeep.Run(lp, logkeep.Policy{}, keep)
 			}
 			shared := runnerShared{
 				once: e.in.Bool("once"), busyWindow: e.in.Duration("busy-window"), busyRetry: e.in.Duration("busy-retry"),

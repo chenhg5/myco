@@ -136,7 +136,7 @@ func TestOSNetworkConsent(t *testing.T) {
 	b := &Backend{}
 	g := b.grants()
 	key := osKey("h1", "pg_n")
-	g.decl[key] = osDecl{app: true, os: []string{"network"}, net: []string{"api.example.com"}, at: time.Now()}
+	g.decl[key] = osDecl{known: true, app: true, os: []string{"network"}, net: []string{"api.example.com"}, at: time.Now()}
 	in := func(url string) osCallIn {
 		args, _ := json.Marshal(map[string]string{"url": url})
 		return osCallIn{Name: "net.fetch", Args: args, Page: osPage{Hub: "h1", ID: "pg_n"}}
@@ -164,7 +164,7 @@ func TestOSNetworkConsent(t *testing.T) {
 func TestOSUndeclaredRefused(t *testing.T) {
 	b := &Backend{}
 	g := b.grants()
-	set := func(page string, d osDecl) { d.at = time.Now(); g.decl[osKey("h1", page)] = d }
+	set := func(page string, d osDecl) { d.at = time.Now(); d.known = true; g.decl[osKey("h1", page)] = d }
 	call := func(page, name string, args any) osCallIn {
 		raw, _ := json.Marshal(args)
 		return osCallIn{Name: name, Args: raw, Page: osPage{Hub: "h1", ID: page}}
@@ -226,7 +226,7 @@ func TestOSGrantsAcrossVersions(t *testing.T) {
 	b := &Backend{Local: &Local{Home: filepath.Join(dir, "home")}, Store: &Store{path: filepath.Join(dir, "hubs.json")}}
 	g := b.grants()
 	set := func(page, ver string, app bool, os, net []string) {
-		g.decl[osKey("h1", page)] = osDecl{app: app, os: os, net: net, ver: ver, at: time.Now()}
+		g.decl[osKey("h1", page)] = osDecl{known: true, app: app, os: os, net: net, ver: ver, at: time.Now()}
 	}
 	call := func(page, name string, args map[string]string) (*osConsent, error) {
 		raw, _ := json.Marshal(args)
@@ -338,8 +338,71 @@ func TestOSGrantsAcrossVersions(t *testing.T) {
 	// Grants kept before versions (no version): asked once more.
 	b3 := &Backend{Store: &Store{path: filepath.Join(t.TempDir(), "hubs.json")}}
 	os.WriteFile(filepath.Join(filepath.Dir(b3.Store.path), "app-grants.json"), []byte(`[{"hub":"h1","page":"pg_v","groups":["files"],"at":1}]`), 0o600)
-	b3.grants().decl[osKey("h1", "pg_v")] = osDecl{app: true, os: []string{"files"}, ver: "2/1.1.0", at: time.Now()}
+	b3.grants().decl[osKey("h1", "pg_v")] = osDecl{known: true, app: true, os: []string{"files"}, ver: "2/1.1.0", at: time.Now()}
 	if c, _ := b3.osCheck(t.Context(), osCallIn{Name: "fs.read", Args: raw2, Page: osPage{Hub: "h1", ID: "pg_v"}}); c == nil {
 		t.Fatal("an old grant with no version is asked again")
+	}
+}
+
+// A slow or failed hub lookup is not a new version of the page: the
+// person's "always" answers stay, and answers given meanwhile are kept
+// when the hub answers again.
+func TestOSGrantsSurviveHubLookupFailure(t *testing.T) {
+	dir := t.TempDir()
+	// (a store with no hubs: every lookup fails)
+	b := &Backend{Local: &Local{Home: filepath.Join(dir, "home")}, Store: &Store{path: filepath.Join(dir, "hubs.json")}}
+	g := b.grants()
+	srv := httptest.NewServer(b.Handler())
+	defer srv.Close()
+	file := map[string]string{"path": "~/a", "body": "hi"}
+	call := func(page string) *osConsent {
+		t.Helper()
+		raw, _ := json.Marshal(file)
+		c, err := b.osCheck(t.Context(), osCallIn{Name: "fs.read", Args: raw, Page: osPage{Hub: "h1", ID: page}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	always := func(page string) {
+		t.Helper()
+		raw, _ := json.Marshal(map[string]string{"hub": "h1", "page": page, "group": "files", "answer": "always"})
+		r, err := http.Post(srv.URL+"/app/os/grants", "application/json", strings.NewReader(string(raw)))
+		if err != nil || r.StatusCode != 200 {
+			t.Fatalf("answer: %v %v", r, err)
+		}
+		r.Body.Close()
+	}
+	stale := func(page string) {
+		g.mu.Lock()
+		d := g.decl[osKey("h1", page)]
+		d.at = time.Now().Add(-2 * time.Minute)
+		g.decl[osKey("h1", page)] = d
+		g.mu.Unlock()
+	}
+
+	g.decl[osKey("h1", "pg_a")] = osDecl{known: true, app: true, os: []string{"files"}, ver: "1/1.0.0", at: time.Now()}
+	always("pg_a")
+	stale("pg_a")
+	if c := call("pg_a"); c != nil {
+		t.Fatalf("a failed lookup asked again: %+v", c)
+	}
+	if d := g.decl[osKey("h1", "pg_a")]; !d.known || d.ver != "1/1.0.0" {
+		t.Fatalf("the last answer from the hub was not kept: %+v", d)
+	}
+
+	// Nothing known yet: the answer waits for the version the hub reports.
+	if c := call("pg_b"); c == nil {
+		t.Fatal("an unknown page was not asked")
+	}
+	always("pg_b")
+	if c := call("pg_b"); c != nil {
+		t.Fatalf("asked again while the hub is unreachable: %+v", c)
+	}
+	g.mu.Lock()
+	g.decl[osKey("h1", "pg_b")] = osDecl{known: true, app: true, os: []string{"files"}, ver: "1/2.0.0", at: time.Now()}
+	g.mu.Unlock()
+	if c := call("pg_b"); c != nil {
+		t.Fatalf("an answer given while unknown was dropped: %+v", c)
 	}
 }

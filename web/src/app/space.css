@@ -3848,3 +3848,62 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
 @media (prefers-reduced-motion: reduce) {
   .ui-clean svg.work-sprite { animation: none; }
 }
+
+/* 全部动态 as a group chat (GroupChat in ProjectSpace.tsx): a line per
+   task and per answer, in time, "@" whom it was for; an answer quotes the
+   task it answers. Plain rows on the page, not bubbles: it reads as a
+   record, like a team channel. */
+.sp-view-seg { margin-left: auto; flex: none; }
+.sp-gchat { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 12px; }
+.sp-gchat-day {
+  align-self: center;
+  margin: 12px 0 6px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--pill);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 20px;
+}
+.sp-gchat-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.sp-gchat-line:hover { background: var(--nav-hover); }
+.sp-gchat-me { width: 28px; height: 28px; flex: none; }
+.sp-gchat-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.sp-gchat-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.sp-gchat-when { color: var(--faint); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.sp-gchat-quote {
+  overflow: hidden;
+  padding-left: 8px;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sp-gchat-body {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  font-size: 13.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.sp-gchat-at { color: var(--accent); font-weight: 500; }
+.sp-gchat-tail { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.sp-gchat-tail svg.work-sprite { width: 18px; height: 14px; }
+.sp-gchat-line.is-failed .sp-gchat-tail { color: var(--red); }
+

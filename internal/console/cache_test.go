@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -254,23 +255,86 @@ func TestCacheStartsOverAfterAnUpdate(t *testing.T) {
 	if err := c.ForVersion("v0.18.34"); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Put([]console.CacheEntry{{Key: "k", Hub: "", Data: json.RawMessage(`{"shape":1}`)}}, nil); err != nil {
+	if err := c.Put([]console.CacheEntry{
+		{Key: "k", Hub: "", Data: json.RawMessage(`{"shape":1}`)},
+		{Key: "trace\x00h\x00msg_1", Hub: "", Data: json.RawMessage(`[{"seq":1}]`)},
+	}, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Same version (a restart): kept.
 	if err := c.ForVersion("v0.18.34"); err != nil {
 		t.Fatal(err)
 	}
-	if n, _, _ := c.Stats(); n != 1 {
+	if n, _, _ := c.Stats(); n != 2 {
 		t.Fatalf("restart lost the cache: %d", n)
 	}
-	// Another version (an update, or going back): what the pages saved may
-	// have another shape now, so it starts over.
+	// Another version (an update, or going back): the pages stay (shown at
+	// once, refreshed as on any start); runs' steps, drawn differently
+	// from version to version, start over.
 	if err := c.ForVersion("v0.18.35"); err != nil {
 		t.Fatal(err)
 	}
-	if n, _, _ := c.Stats(); n != 0 {
-		t.Fatalf("kept %d entries across an update", n)
+	all, err := c.All(map[string]bool{})
+	if err != nil || len(all) != 1 || all[0].Key != "k" {
+		t.Fatalf("an update should keep the pages and drop the steps: %v %+v", err, all)
+	}
+}
+
+// At start the App reads the pages first (small: shown at once) and runs'
+// steps after, so a full cache never holds the start up.
+func TestCacheReadsPagesApartFromTraces(t *testing.T) {
+	c, err := console.OpenCache(filepath.Join(t.TempDir(), "c.db"), key(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if err := c.Put([]console.CacheEntry{
+		{Key: "overview", Hub: "", Data: json.RawMessage(`{}`)},
+		{Key: "conv\x00h1\x00a", Hub: "", Data: json.RawMessage(`[]`)},
+		{Key: "trace\x00h1\x00msg_1", Hub: "", Data: json.RawMessage(`[]`)},
+		{Key: "trace\x00h1\x00msg_2", Hub: "", Data: json.RawMessage(`[]`)},
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	keys := func(kind string) []string {
+		es, err := c.Some(map[string]bool{}, kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, e := range es {
+			out = append(out, e.Key)
+		}
+		sort.Strings(out)
+		return out
+	}
+	if got := keys("pages"); len(got) != 2 || strings.HasPrefix(got[0], "trace") || strings.HasPrefix(got[1], "trace") {
+		t.Fatalf("pages: %q", got)
+	}
+	if got := keys("traces"); len(got) != 2 || !strings.HasPrefix(got[0], "trace") || !strings.HasPrefix(got[1], "trace") {
+		t.Fatalf("traces: %q", got)
+	}
+	if got := keys(""); len(got) != 4 {
+		t.Fatalf("all: %q", got)
+	}
+	// and over HTTP: ?kind=pages (older UIs ask without it and get all)
+	b := &console.Backend{Cache: c, Store: console.NewStore(filepath.Join(t.TempDir(), "hubs.json"))}
+	srv := httptest.NewServer(b.Handler())
+	defer srv.Close()
+	for kind, want := range map[string]int{"pages": 2, "traces": 2, "": 4} {
+		r, err := srv.Client().Get(srv.URL + "/app/cache?kind=" + kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body struct {
+			Entries []console.CacheEntry
+			Enabled bool
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		r.Body.Close()
+		if len(body.Entries) != want || !body.Enabled {
+			t.Fatalf("GET kind=%q: %d entries, enabled %v", kind, len(body.Entries), body.Enabled)
+		}
 	}
 }
 

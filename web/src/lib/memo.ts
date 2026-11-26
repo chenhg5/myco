@@ -87,31 +87,58 @@ export async function flush(keepalive = false) {
   }
 }
 
-/**
- * Loads what the backend saved last time (desktop app). Waits at most
- * timeoutMs: a slow cache must not hold the App up.
- */
-export async function hydrate(timeoutMs = 800) {
-  const ctl = new AbortController();
-  const t = window.setTimeout(() => ctl.abort(), timeoutMs);
-  try {
-    const r = await fetch("app/cache", { credentials: "same-origin", signal: ctl.signal, headers: { Accept: "application/json" } });
-    if (!r.ok) return;
-    const body = await r.json() as { enabled?: boolean; entries?: { key: string; data: unknown }[] };
-    persist = !!body.enabled;
-    // Most recently used first: insert the oldest first.
-    for (const e of [...(body.entries || [])].reverse()) {
-      if (store.has(e.key)) continue; // fetched meanwhile: newer
-      store.set(e.key, e.data);
-      savedJSON.set(e.key, JSON.stringify(e.data));
-    }
-    trimLike("");
-    trimLike("trace\u0000");
-  } catch {
-    // No cache this time.
-  } finally {
-    window.clearTimeout(t);
+/** Puts saved entries in memory, oldest first, keeping what was fetched
+ *  meanwhile (newer). */
+function take(entries: { key: string; data: unknown }[]) {
+  for (const e of [...entries].reverse()) {
+    if (store.has(e.key)) continue;
+    store.set(e.key, e.data);
+    savedJSON.set(e.key, JSON.stringify(e.data));
   }
+  trimLike("");
+  trimLike("trace\u0000");
+}
+
+/** One part of the saved cache ("pages" or "traces"); null when it did not
+ *  come in time (timeoutMs 0: no limit). Says whether a trace came along
+ *  (an older backend sends everything at once). */
+async function loadPart(kind: "pages" | "traces", timeoutMs: number): Promise<{ enabled: boolean; traces: boolean } | null> {
+  const ctl = new AbortController();
+  const t = timeoutMs > 0 ? window.setTimeout(() => ctl.abort(), timeoutMs) : 0;
+  try {
+    const r = await fetch(`app/cache?kind=${kind}`, { credentials: "same-origin", signal: ctl.signal, headers: { Accept: "application/json" } });
+    if (!r.ok) return null;
+    const body = await r.json() as { enabled?: boolean; entries?: { key: string; data: unknown }[] };
+    const entries = body.entries || [];
+    take(entries);
+    return { enabled: !!body.enabled, traces: entries.some((e) => isTrace(e.key)) };
+  } catch {
+    return null;
+  } finally {
+    if (t) window.clearTimeout(t);
+  }
+}
+
+/**
+ * Loads what the backend saved last time (desktop app): the pages first
+ * (projects, chats, their messages: small, and what the App shows at once),
+ * waiting at most timeoutMs; runs' steps after, without holding the start
+ * up. However slow the read, what is fetched from now on is saved.
+ */
+export async function hydrate(timeoutMs = 2500) {
+  const pages = await loadPart("pages", timeoutMs);
+  if (pages) {
+    persist = pages.enabled;
+  } else {
+    // Too slow this time: whether there is a cache to save to, at least.
+    try {
+      const r = await fetch("app/cache/stats", { credentials: "same-origin", headers: { Accept: "application/json" } });
+      if (r.ok) persist = !!((await r.json()) as { enabled?: boolean }).enabled;
+    } catch { /* no cache */ }
+  }
+  // Runs' steps (many, big): when they come, an older backend having sent
+  // them with the pages already.
+  if (persist && !pages?.traces) void loadPart("traces", 0);
   if (persist && typeof window !== "undefined") {
     const save = () => { if (document.visibilityState === "hidden") void flush(true); };
     document.addEventListener("visibilitychange", save);

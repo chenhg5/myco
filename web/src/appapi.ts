@@ -499,6 +499,12 @@ export class ApiError extends Error {
   suggestion?: string;
   /** Safe browser profile recovery reason, when available. */
   reason?: string;
+  /** The request's id (X-Request-Id): the same in the App backend's and
+   *  the hub's logs, to find this request there. */
+  requestId?: string;
+  /** How long the App waited for it, in milliseconds: next to the hub's
+   *  logged time for the same id, it shows where the time went. */
+  elapsedMs?: number;
   constructor(message: string, status: number, code?: string, suggestion?: string) {
     super(message);
     this.name = "ApiError";
@@ -603,10 +609,23 @@ export interface ConnectJob {
  *  not cut short: some take minutes (a session starting, an upload). */
 const READ_TIMEOUT_MS = 60_000;
 
+/** A request id: 16 hex digits. */
+function newRequestId(): string {
+  const b = new Uint8Array(8);
+  crypto.getRandomValues(b);
+  return [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
 async function request<T>(method: string, path: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number, extraHeaders?: Record<string, string>): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json", ...extraHeaders };
   const raw = body instanceof Blob;
   if (body !== undefined) headers["Content-Type"] = raw ? (body.type || "application/octet-stream") : "application/json";
+  // One id per request, made here and sent on (the backend passes it to
+  // the hub): an error names it, also one that never got an answer.
+  const requestId = headers["X-Request-Id"] || newRequestId();
+  headers["X-Request-Id"] = requestId;
+  const started = performance.now();
+  const took = () => Math.round(performance.now() - started);
   const limit = timeoutMs ?? (method === "GET" ? READ_TIMEOUT_MS : 0);
   // (by hand, not AbortSignal.any: older Mac web views lack it)
   const ctl = limit > 0 ? new AbortController() : null;
@@ -629,7 +648,8 @@ async function request<T>(method: string, path: string, body?: unknown, signal?:
     });
     text = await r.text();
   } catch (e) {
-    if (timedOut) throw new ApiError(L("等了太久没有回应", "No answer in time"), 0, "timeout");
+    if (timedOut) throw Object.assign(new ApiError(L("等了太久没有回应", "No answer in time"), 0, "timeout"), { requestId, elapsedMs: took() });
+    if (e instanceof Error && !(e instanceof DOMException && e.name === "AbortError")) Object.assign(e, { requestId, elapsedMs: took() });
     throw e;
   } finally {
     if (ctl) { window.clearTimeout(timer); signal?.removeEventListener("abort", onAbort); }
@@ -640,7 +660,7 @@ async function request<T>(method: string, path: string, body?: unknown, signal?:
     const e = (data ?? {}) as { error?: string; message?: string; suggestion?: string; latest?: unknown; reason?: string; error_node?: string; group?: string; host?: string; declared?: boolean; once_only?: boolean };
     // A gateway's own page (no JSON) still says why: keep its first words for 详细信息.
     const page = data === null && r.status >= 500 ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : "";
-    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), e.latest ? { latest: e.latest } : {}, typeof e.reason === "string" ? { reason: e.reason } : {}, typeof e.error_node === "string" ? { error_node: e.error_node } : {},
+    throw Object.assign(new ApiError(e.message || page || `HTTP ${r.status}`, r.status, typeof e.error === "string" ? e.error : undefined, e.suggestion), { requestId: r.headers.get("X-Request-Id") || requestId, elapsedMs: took() }, e.latest ? { latest: e.latest } : {}, typeof e.reason === "string" ? { reason: e.reason } : {}, typeof e.error_node === "string" ? { error_node: e.error_node } : {},
       e.error === "consent_required" && e.group ? { consent: { group: e.group, host: e.host || undefined, declared: !!e.declared, once_only: !!e.once_only } } : {});
   }
   return data as T;

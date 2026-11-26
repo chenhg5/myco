@@ -18,6 +18,7 @@ import { ProjectPage } from "@/app/ProjectPage";
 import { HelpPage, openHelp } from "@/app/Help";
 import type { HelpId } from "@/app/help/docs";
 import { openSettingsSection, SettingsPage } from "@/app/SettingsPage";
+import { navEntryLabel, useNavHidden, type NavEntry } from "@/lib/navHidden";
 import { AgentSwitcher } from "@/app/AgentSwitcher";
 import { navBack, navForward, navRecord, navSub, onNavApply, useNavState, type NavPlace } from "@/app/nav";
 import { UpdateNotice } from "@/app/UpdateNotice";
@@ -1092,6 +1093,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // full screen) keeps clear of the traffic lights.
   useEffect(() => { document.documentElement.classList.toggle("shell-mac", isMac); }, [isMac]);
   const navMenu = useContextMenu();
+  // 侧栏显示: entries the person hid (Settings › Appearance, or right-click).
+  const [navHidden, setNavHidden] = useNavHidden();
+  const shows = (e: NavEntry) => !navHidden.has(e);
+  const navEntryMenu = (e: React.MouseEvent, entry: NavEntry) => navMenu.open(e, [
+    { label: L(`在侧栏隐藏「${navEntryLabel(entry)}」`, `Hide "${navEntryLabel(entry)}" from the sidebar`), onSelect: () => setNavHidden(entry, true) },
+    { label: L("侧栏显示哪些…", "Choose what the sidebar shows…"), onSelect: () => { openSettingsSection("appearance"); setPage("settings"); } },
+  ]);
 
   useEffect(() => {
     if (!isMac) return;
@@ -1247,25 +1255,25 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   {noticeCount > 0 && <span className="wf-nav-badge" title={L(`${noticeCount} 件事在等你`, `${noticeCount} things wait for you`)}>{noticeCount}</span>}
                 </button>
               )}
-              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-auto", page === "automations" && "active")} aria-current={page === "automations" ? "page" : undefined}
-                onClick={() => { setNavChat(null); toPage("automations"); }}>
+              {shows("automations") && <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-auto", page === "automations" && "active")} aria-current={page === "automations" ? "page" : undefined}
+                onClick={() => { setNavChat(null); toPage("automations"); }} onContextMenu={(e) => navEntryMenu(e, "automations")}>
                 <Zap /><span className="app-nav-label">{L("自动化", "Automations")}</span>
-              </button>
-              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-workflows", page === "workflows" && "active")} aria-current={page === "workflows" ? "page" : undefined}
-                onClick={() => { setNavChat(null); toPage("workflows"); }}>
+              </button>}
+              {shows("workflows") && <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-workflows", page === "workflows" && "active")} aria-current={page === "workflows" ? "page" : undefined}
+                onClick={() => { setNavChat(null); toPage("workflows"); }} onContextMenu={(e) => navEntryMenu(e, "workflows")}>
                 <Workflow /><span className="app-nav-label">{L("工作流", "Workflows")}</span>
                 {decisionCount > 0 && <span className="wf-nav-badge" title={L(`${decisionCount} 个决定在等你`, `${decisionCount} decisions wait for you`)}>{decisionCount}</span>}
-              </button>
-              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
-                onClick={() => { setNavChat(null); toPage("templates"); }}>
+              </button>}
+              {shows("templates") && <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
+                onClick={() => { setNavChat(null); toPage("templates"); }} onContextMenu={(e) => navEntryMenu(e, "templates")}>
                 <LayoutGrid /><span className="app-nav-label">{L("应用", "Apps")}</span>
-              </button>
-              <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-computers", page === "computers" && "active")} aria-current={page === "computers" ? "page" : undefined}
-                onClick={() => { setNavChat(null); toPage("computers"); }}>
+              </button>}
+              {shows("computers") && <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-computers", page === "computers" && "active")} aria-current={page === "computers" ? "page" : undefined}
+                onClick={() => { setNavChat(null); toPage("computers"); }} onContextMenu={(e) => navEntryMenu(e, "computers")}>
                 <Monitor /><span className="app-nav-label">{L("电脑", "Computers")}</span>
-              </button>
+              </button>}
             </div>
-            <div className="app-nav-group sp-nav-projects">
+            {shows("projects") && <div className="app-nav-group sp-nav-projects" onContextMenu={(e) => { if ((e.target as HTMLElement).closest(".sp-nav-head")) navEntryMenu(e, "projects"); }}>
               <NavHead label={L("项目", "Projects")} folded={projFolded} onFold={() => foldProjects(!projFolded)} count={liveProjects.length}>
                 <button type="button" className="app-nav-add" aria-label={L("新建项目", "New project")} title={L("新建项目", "New project")}
                   onClick={() => setNewProjectOpen(true)}><Plus /></button>
@@ -1300,8 +1308,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   <Plus strokeWidth={1.75} /><span>{L("新建项目", "New project")}</span>
                 </button>
               )}
-            </div>
-            <div className={cn("app-nav-group sp-nav-chats", chatFolded && "is-folded")}>
+            </div>}
+            {shows("chats") && <div className={cn("app-nav-group sp-nav-chats", chatFolded && "is-folded")} onContextMenu={(e) => { if ((e.target as HTMLElement).closest(".sp-nav-head")) navEntryMenu(e, "chats"); }}>
               {looseHubs.map((id) => {
                 const ref: SpaceRef = { hubId: id, loose: true };
                 const active = page === "space" && !navChat && !!shown && spaceKey(shown) === spaceKey(ref);
@@ -1359,8 +1367,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   </button>
                 )}
               </div>}
-            </div>
-            {!simple && <div className="app-nav-group sp-nav-pcs">
+            </div>}
+            {!simple && shows("terminals") && <div className="app-nav-group sp-nav-pcs" onContextMenu={(e) => { if ((e.target as HTMLElement).closest(".sp-nav-head")) navEntryMenu(e, "terminals"); }}>
               <NavHead label={L("终端", "Terminals")} className="sp-nav-pcs-head" active={page === "computers"} title={L("电脑和终端", "Computers and terminals")}
                 onOpen={() => { setNavChat(null); toPage("computers"); }} folded={pcFolded} onFold={() => foldPcs(!pcFolded)} count={computers.length}>
                 <button type="button" className="app-nav-add" aria-label={L("加一个终端", "Add a terminal")} title={L("加一个终端", "Add a terminal")}
@@ -1408,6 +1416,15 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 )}
               </>)}
             </div>}
+            {/* Something hidden (侧栏显示): never silently gone; a click
+                shows what and brings it back. */}
+            {navHidden.size > 0 && (
+              <button type="button" className="sp-nav-hidden-note" data-testid="nav-hidden-note"
+                onClick={() => { openSettingsSection("appearance"); setPage("settings"); }}
+                title={L(`已隐藏：${[...navHidden].map(navEntryLabel).join("、")}。点一下管理`, `Hidden: ${[...navHidden].map(navEntryLabel).join(", ")}. Click to manage`)}>
+                {L(`已隐藏 ${navHidden.size} 项：${[...navHidden].map(navEntryLabel).join("、")}`, `${navHidden.size} hidden: ${[...navHidden].map(navEntryLabel).join(", ")}`)}
+              </button>
+            )}
           </nav>
 
           <div className="app-sidebar-foot">

@@ -170,7 +170,8 @@ func TestClientsShareTheHubTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, _ := New("https://hub.example.com", "y")
-	if a.http.Transport != hubTransport || b.http.Transport != hubTransport {
+	base := func(c *Client) http.RoundTripper { return c.http.Transport.(withRequestID).base }
+	if base(a) != hubTransport || base(b) != hubTransport {
 		t.Fatal("clients do not share hubTransport")
 	}
 	if h := hubTransport.HTTP2; h == nil || h.SendPingTimeout != pingAfter || h.PingTimeout != pingTimeout {

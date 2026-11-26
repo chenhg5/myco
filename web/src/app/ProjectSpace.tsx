@@ -2,13 +2,14 @@ import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { activePaneId } from "@/app/ChatSearch";
 import { IntroCard, introOf } from "@/app/Onboard";
-import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Eye, Target, Columns2, FileText, Loader2, MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
+import { Activity, ArrowLeft, ArrowUp, ChevronDown, AudioLines, Eye, Target, Columns2, FileText, MoreHorizontal, PanelRightClose, PanelRightOpen, Plus, Users } from "lucide-react";
 import { appApi, errorMessage, type RecentItem } from "@/appapi";
 import { GroupNameDialog, GroupedMembers, inGroupOrder, moveItems, useGroupStyle, type GroupStyle, type GroupsCtl } from "@/app/MemberGroups";
 import type { Message, Project } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { agentKind, heldTaskLabel, isMe, nodeName } from "@/app/nodes";
 import { QuotaTag } from "@/app/QuotaTag";
+import { SendingMark } from "@/app/ConversationDetail";
 import { quotaUnreadable } from "@/app/quota";
 import { keepSent, keptSent, useInputHistory } from "@/app/inputHistory";
 import { DictateButton } from "@/app/Dictate";
@@ -952,6 +953,14 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
     onSent();
   };
 
+  // 全部动态 as cards (one per task) or as a group chat (one line per
+  // message, @ whom it was for); kept on this computer.
+  const [chatView, setChatView] = useState(() => { try { return localStorage.getItem(ACTIVITY_VIEW_KEY) === "chat"; } catch { return false; } });
+  const pickView = (chat: boolean) => {
+    setChatView(chat);
+    try { localStorage.setItem(ACTIVITY_VIEW_KEY, chat ? "chat" : "cards"); } catch { /* not kept */ }
+  };
+  const asChat = activity && chatView;
   return (
     <div className="sp-group">
       <header className="sp-head">
@@ -973,6 +982,15 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
             <FileText />{L("项目资料", "Project notes")}
           </button>
         )}
+        {activity && (
+          <div className="seg sp-view-seg" role="tablist" aria-label={L("怎么看", "View")}>
+            {([[false, L("卡片", "Cards")], [true, L("群聊", "Group chat")]] as const).map(([v, label]) => (
+              <button key={String(v)} type="button" role="tab" aria-selected={chatView === v} className={cn("seg-btn", chatView === v && "active")} onClick={() => pickView(v)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
       {strip}
 
@@ -993,7 +1011,8 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
               </div>
             )
           )}
-          {items?.map((it) => (
+          {asChat && items && items.length > 0 && <GroupChat items={items} rowOf={rowOf} nameOf={nameOf} now={now} onOpen={onOpenThread} />}
+          {!asChat && items?.map((it) => (
             <TaskCard key={`${it.kind}:${it.thread_id}:${it.node || ""}`} it={it} rowOf={rowOf} nameOf={nameOf} now={now} onOpen={() => onOpenThread(it)} />
           ))}
           {pending && (
@@ -1004,7 +1023,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
                 <Who row={rowOf(pending.to)} name={nameOf(pending.to)} />
               </div>
               <div className="sp-card-body"><ClampText text={pending.body} lines={4} /></div>
-              <div className="sp-card-foot"><span className="sp-card-state"><Loader2 className="spin" />{L("发送中…", "Sending…")}</span></div>
+              <div className="sp-card-foot"><span className="sp-card-state"><SendingMark /></span></div>
             </div>
           )}
         </div>
@@ -1087,6 +1106,87 @@ function TaskCard({ it, rowOf, nameOf, now, onOpen }: {
       </div>
     </button>
   );
+}
+
+const ACTIVITY_VIEW_KEY = "myco-activity-view";
+
+/** 全部动态 as a group chat: every task and every answer as a line, in
+ *  time, said by its sender "@" whom it was for; an answer quotes the task
+ *  it answers. A task still at work says so; one with more in between says
+ *  how many. A click opens the thread. (Built from the same list as the
+ *  cards: a thread's task and its answer, no request of its own.) */
+function GroupChat({ items, rowOf, nameOf, now, onOpen }: {
+  items: RecentItem[];
+  rowOf: (n: string) => AgentRow | undefined;
+  nameOf: (n: string) => string;
+  now: number;
+  onOpen: (it: RecentItem) => void;
+}) {
+  type Line = { key: string; it: RecentItem; m: Message; to: string; quote?: string; tail?: string; state?: string };
+  const lines: Line[] = [];
+  for (const it of items) {
+    const task = it.task || it.first;
+    const to = it.kind === "pair" ? (it.node || task.to) : task.to;
+    const answer = it.answer && it.answer.id !== task.id ? it.answer
+      : it.last && it.last.id !== task.id && it.last.type !== "task" && it.last.type !== "progress" ? it.last : undefined;
+    const between = it.messages - 1 - (answer ? 1 : 0);
+    const state = it.state || "";
+    lines.push({ key: `${it.thread_id}:t`, it, m: task, to,
+      tail: !answer && state === "working" ? L("正在做…", "On it…") : !answer && state === "queued" ? L("排队中", "Queued") : !answer && state === "failed" ? L("没做成", "Didn't work out") : undefined,
+      state: answer ? undefined : state });
+    if (answer) {
+      lines.push({ key: `${it.thread_id}:a`, it, m: answer, to: task.from, quote: firstLine(task.body),
+        tail: between > 0 ? L(`中间还有 ${between} 条进度`, `${between} updates in between`) : undefined });
+    }
+  }
+  lines.sort((a, b) => a.m.created_at.localeCompare(b.m.created_at));
+  let lastDay = "";
+  return (
+    <div className="sp-gchat" data-testid="activity-chat">
+      {lines.map((x) => {
+        const day = new Date(x.m.created_at).toDateString();
+        const divider = day !== lastDay ? dayLabel(x.m.created_at, now) : "";
+        lastDay = day;
+        const row = rowOf(x.m.from);
+        return (
+          <Fragment key={x.key}>
+            {divider && <div className="sp-gchat-day">{divider}</div>}
+            <button type="button" className={cn("sp-gchat-line", x.state && `is-${x.state}`)} onClick={() => onOpen(x.it)}>
+              {row ? <Avatar agent={row.st.agent} size={28} badge={false} /> : <span className="sp-who-me sp-gchat-me">{nameOf(x.m.from).slice(0, 1)}</span>}
+              <span className="sp-gchat-main">
+                <span className="sp-gchat-head">
+                  <b>{nameOf(x.m.from)}</b>
+                  <span className="sp-gchat-when">{timeOf(x.m.created_at)}</span>
+                </span>
+                {x.quote && <span className="sp-gchat-quote">{x.quote}</span>}
+                <span className="sp-gchat-body">
+                  <span className="sp-gchat-at">@{nameOf(x.to)}</span>{" "}
+                  <span className="sp-gchat-text">{firstLine(x.m.body)}</span>
+                </span>
+                {x.tail && <span className="sp-gchat-tail">{x.state === "working" ? <Mushroom /> : null}{x.tail}</span>}
+              </span>
+            </button>
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+/** "今天", "昨天", or the date: a divider between days. */
+function dayLabel(iso: string, now: number): string {
+  const d = new Date(iso);
+  const today = new Date(now);
+  const days = Math.round((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86400e3);
+  if (days === 0) return L("今天", "Today");
+  if (days === 1) return L("昨天", "Yesterday");
+  return L(`${d.getMonth() + 1} 月 ${d.getDate()} 日`, d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+}
+
+/** "14:05" */
+function timeOf(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function Who({ row, name }: { row?: AgentRow; name: string }) {

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -156,12 +157,25 @@ func (c *Cache) open1(key string, blob []byte) ([]byte, error) {
 	return c.aead.Open(nil, blob[:n], blob[n:], []byte(key))
 }
 
+// traceKey marks a finished run's steps: many and big, read after the
+// pages at start (the web UI's keys are kind\x00hub\x00…).
+const traceKey = "trace\x00"
+
 // All returns the entries, most recently used first, for hubs still in the
 // app (keep); entries of other hubs are deleted. One that cannot be read
 // is dropped.
 func (c *Cache) All(keep map[string]bool) ([]CacheEntry, error) {
+	return c.Some(keep, "")
+}
+
+// Some is All for one kind: "pages" (all but runs' steps: small, what the
+// App shows first), "traces" (runs' steps), or "" for every entry.
+func (c *Cache) Some(keep map[string]bool, kind string) ([]CacheEntry, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	// (the kind is told by the key, in Go: keys hold a NUL, which SQL's
+	// string functions do not take well; reading a row is cheap, opening
+	// it is what costs)
 	rows, err := c.db.Query(`SELECT key, hub, data FROM entries ORDER BY used DESC`)
 	if err != nil {
 		return nil, err
@@ -177,6 +191,9 @@ func (c *Cache) All(keep map[string]bool) ([]CacheEntry, error) {
 		}
 		if hub != "" && !keep[hub] {
 			drop = append(drop, key)
+			continue
+		}
+		if trace := strings.HasPrefix(key, traceKey); (kind == "pages" && trace) || (kind == "traces" && !trace) {
 			continue
 		}
 		data, err := c.open1(key, blob)
@@ -304,8 +321,26 @@ func (c *Cache) ForVersion(version string) error {
 	if v == version {
 		return nil
 	}
-	if _, err := c.db.Exec(`DELETE FROM entries`); err != nil {
+	// A new version of the App keeps the pages it had (they are shown at
+	// once and refreshed, as on any start); only runs' steps, whose shape
+	// changes with how they are drawn, start over. (A change the pages
+	// cannot survive bumps cacheVersion instead.)
+	rows, err := c.db.Query(`SELECT key FROM entries`)
+	if err != nil {
 		return err
+	}
+	var steps []string
+	for rows.Next() {
+		var k string
+		if rows.Scan(&k) == nil && strings.HasPrefix(k, traceKey) {
+			steps = append(steps, k)
+		}
+	}
+	rows.Close()
+	for _, k := range steps {
+		if _, err := c.db.Exec(`DELETE FROM entries WHERE key = ?`, k); err != nil {
+			return err
+		}
 	}
 	_, err = c.db.Exec(`INSERT INTO meta (k, v) VALUES ('app_version', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v`, version)
 	return err
@@ -327,7 +362,9 @@ func (b *Backend) cacheRoutes(m *http.ServeMux) {
 					keep[h.ID] = true
 				}
 			}
-			if e, err := b.Cache.All(keep); err == nil {
+			// kind=pages first at start, kind=traces after (older UIs ask
+			// for everything at once)
+			if e, err := b.Cache.Some(keep, r.URL.Query().Get("kind")); err == nil {
 				out = e
 			} else {
 				log.Printf("app cache: read: %v", err)

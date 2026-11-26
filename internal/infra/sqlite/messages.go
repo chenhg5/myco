@@ -80,7 +80,7 @@ func (r *MessageRepo) TouchActive(ctx context.Context, id string, at time.Time) 
 }
 
 func (r *MessageRepo) AckedActivity(ctx context.Context) (map[domain.AgentName][]domain.Activity, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT to_agent, id, MAX(active_at, updated_at) FROM messages WHERE status='acked'`)
+	rows, err := r.db.QueryContext(ctx, ackedActivitySQL)
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -193,6 +193,11 @@ func (r *MessageRepo) ListThread(ctx context.Context, threadID string) ([]*domai
 // small partial index instead of every message ever stored: their cost
 // follows the backlog, not the size of the table (plans_test.go pins this).
 const openStatus = `status IN ('queued','delivered','acked','held')`
+
+// ackedActivitySQL runs on every overview and agent listing. Without
+// openStatus it scanned every message ever sent (about 200 ms on a hub with
+// 36,000 messages, about one CPU core with a few apps open).
+const ackedActivitySQL = `SELECT to_agent, id, MAX(active_at, updated_at) FROM messages WHERE ` + openStatus + ` AND status='acked'`
 
 const afterReady = `(after='' OR NOT EXISTS (SELECT 1 FROM messages parent WHERE parent.id=messages.after AND parent.status NOT IN ('done','failed')))`
 const dueWhere = `(` + openStatus + ` AND ((status='queued' AND ` + afterReady + `) OR (status='delivered' AND lease_until<=?)))`
@@ -360,23 +365,36 @@ func inNames(names []domain.AgentName) (string, []any) {
 // excludes reports whether a name list that must match rules everything out.
 func excludes(names []domain.AgentName) bool { return names != nil && len(names) == 0 }
 
+// ListRecentThreads lists threads by their newest message, newest first.
+//
+// Without a filter that narrows to some threads (who takes part, a
+// project), it reads messages newest first from idx_messages_updated and
+// stops once it has the page: a GROUP BY over all messages would read the
+// whole table on every refresh. With one, it groups the messages of the
+// threads that filter selects (found through indexes).
 func (r *MessageRepo) ListRecentThreads(ctx context.Context, f domain.RecentFilter) ([]domain.ThreadRef, error) {
 	if excludes(f.Involve) || excludes(f.Match) {
 		return nil, nil
 	}
-	q := `SELECT thread_id, MAX(updated_at) AS u FROM messages WHERE 1=1`
-	var args []any
+	narrow := f.Involve != nil || f.Match != nil || f.Project != ""
+	var conds, having string
+	var args, havingArgs []any
 	inThreads := func(not bool, cond string, a ...any) {
 		op := " IN "
 		if not {
 			op = " NOT IN "
 		}
-		q += ` AND thread_id` + op + `(SELECT thread_id FROM messages WHERE ` + cond + `)`
+		conds += ` AND thread_id` + op + `(SELECT thread_id FROM messages WHERE ` + cond + `)`
 		args = append(args, a...)
 	}
 	if f.SenderPrefix != "" {
-		like := escapeLike(f.SenderPrefix) + "%"
-		inThreads(false, `from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\'`, like, like)
+		// Checked in each thread (through idx_messages_thread), not
+		// collected: most threads may have one. A range, not LIKE, so that
+		// it is answered from the index entries (names compare as bytes).
+		lo, hi := f.SenderPrefix, prefixEnd(f.SenderPrefix)
+		having = ` AND EXISTS (SELECT 1 FROM messages p WHERE p.thread_id=messages.thread_id AND
+			((p.from_agent >= ? AND p.from_agent < ?) OR (p.to_agent >= ? AND p.to_agent < ?)))`
+		havingArgs = []any{lo, hi, lo, hi}
 	}
 	if skip := append(append([]domain.AgentName{}, f.Nodes...), f.Skip...); len(skip) > 0 {
 		in, a := inNames(skip)
@@ -392,16 +410,28 @@ func (r *MessageRepo) ListRecentThreads(ctx context.Context, f domain.RecentFilt
 		inThreads(false, `project=?`, f.Project)
 	}
 	if f.Query != "" {
+		// (reads every message's body: a search, not a refresh)
 		like := "%" + escapeLike(f.Query) + "%"
 		inThreads(false, `body LIKE ? ESCAPE '\' OR from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\'`, like, like, like)
 	}
-	q += ` GROUP BY thread_id`
-	if f.Before > 0 {
-		q += ` HAVING u < ?`
-		args = append(args, f.Before)
+	limit := recentLimit(f.Limit)
+	if narrow {
+		// (the sender check once per thread, after grouping)
+		return r.recentThreadsGrouped(ctx, conds, args, having, havingArgs, f.Before, limit)
+	}
+	return r.recentThreadsByUpdate(ctx, conds+having, append(args, havingArgs...), f.Before, limit)
+}
+
+// recentThreadsGrouped: the threads conds selects, grouped.
+func (r *MessageRepo) recentThreadsGrouped(ctx context.Context, conds string, args []any, having string, havingArgs []any, before int64, limit int) ([]domain.ThreadRef, error) {
+	q := `SELECT thread_id, MAX(updated_at) AS u FROM messages WHERE 1=1` + conds + ` GROUP BY thread_id HAVING 1=1` + having
+	args = append(args, havingArgs...)
+	if before > 0 {
+		q += ` AND u < ?`
+		args = append(args, before)
 	}
 	q += ` ORDER BY u DESC LIMIT ?`
-	args = append(args, recentLimit(f.Limit))
+	args = append(args, limit)
 	rows, err := r.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, internal(err)
@@ -417,6 +447,51 @@ func (r *MessageRepo) ListRecentThreads(ctx context.Context, f domain.RecentFilt
 		out = append(out, domain.ThreadRef{ID: id, UpdatedAt: fromMS(u)})
 	}
 	return out, internal(rows.Err())
+}
+
+// recentThreadsByUpdate reads messages newest first; a thread's first row is
+// its newest. Paging back (before) keeps threads whose newest message is
+// older than before: a thread updated since is left for the newer page.
+func (r *MessageRepo) recentThreadsByUpdate(ctx context.Context, conds string, args []any, before int64, limit int) ([]domain.ThreadRef, error) {
+	q := `SELECT thread_id, updated_at FROM messages INDEXED BY idx_messages_updated WHERE 1=1`
+	var a []any
+	if before > 0 {
+		q += ` AND updated_at < ? AND NOT EXISTS (SELECT 1 FROM messages newer WHERE newer.thread_id=messages.thread_id AND newer.updated_at >= ?)`
+		a = append(a, before, before)
+	}
+	q += conds + ` ORDER BY updated_at DESC, id`
+	rows, err := r.db.QueryContext(ctx, q, append(a, args...)...)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer rows.Close()
+	seen := map[string]bool{}
+	var out []domain.ThreadRef
+	for len(out) < limit && rows.Next() {
+		var id string
+		var u int64
+		if err := rows.Scan(&id, &u); err != nil {
+			return nil, internal(err)
+		}
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, domain.ThreadRef{ID: id, UpdatedAt: fromMS(u)})
+		}
+	}
+	return out, internal(rows.Err())
+}
+
+// prefixEnd is the smallest string greater than every string starting
+// with prefix (for a range in place of LIKE 'prefix%').
+func prefixEnd(prefix string) string {
+	b := []byte(prefix)
+	for i := len(b) - 1; i >= 0; i-- {
+		if b[i] < 0xff {
+			b[i]++
+			return string(b[:i+1])
+		}
+	}
+	return "\xff\xff\xff\xff"
 }
 
 func (r *MessageRepo) ListRecentPairs(ctx context.Context, f domain.RecentFilter) ([]domain.PairRef, error) {
@@ -474,66 +549,86 @@ func (r *MessageRepo) ListRecentPairs(ctx context.Context, f domain.RecentFilter
 }
 
 // listAllPairs lists every pair of names that exchanged messages, newest
-// first: A is the alphabetically first name, B the other.
+// first: A is the alphabetically first name, B the other. Messages are
+// read newest first from idx_messages_updated until the page is full (a
+// pair's first message met is its newest; paging back, pairs met at or
+// after before were on a newer page), then each pair is counted from
+// idx_messages_from. A GROUP BY of the pairs would read every message.
 func (r *MessageRepo) listAllPairs(ctx context.Context, f domain.RecentFilter) ([]domain.PairRef, error) {
 	if excludes(f.Involve) || excludes(f.Match) {
 		return nil, nil
 	}
-	q := `SELECT CASE WHEN from_agent < to_agent THEN from_agent ELSE to_agent END AS a,
-		CASE WHEN from_agent < to_agent THEN to_agent ELSE from_agent END AS b,
-		COUNT(*), MAX(updated_at) AS u
-		FROM messages WHERE from_agent != to_agent`
+	var conds string
 	var args []any
 	if len(f.Skip) > 0 {
 		in, a := inNames(f.Skip)
-		q += ` AND from_agent NOT` + in + ` AND to_agent NOT` + in
+		conds += ` AND from_agent NOT` + in + ` AND to_agent NOT` + in
 		args = append(args, append(a, a...)...)
 	}
 	for _, names := range [][]domain.AgentName{f.Involve, f.Match} {
 		if names != nil {
 			in, a := inNames(names)
-			q += ` AND (from_agent` + in + ` OR to_agent` + in + `)`
+			conds += ` AND (from_agent` + in + ` OR to_agent` + in + `)`
 			args = append(args, append(a, a...)...)
 		}
 	}
 	if f.Party != "" {
 		if f.WithoutParty {
-			q += ` AND from_agent != ? AND to_agent != ?`
+			conds += ` AND from_agent != ? AND to_agent != ?`
 		} else {
-			q += ` AND (from_agent = ? OR to_agent = ?)`
+			conds += ` AND (from_agent = ? OR to_agent = ?)`
 		}
 		args = append(args, f.Party, f.Party)
 	}
 	if f.Project != "" {
-		q += ` AND project=?`
+		conds += ` AND project=?`
 		args = append(args, f.Project)
 	}
 	if f.Query != "" {
 		like := "%" + escapeLike(f.Query) + "%"
-		q += ` AND (body LIKE ? ESCAPE '\' OR from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\')`
+		conds += ` AND (body LIKE ? ESCAPE '\' OR from_agent LIKE ? ESCAPE '\' OR to_agent LIKE ? ESCAPE '\')`
 		args = append(args, like, like, like)
 	}
-	q += ` GROUP BY a, b`
-	if f.Before > 0 {
-		q += ` HAVING u < ?`
-		args = append(args, f.Before)
+	out, err := r.newestPairs(ctx, conds, args, f.Before, recentLimit(f.Limit))
+	if err != nil {
+		return nil, err
 	}
-	q += ` ORDER BY u DESC LIMIT ?`
-	args = append(args, recentLimit(f.Limit))
-	rows, err := r.db.QueryContext(ctx, q, args...)
+	// (after the walk is closed: the hub has one connection)
+	for i := range out {
+		p := &out[i]
+		err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE ((from_agent=? AND to_agent=?) OR (from_agent=? AND to_agent=?))`+conds,
+			append([]any{p.Other, p.Node, p.Node, p.Other}, args...)...).Scan(&p.Messages)
+		if err != nil {
+			return nil, internal(err)
+		}
+	}
+	return out, nil
+}
+
+func (r *MessageRepo) newestPairs(ctx context.Context, conds string, args []any, before int64, limit int) ([]domain.PairRef, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT from_agent, to_agent, updated_at FROM messages INDEXED BY idx_messages_updated
+		WHERE from_agent != to_agent`+conds+` ORDER BY updated_at DESC, id`, args...)
 	if err != nil {
 		return nil, internal(err)
 	}
 	defer rows.Close()
+	seen := map[[2]domain.AgentName]bool{}
 	var out []domain.PairRef
-	for rows.Next() {
-		var p domain.PairRef
+	for len(out) < limit && rows.Next() {
+		var from, to domain.AgentName
 		var u int64
-		if err := rows.Scan(&p.Other, &p.Node, &p.Messages, &u); err != nil {
+		if err := rows.Scan(&from, &to, &u); err != nil {
 			return nil, internal(err)
 		}
-		p.UpdatedAt = fromMS(u)
-		out = append(out, p)
+		k := [2]domain.AgentName{min(from, to), max(from, to)}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		if before > 0 && u >= before {
+			continue // (on a newer page)
+		}
+		out = append(out, domain.PairRef{Other: k[0], Node: k[1], UpdatedAt: fromMS(u)})
 	}
 	return out, internal(rows.Err())
 }
@@ -592,12 +687,22 @@ func (r *MessageRepo) ListBetweenSince(ctx context.Context, a, b domain.AgentNam
 		ORDER BY updated_at ASC, id ASC LIMIT ?`, a, b, b, a, since, since, limit)
 }
 
+// ListBetween: the newest messages between a and b. Each direction is read
+// newest first from idx_messages_from, at most limit each, then merged: an
+// OR of the two would read and sort every message the pair ever sent.
 func (r *MessageRepo) ListBetween(ctx context.Context, a, b domain.AgentName, before int64, limit int) ([]*domain.Message, error) {
-	where := `WHERE ((from_agent=? AND to_agent=?) OR (from_agent=? AND to_agent=?))`
-	args := []any{a, b, b, a}
+	side := `SELECT rowid FROM (SELECT rowid FROM messages WHERE from_agent=? AND to_agent=?`
 	if before > 0 {
-		where += ` AND created_at < ?`
-		args = append(args, before)
+		side += ` AND created_at < ?`
 	}
-	return r.many(ctx, r.db, where+` ORDER BY created_at DESC, id DESC LIMIT ?`, append(args, limit)...)
+	side += ` ORDER BY created_at DESC, id DESC LIMIT ?)`
+	var args []any
+	for _, dir := range [][2]domain.AgentName{{a, b}, {b, a}} {
+		args = append(args, dir[0], dir[1])
+		if before > 0 {
+			args = append(args, before)
+		}
+		args = append(args, limit)
+	}
+	return r.many(ctx, r.db, `WHERE rowid IN (`+side+` UNION ALL `+side+`) ORDER BY created_at DESC, id DESC LIMIT ?`, append(args, limit)...)
 }

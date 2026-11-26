@@ -237,6 +237,8 @@ function reportProblems() {
 
 const intentionalPublicNotReady = new WeakSet();
 const intentionalPageOriginBusy = new WeakSet();
+// Pages whose app library is made to fail on purpose (出错 · 显示请求编号).
+const intentionalTemplatesFail = new WeakSet();
 
 function watchPage(page, size, scheme) {
   // Page events come outside this run's async context: keep it here.
@@ -256,6 +258,7 @@ function watchPage(page, size, scheme) {
     // This fixture deliberately returns the real backend's not-ready status.
     if (intentionalPublicNotReady.has(page) && msg.text().includes("503") && /\/app\/local\/hub:/.test(where)) return;
     // This fixture deliberately keeps the saved page origin occupied.
+    if (intentionalTemplatesFail.has(page) && msg.text().includes("500") && /\/app\/hubs\/[^/]+\/templates:/.test(where)) return;
     if (intentionalPageOriginBusy.has(page) && msg.text().includes("503") && /\/app\/hubs\/[^/]+\/pages\/pg_release\/open:/.test(where)) return;
     addProblem(r, "console", msg.text(), where);
   });
@@ -1479,6 +1482,41 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-home, .sp-group").first().waitFor({ timeout: 10_000 });
     });
 
+    // A failed request names its id (X-Request-Id), the one the App sent:
+    // the hub logs it, so the error can be found there. This one answers
+    // without an id of its own, as a timeout would.
+    await step("出错 · 显示请求编号", async () => {
+      const routeURL = /\/app\/hubs\/[^/]+\/templates(\?|$)/;
+      let sent = "";
+      intentionalTemplatesFail.add(page);
+      await page.route(routeURL, (route) => {
+        if (route.request().method() !== "GET") return route.continue();
+        sent = route.request().headers()["x-request-id"] || "";
+        return route.fulfill({ status: 500, json: { error: "internal", message: "database is locked" } });
+      });
+      try {
+        await go(page, "应用", narrow);
+        const id = page.locator(".tp .app-error-id").first();
+        await id.waitFor({ timeout: 10_000 });
+        if (!/^[0-9a-f]{16}$/.test(sent)) throw new Error(`App 应给每个请求带上 X-Request-Id，实际「${sent}」`);
+        const text = (await id.innerText()).trim();
+        if (text !== `请求编号 ${sent}`) throw new Error(`出错时应显示这次请求的编号「${sent}」，实际「${text}」`);
+        // (details show only where the message replaced the raw text)
+        const more = page.locator(".tp .app-error-more", { hasText: "详细信息" }).first();
+        if (await more.count()) {
+          await clickVisible(page, more);
+          const detail = await page.locator(".tp .app-error-detail").first().innerText();
+          if (!detail.includes(sent) || !/用时 \d/.test(detail)) throw new Error(`详细信息里也应有请求编号和用时，实际「${detail}」`);
+        }
+        await shot(page, size, scheme, "error-request-id");
+      } finally {
+        await page.unroute(routeURL);
+        intentionalTemplatesFail.delete(page);
+      }
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home, .sp-group").first().waitFor({ timeout: 10_000 });
+    });
+
     await step("应用 · English metadata and legacy Hub", async () => {
       const pattern="**/app/hubs/hub_studio/templates";
       try {
@@ -1719,8 +1757,54 @@ async function runMatrix(browser, size, scheme) {
       if (await page.locator(".sp-group .sp-compose").count()) throw new Error("全部动态是记录，不该有输入框");
       await settle(page);
       await shot(page, size, scheme, "project-activity");
+      // As a group chat: a line per task and per answer, "@" whom it was
+      // for, in time; a click opens the thread. The choice is kept.
+      await page.locator(".sp-head").getByRole("tab", { name: "群聊" }).click();
+      const chat = page.locator("[data-testid=activity-chat]");
+      await chat.waitFor({ timeout: 5_000 });
+      const lines = chat.locator(".sp-gchat-line");
+      if ((await lines.count()) < 2) throw new Error("群聊视图应有好几行");
+      if (!(await chat.locator(".sp-gchat-at").first().innerText()).startsWith("@")) throw new Error("每一行应写明 @ 谁");
+      if (!(await chat.locator(".sp-gchat-quote").count())) throw new Error("回复应引用它答的那一条");
+      const times = await lines.evaluateAll((els) => els.map((e) => e.querySelector(".sp-gchat-when")?.textContent || ""));
+      if (!times.every(Boolean)) throw new Error("每一行应有时间");
+      await settle(page);
+      await shot(page, size, scheme, "project-activity-chat");
+      await page.locator(".sp-head").getByRole("tab", { name: "卡片" }).click();
+      await page.locator(".sp-group .sp-card").first().waitFor({ timeout: 5_000 });
       await clickVisible(page, page.locator(".sp-head button[aria-label='返回']"));
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+    });
+
+    // A restart on a slow network: what was there last time shows at once
+    // from the App's own saved cache (the sidebar's projects and chats, the
+    // project's chat), and is refreshed when the workspace answers.
+    await step("启动 · 先显示上次的数据", async () => {
+      await page.waitForTimeout(2000); // (the cache is saved a moment after a change)
+      await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+      await page.waitForTimeout(500);
+      const slow = async (route) => {
+        const u = route.request().url();
+        // (what goes to a workspace: its overview, anything of one hub;
+        // the App's own list of workspaces is on this computer)
+        if (/\/app\/(overview\b|hubs\/[^/?]+\/)/.test(u)) await new Promise((ok) => setTimeout(ok, 8000));
+        await route.continue().catch(() => {});
+      };
+      await page.route("**/app/**", slow);
+      try {
+        const t0 = Date.now();
+        await page.reload({ waitUntil: "domcontentloaded" });
+        if (narrow) await sidebar(page, true);
+        await page.locator(".app-sidebar").getByText("官网改版", { exact: true }).first().waitFor({ timeout: 4_000 });
+        await page.locator(".app-sidebar").getByText("PM (Codex)", { exact: true }).first().waitFor({ timeout: 2_000 });
+        const ms = Date.now() - t0;
+        if (ms > 5_000) throw new Error(`重启后应先显示上次的项目和会话，实际等了 ${ms} 毫秒`);
+        await settle(page, 200);
+        await shot(page, size, scheme, "start-from-cache");
+      } finally {
+        await page.unroute("**/app/**", slow);
+      }
+      if (narrow) await sidebar(page, false);
     });
 
     // A member opens on the right; either pane can take the whole width.
@@ -2536,6 +2620,36 @@ async function runMatrix(browser, size, scheme) {
       if (!all.includes("每周") || !all.includes("剩 38%") || !all.includes("Studio Mac") || !all.includes("读取")) throw new Error(`点开应列出全部窗口、来源和读取时间，实际是「${all}」`);
       await settle(page, 200);
       await shot(page, size, scheme, "chat-quota-pill");
+      // It stays in the chat column (a members panel beside it, a narrow
+      // window): moved left as far as it must, never cut off at the right.
+      const inColumn = async () => menu.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const b = el.closest(".conv-detail").getBoundingClientRect();
+        return { ok: r.left >= b.left - 1 && r.right <= b.right + 1, r: [Math.round(r.left), Math.round(r.right)], b: [Math.round(b.left), Math.round(b.right)] };
+      });
+      let fit = await inColumn();
+      if (!fit.ok) throw new Error(`额度弹窗应留在对话栏里，弹窗 ${fit.r}，对话栏 ${fit.b}`);
+      if (!narrow) {
+        // (a narrower window, the members panel still beside the chat)
+        await page.keyboard.press("Escape");
+        await page.locator(".sp-home .quota-pill-scrim").click({ force: true }).catch(() => {});
+        await page.setViewportSize({ width: 860, height: size.height });
+        try {
+          await settle(page, 300);
+          await pill.click();
+          await menu.waitFor({ timeout: 5_000 });
+          fit = await inColumn();
+          if (!fit.ok) throw new Error(`窗口窄一些时，额度弹窗也应留在对话栏里，弹窗 ${fit.r}，对话栏 ${fit.b}`);
+          await shot(page, { ...size, width: 860 }, scheme, "chat-quota-pill-narrow");
+          await page.keyboard.press("Escape");
+          await page.locator(".sp-home .quota-pill-scrim").click({ force: true }).catch(() => {});
+        } finally {
+          await page.setViewportSize({ width: size.width, height: size.height });
+        }
+        await settle(page, 300);
+        await pill.click();
+        await menu.waitFor({ timeout: 5_000 });
+      }
       await page.keyboard.press("Escape");
       await page.locator(".sp-home .quota-pill-scrim").click({ force: true }).catch(() => {});
       if (await page.locator(".sp-home .conv-quota-out").count()) throw new Error("没用完时不该提示");
@@ -2546,6 +2660,48 @@ async function runMatrix(browser, size, scheme) {
       if (!(await out.innerText()).includes("已用完")) throw new Error(`用完时应提示，实际是「${await out.innerText()}」`);
       if (await page.locator(".conv-detail .conv-compose-input").isDisabled()) throw new Error("用完也不该拦着发");
       if (!(await page.locator(".conv-detail [data-testid=quota-pill]").getAttribute("class") || "").includes("is-out")) throw new Error("用完应变红");
+    });
+
+    // A message on its way: a turning ring and dots under the faint
+    // bubble. When a refresh brings it back before the send answers (a
+    // slow workspace), it shows once, not twice.
+    await step("单聊 · 发送中", async () => {
+      // (one at rest: what you send is a new message, not an addition)
+      await openMember(page, narrow, "聊天", "MCP Claude");
+      const box0 = page.locator(".conv-detail .conv-compose-input");
+      // (a chat with something in it, the agent done with it: the next one
+      // is a new message, sent while the chat refreshes)
+      if (!(await page.locator(".conv-detail .conv-msg.is-me").count())) {
+        await box0.fill("先打个招呼");
+        await box0.press("Enter");
+        await page.locator(".conv-detail .conv-msg.is-me", { hasText: "先打个招呼" }).first().waitFor({ timeout: 15_000 });
+      }
+      await page.waitForFunction(() => !/排到下一条/.test(document.querySelector(".conv-detail .conv-compose-input")?.getAttribute("placeholder") || ""), null, { timeout: 60_000 });
+      const text = `发送中只出现一次 ${size.width} ${scheme}`;
+      const slowSend = async (route) => {
+        if (route.request().method() !== "POST") return route.continue();
+        const resp = await route.fetch();
+        await new Promise((ok) => setTimeout(ok, 7000));
+        await route.fulfill({ response: resp }).catch(() => {});
+      };
+      await page.route("**/app/hubs/*/messages", slowSend);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill(text);
+      await box.press("Enter");
+      const sending = page.locator(".conv-detail [data-testid=chat-sending]");
+      await sending.waitFor({ timeout: 5_000 });
+      if (!(await sending.locator(".send-ring").count())) throw new Error("发送中应有转圈");
+      await settle(page, 300);
+      await shot(page, size, scheme, "chat-sending");
+      // The refresh brings it (the send has not answered yet): one bubble.
+      await page.locator(".conv-detail .conv-msg.is-me", { hasText: text }).first().waitFor({ timeout: 10_000 });
+      for (let i = 0; i < 4; i++) {
+        const n = await page.locator(".conv-detail .conv-msg", { hasText: text }).count();
+        if (n !== 1) throw new Error(`同一条消息应只出现一次，实际 ${n} 次`);
+        await page.waitForTimeout(500);
+      }
+      await page.waitForFunction(() => !document.querySelector(".conv-detail [data-testid=chat-sending]"), null, { timeout: 15_000 });
+      await page.unroute("**/app/hubs/*/messages", slowSend);
     });
 
     await step("单聊 · 空对话", async () => {
@@ -3269,6 +3425,23 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "chat-supplement-in-run");
       await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).last().waitFor({ timeout: 25_000 });
       await noRound(page);
+      // Done, the process folds, and what you added is not folded into it:
+      // it stays out, the steps before it folded on their own line above.
+      await page.waitForFunction(() => {
+        const el = [...document.querySelectorAll(".conv-detail .trace-steer")].find((x) => (x.textContent || "").includes("顺便看看 Windows 的包"));
+        return !!el && !el.closest(".trace")?.classList.contains("is-live");
+      }, null, { timeout: 10_000 }).catch(() => undefined);
+      if (!(await added.isVisible())) throw new Error("过程折起后，你在运行中补充的话不该被收进过程里");
+      const folds = await added.evaluate((el) => {
+        const run = el.closest(".trace");
+        const y = el.getBoundingClientRect().top;
+        const heads = [...(run?.querySelectorAll(".trace-fold") || [])];
+        return { above: heads.filter((h) => h.getBoundingClientRect().top < y).map((h) => (h.textContent || "").trim()), shut: heads.every((h) => h.getAttribute("aria-expanded") === "false") };
+      });
+      if (!folds.above.length || !/过程 · \d+ 步/.test(folds.above[0])) throw new Error(`补充之前的步骤应单独折成一行在它上面，实际 ${JSON.stringify(folds.above)}`);
+      if (!folds.shut) throw new Error("做完后过程应折起");
+      await added.scrollIntoViewIfNeeded();
+      await shot(page, size, scheme, "chat-supplement-after-done");
     });
 
     // A line you add after something came in between (another member
@@ -3998,6 +4171,63 @@ async function runMatrix(browser, size, scheme) {
       await row.waitFor({ state: "detached", timeout: 5_000 });
     });
 
+    // 侧栏显示: every entry shows until hidden, from Settings or by
+    // right-clicking it in the sidebar; shown again from Settings.
+    await step("设置 · 侧栏显示", async () => {
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+      const row = page.locator("[data-setting=nav-entries]");
+      await row.waitFor({ timeout: 5_000 });
+      const chip = (name) => row.locator(".nav-show-chip", { hasText: name });
+      if ((await row.locator(".nav-show-chip.is-on").count()) !== (await row.locator(".nav-show-chip").count())) throw new Error("默认应全部显示");
+      await chip("自动化").click();
+      await page.waitForFunction(() => !document.querySelector(".sp-nav-auto"), null, { timeout: 5_000 });
+      if (await chip("自动化").getAttribute("aria-pressed") !== "false") throw new Error("隐藏后按钮应显示为关");
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-nav-entries");
+      await page.keyboard.press("Escape");
+      await sidebar(page, true);
+      // right-click an entry: hide it
+      await page.locator(".sp-nav-workflows").click({ button: "right" });
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "在侧栏隐藏「工作流」" }).click();
+      await page.locator(".sp-nav-workflows").waitFor({ state: "detached", timeout: 5_000 });
+      // Hidden is never silent: the sidebar says what, and a click opens the setting.
+      const note = page.locator("[data-testid=nav-hidden-note]");
+      if (!(await note.innerText()).includes("工作流")) throw new Error(`侧栏应写明隐藏了什么，实际「${await note.innerText()}」`);
+      // and back, from Settings
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+      await chip("自动化").click();
+      await chip("工作流").click();
+      await page.keyboard.press("Escape");
+      await sidebar(page, true);
+      await page.locator(".sp-nav-auto").waitFor({ timeout: 5_000 });
+      await page.locator(".sp-nav-workflows").waitFor({ timeout: 5_000 });
+      if (await page.locator("[data-testid=nav-hidden-note]").count()) throw new Error("全部显示时不该有「已隐藏」提示");
+      if (narrow) await sidebar(page, false);
+    });
+
+    // An App updated from before 侧栏显示, or with a setting it cannot read:
+    // everything shows (projects and chats above all).
+    await step("设置 · 侧栏显示（升级上来）", async () => {
+      for (const v of [null, "not json", "{\"projects\":true}"]) {
+        await page.evaluate((x) => { if (x === null) localStorage.removeItem("myco-nav-hidden"); else localStorage.setItem("myco-nav-hidden", x); }, v);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        // (the shell first: sidebar() reads it before it is there as hidden,
+        // and its click would then close the sidebar)
+        await page.locator(".app-crumbbar").waitFor({ timeout: 15_000 });
+        await sidebar(page, true);
+        await page.locator(".app-sidebar").getByText("官网改版", { exact: true }).first().waitFor({ timeout: 15_000 });
+        await page.locator(".app-sidebar").getByText("PM (Codex)", { exact: true }).first().waitFor({ timeout: 5_000 });
+        for (const sel of [".sp-nav-auto", ".sp-nav-workflows", ".sp-nav-templates", ".sp-nav-computers", ".sp-nav-projects", ".sp-nav-chats"]) {
+          if (!(await page.locator(sel).count())) throw new Error(`没有存过或读不出侧栏设置时（${v}）应全部显示，缺 ${sel}`);
+        }
+        if (await page.locator("[data-testid=nav-hidden-note]").count()) throw new Error("没有隐藏时不该有「已隐藏」提示");
+      }
+      await page.evaluate(() => localStorage.removeItem("myco-nav-hidden"));
+      if (narrow) await sidebar(page, false);
+    });
+
     await step("设置 · 只看进度", async () => {
       await go(page, "设置", narrow);
       await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
@@ -4139,6 +4369,10 @@ async function runMatrix(browser, size, scheme) {
       await box.fill(t);
       await box.press("Enter");
       await page.locator(".conv-msg.is-me", { hasText: t }).last().waitFor({ timeout: 20_000 });
+      // ⌘↩ queues only while that one is at work (the box then offers to
+      // queue the next one); before the agent takes it up, it would just
+      // send. Wait for that, not for a fixed time.
+      await page.waitForFunction(() => /排到下一条/.test(document.querySelector(".conv-detail .conv-compose-input")?.getAttribute("placeholder") || ""), null, { timeout: 20_000 });
       const gone = "这条先撤掉";
       const a = "第一条排队：改首页标题";
       const b = "第二条排队：改下载页按钮";
@@ -4958,6 +5192,62 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
+    // An agent in its own session (inbox wait: a Claude cloud session) has
+    // no computer to read a quota on; its session reports it
+    // (myco agent runtime quota: source_kind cloud_session, no machine_id).
+    // The member card, its card's 额度 and the composer all show it.
+    await step("成员 · 会话上报的额度", async () => {
+      const at = new Date(Date.now() - 5 * 60e3).toISOString();
+      const quota = {
+        source: "claude", provider: "claude", source_kind: "cloud_session", status: "ok", at, checked_at: at,
+        windows: [
+          { name: "five_hour", used: 0.17, status: "allowed", duration_sec: 18000, resets_at: new Date(Date.now() + 3 * 3600e3).toISOString() },
+          { name: "seven_day", used: 0.48, status: "allowed", duration_sec: 604800, resets_at: new Date(Date.now() + 4 * 86400e3).toISOString() },
+        ],
+      };
+      const put = (v) => {
+        if (Array.isArray(v)) { v.forEach(put); return; }
+        if (!v || typeof v !== "object") return;
+        if (v.name === "grok-agent-7c2e" && v.runtime) v.runtime = { ...v.runtime, quota };
+        for (const x of Object.values(v)) put(x);
+      };
+      const routeURL = /\/app\/overview(\?|$)/;
+      await page.route(routeURL, async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        put(json);
+        await route.fulfill({ response, json });
+      });
+      try {
+        await go(page, "成员", narrow);
+        const card = page.locator(".mb-card", { hasText: "Myco (Grok)" });
+        const tag = card.locator(".app-quota-tag");
+        await tag.waitFor({ timeout: 15_000 });
+        if (!compactText(await tag.innerText()).includes("剩 52%")) throw new Error(`会话上报的额度应在成员卡上显示最紧的窗口「剩 52%」，实际「${await tag.innerText()}」`);
+        if (!(await tag.getAttribute("title")).includes("会话上报")) throw new Error(`额度应说明是会话上报的，实际「${await tag.getAttribute("title")}」`);
+        await card.click();
+        await page.locator(".ms").waitFor({ timeout: 10_000 });
+        await clickVisible(page, page.locator(".ms .ms-fold"));
+        const body = page.locator(".ms .ms-fold-body");
+        await body.getByText("模型由它自己的会话管理，myco 改不了；额度是它的会话上报的。").waitFor({ timeout: 5_000 });
+        const rows = compactText(await body.locator(".app-quota").allInnerTexts().then((x) => x.join(" | ")));
+        if (!rows.includes("剩 83%") || !rows.includes("剩 52%")) throw new Error(`卡片的额度应列出两个窗口，实际「${rows}」`);
+        await settle(page, 200);
+        await shot(page, size, scheme, "member-quota-session");
+        await page.keyboard.press("Escape");
+        await page.locator(".ms").waitFor({ state: "hidden" });
+        await openMember(page, narrow, "聊天", "Myco (Grok)");
+        const pill = page.locator(".conv-detail [data-testid=quota-pill]");
+        await pill.waitFor({ timeout: 10_000 });
+        if (!compactText(await pill.innerText()).includes("剩 52%")) throw new Error(`输入框的额度应是「剩 52%」，实际「${await pill.innerText()}」`);
+      } finally {
+        await page.unroute(routeURL);
+      }
+      // (back where the next step starts: the members page)
+      await go(page, "成员", narrow);
+      await page.locator(".mb-card", { hasText: "PM (Codex)" }).waitFor({ timeout: 15_000 });
+    });
+
     await step("成员 · 模型和额度", async () => {
       // A manager picks a model and an effort: each goes to the App backend
       // at once with both fields. The quota rows say whose usage it is
@@ -5102,7 +5392,7 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ timeout: 10_000 });
       await clickVisible(page, page.locator(".ms .ms-fold"));
       const inbox = page.locator(".ms .ms-fold-body");
-      await inbox.getByText("模型和额度由它自己的会话管理，myco 拿不到也改不了。").waitFor({ timeout: 5_000 });
+      await inbox.getByText("模型和额度由它自己的会话管理；会话上报额度后，这里就能看到。").waitFor({ timeout: 5_000 });
       if (await inbox.locator("select").count()) throw new Error("inbox wait 的 agent 不该有可编辑控件");
       const inboxText = compactText(await inbox.innerText());
       if (!inboxText.includes("grok-4") || !inboxText.includes("它自己报的")) {
@@ -5991,11 +6281,22 @@ async function runMatrix(browser, size, scheme) {
     // ⌃Tab still switches; Esc puts everything back.
     await step("专注模式", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
-      if (narrow) await sidebar(page, false);
+      // (narrow: the sidebar slides away first; a click on ⋯ while it
+      // still covers the chat does not reach the button)
+      if (narrow) {
+        await sidebar(page, false);
+        await page.locator(".app-sidebar").waitFor({ state: "hidden", timeout: 5_000 });
+      }
       const conv = page.locator(".conv-detail:visible").last();
-      await clickVisible(page, conv.getByRole("button", { name: "更多" }).first());
       const item = page.locator(".conv-menu").getByRole("menuitem", { name: /专注模式/ });
-      await item.waitFor({ timeout: 5_000 });
+      // The menu is open when its item shows; a click that landed while
+      // the chat was still settling opens nothing, so it is tried again.
+      for (let i = 0; ; i++) {
+        await clickVisible(page, conv.getByRole("button", { name: "更多" }).first());
+        if (await item.waitFor({ timeout: 3_000 }).then(() => true, () => false)) break;
+        if (i === 2) throw new Error("⋯ 菜单点了三次都没打开");
+        await page.keyboard.press("Escape");
+      }
       if (!/⌘⇧F|Ctrl\+Shift\+F/.test(await item.innerText())) throw new Error("菜单里应写着专注模式的快捷键");
       await item.click();
       await page.locator(".app-shell.is-focus").waitFor({ timeout: 5_000 });

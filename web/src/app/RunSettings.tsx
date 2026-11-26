@@ -1,3 +1,4 @@
+import { fitMenu } from "@/app/fitMenu";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { appApi, isOldHub } from "@/appapi";
 import type { RunSettings, Runtime, RuntimeAccess, RuntimeModel } from "@/api";
@@ -236,9 +237,10 @@ export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
   const efforts = effortChoices(cli, rt?.models, model || rt?.model, rt?.effort, effort);
 
   // An agent that receives in its own session runs its CLI itself: myco can
-  // neither read nor set its model and quota.
+  // neither read nor set its model; its quota is there once its session
+  // reports it (myco agent runtime quota, e.g. a Claude cloud session).
   if (isInbox(ag)) {
-    if (part === "quota") return null;
+    if (part === "quota") return rt?.quota ? <QuotaRows quota={rt.quota} row={row} now={now} /> : null;
     return (
       <><div className="app-kv has-help">
         <span className="app-kv-label">{L("模型", "Model")}</span>
@@ -248,7 +250,9 @@ export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
             : "—"}
         </span>
         <span className="app-kv-help">
-          {L("模型和额度由它自己的会话管理，myco 拿不到也改不了。", "Its own session manages the model and quota; myco can't see or change them.")}
+          {rt?.quota
+            ? L("模型由它自己的会话管理，myco 改不了；额度是它的会话上报的。", "Its own session manages the model, which myco can't change; its session reports the quota.")
+            : L("模型和额度由它自己的会话管理；会话上报额度后，这里就能看到。", "Its own session manages the model and quota; the quota shows here once its session reports it.")}
         </span>
       </div>{accessRow}{mcpRow}</>
     );
@@ -415,7 +419,7 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
       {open && (
         <>
           <span className="run-pill-scrim" onClick={() => setOpen(false)} />
-          <div className="run-pill-menu" role="menu" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
+          <div ref={fitMenu} className="run-pill-menu" role="menu" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
             {editable ? (
               <>
                 <div className="run-pill-group">{L("模型", "Model")}</div>
@@ -541,7 +545,7 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
       {open && (
         <>
           <span className="run-pill-scrim" onClick={() => setOpen(false)} />
-          <div className="run-pill-menu" role="menu" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
+          <div ref={fitMenu} className="run-pill-menu" role="menu" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
             {editable ? (
               <>
                 <div className="run-pill-group">{L("它运行时能动什么", "What it may touch when it runs")}</div>

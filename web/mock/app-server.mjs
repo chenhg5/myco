@@ -2593,7 +2593,10 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { enabled: true, entries: cacheStore.size, bytes });
     }
     if (method === "GET") {
-      const entries = [...cacheStore.values()].reverse();
+      // kind=pages first at start, kind=traces after (as the App backend)
+      const kind = url.searchParams.get("kind") || "";
+      const trace = (e) => e.key.startsWith("trace\u0000");
+      const entries = [...cacheStore.values()].reverse().filter((e) => kind === "pages" ? !trace(e) : kind === "traces" ? trace(e) : true);
       return send(res, 200, { enabled: true, entries });
     }
     if (method === "PUT") {

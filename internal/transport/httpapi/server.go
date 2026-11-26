@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/myco-ai/myco/internal/perf"
 	"io"
 	"log/slog"
 	"net"
@@ -29,6 +30,7 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
+	perf    *perf.Timings
 	goals   *app.GoalService
 	watches *app.WatchService
 
@@ -174,6 +176,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return // held for its owner's approval
 	}
 	s.mux.ServeHTTP(w, r)
+	perf.SetRoute(r.Context(), routePattern(r))
 }
 
 func (s *Server) routes() {
@@ -193,6 +196,7 @@ func (s *Server) routes() {
 
 	// Administration (admin token).
 	m.HandleFunc("POST /v1/admin/upgrade", s.admin(s.upgradeHub))
+	m.HandleFunc("GET /v1/admin/perf", s.admin(s.adminPerf))
 	s.routeBackups(m)
 	m.HandleFunc("POST /v1/agents", s.admin(s.register))
 	m.HandleFunc("DELETE /v1/agents/{name}", s.admin(s.removeAgent))

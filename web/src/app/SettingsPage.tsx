@@ -24,6 +24,7 @@ import { osWant } from "@/app/pages";
 import { LocalAgentsSection } from "@/app/LocalAgents";
 import { setSimpleMode, useSimpleMode } from "@/app/simpleMode";
 import { useUiStyle } from "@/lib/uiStyle";
+import { NAV_ENTRIES, navEntryLabel, useNavHidden } from "@/lib/navHidden";
 import type { TextSize, ThemeMode } from "@/lib/theme";
 import { setReportsOnly, useReportsOnly } from "@/app/quietRuns";
 import { appTo, setAutoTranslate, setTranslateReady, useAutoTranslate, useTranslateReady } from "@/app/translate";
@@ -228,6 +229,7 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
   { section: "appearance", key: "theme", title: () => L("外观（浅色 / 深色）", "Appearance (light / dark)"), words: "外观 主题 浅色 深色 跟随系统 theme dark light appearance" },
   { section: "appearance", key: "simple-mode", title: () => L("简单模式", "Simple mode"), words: "简单模式 完整 simple mode" },
   { section: "appearance", key: "ui-style", title: () => L("界面风格（标准 / 清爽）", "Style (standard / clean)"), words: "界面风格 清爽 简洁 干净 头像 装饰 标准 style clean minimal avatars decoration" },
+  { section: "appearance", key: "nav-entries", title: () => L("侧栏显示", "Sidebar entries"), words: "侧栏 导航 隐藏 显示 自动化 工作流 应用 电脑 项目 会话 终端 sidebar navigation hide show automations workflows apps computers projects conversations terminals" },
   { section: "appearance", key: "text-size", title: () => L("文字大小", "Text size"), words: "文字大小 字号 缩放 放大 text size zoom font" },
   { section: "appearance", key: "steps", title: () => L("对话里的过程（只看进度）", "Steps in chats"), words: "对话里的过程 只看进度 思考 命令 steps progress" },
   { section: "appearance", key: "chat-bg", title: () => L("聊天背景", "Chat background"), words: "聊天背景 壁纸 背景图 chat background wallpaper" },
@@ -278,7 +280,7 @@ const LANGS: { choice: LangChoice; label: string }[] = [
 /** A section another page asks Settings to open on (say, voice from the
  *  call button); taken once. */
 let nextSettingsSection: Section | null = null;
-export function openSettingsSection(s: "voice" | "about" | "agents" | "hubs" | "shortcuts") { nextSettingsSection = s; }
+export function openSettingsSection(s: "voice" | "about" | "agents" | "hubs" | "shortcuts" | "appearance") { nextSettingsSection = s; }
 /** (read as the page starts; cleared once it is up, so a second run of
  *  its first render, as React's strict mode does, reads the same) */
 function takeSettingsSection(): Section | null {
@@ -344,6 +346,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 }) {
   const simple = useSimpleMode();
   const [uiStyle, setUiStyle] = useUiStyle();
+  const [navHidden, setNavHidden] = useNavHidden();
   const [section, setSection] = useState<Section>(() => takeSettingsSection() ?? langSwitchSection ?? (simpleModeNow() ? "agents" : "hubs"));
   const askedFor = useRef<Section | null>(takeSettingsSection());
   useEffect(() => { nextSettingsSection = null; }, []);
@@ -775,6 +778,23 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
                       {label}
                     </button>
                   ))}
+                </div>
+              </div>
+              <div data-setting="nav-entries" className="app-setting-line app-setting-wrap">
+                <div className="app-setting-line-text">
+                  <b>{L("侧栏显示", "Sidebar entries")}</b>
+                  <span>{L("点一下隐藏或显示；藏起来的页面还在，搜索和链接照样能到。也可以在侧栏上右键某一项隐藏它。",
+                    "Click to hide or show one; a hidden page is still there, reachable by search and links. You can also right-click an entry in the sidebar to hide it.")}</span>
+                </div>
+                <div className="nav-show-chips" role="group" aria-label={L("侧栏显示", "Sidebar entries")}>
+                  {NAV_ENTRIES.map((e) => {
+                    const on = !navHidden.has(e);
+                    return (
+                      <button key={e} type="button" className={cn("nav-show-chip", on && "is-on")} aria-pressed={on} onClick={() => setNavHidden(e, on)}>
+                        {on ? <Check aria-hidden /> : null}{navEntryLabel(e)}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="app-setting-line" data-setting="simple-mode">
