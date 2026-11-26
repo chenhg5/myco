@@ -3,6 +3,7 @@ package im
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -171,10 +172,24 @@ func eventually(t *testing.T, what string, ok func() bool) {
 	}
 }
 
+// stateDir is a bridge's state directory for a test. Not t.TempDir: the
+// bridge's goroutines (process, watch) may still save their state just after
+// a test ends, and TempDir fails the test when its cleanup meets a file
+// written meanwhile. A late write here is harmless.
+func stateDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "myco-im-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 func newTestBridge(t *testing.T) (*Bridge, *fakeAdapter, *fakeHub, context.CancelFunc) {
 	t.Helper()
 	ad, hub := &fakeAdapter{}, newFakeHub()
-	b, err := New(Config{Name: "fs", Platform: "feishu", Owner: "ou_owner", OwnerName: "glenn", Agent: "coder"}, ad, hub, t.TempDir(), nil)
+	b, err := New(Config{Name: "fs", Platform: "feishu", Owner: "ou_owner", OwnerName: "glenn", Agent: "coder"}, ad, hub, stateDir(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +346,7 @@ func TestInboxForwardsToOwner(t *testing.T) {
 }
 
 func TestStateSurvivesRestart(t *testing.T) {
-	dir := t.TempDir()
+	dir := stateDir(t)
 	ad, hub := &fakeAdapter{}, newFakeHub()
 	cfg := Config{Name: "fs", Platform: "slack", Owner: "U1", Agent: "coder"}
 	b, _ := New(cfg, ad, hub, dir, nil)
