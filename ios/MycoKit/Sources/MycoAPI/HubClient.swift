@@ -214,6 +214,46 @@ public struct HubClient: HubAPI {
         return envelope.approvals
     }
 
+    public func watches(agent: String, all: Bool) async throws -> [Watch] {
+        struct Envelope: Decodable { @LossyList var watches: [Watch] }
+        let envelope: Envelope = try await get("/v1/watches", ["agent": agent, "state": all ? "all" : "active"], timeout: Self.pollTimeout)
+        return envelope.watches
+    }
+
+    public func stopWatch(_ id: String) async throws -> Watch {
+        try Self.decode(Watch.self, from: try await call("POST", "/v1/watches/\(Self.segment(id))/stop", body: Data("{}".utf8)))
+    }
+
+    public func extendWatch(_ id: String, seconds: Int) async throws -> Watch {
+        struct Body: Encodable { var forSec: Int }
+        return try Self.decode(Watch.self, from: try await call("POST", "/v1/watches/\(Self.segment(id))/extend", body: HubJSON.encoder().encode(Body(forSec: seconds))))
+    }
+
+    public func goals(agent: String, all: Bool) async throws -> [Goal] {
+        struct Envelope: Decodable { @LossyList var goals: [Goal] }
+        let envelope: Envelope = try await get("/v1/goals", ["agent": agent, "state": all ? "all" : "active"], timeout: Self.pollTimeout)
+        return envelope.goals
+    }
+
+    public func goal(_ id: String) async throws -> (goal: Goal, rounds: [GoalRound]) {
+        struct Envelope: Decodable { var goal: Goal; @LossyList var rounds: [GoalRound] }
+        let envelope: Envelope = try await get("/v1/goals/\(Self.segment(id))")
+        return (envelope.goal, envelope.rounds)
+    }
+
+    public func startGoal(_ request: GoalRequest) async throws -> Goal {
+        try Self.decode(Goal.self, from: try await call("POST", "/v1/goals", body: HubJSON.encoder().encode(request)))
+    }
+
+    public func controlGoal(_ id: String, _ action: String) async throws -> Goal {
+        try Self.decode(Goal.self, from: try await call("POST", "/v1/goals/\(Self.segment(id))/\(Self.segment(action))", body: Data("{}".utf8)))
+    }
+
+    public func setGoalInterval(_ id: String, seconds: Int) async throws -> Goal {
+        struct Body: Encodable { var everySec: Int }
+        return try Self.decode(Goal.self, from: try await call("PATCH", "/v1/goals/\(Self.segment(id))", body: HubJSON.encoder().encode(Body(everySec: seconds))))
+    }
+
     public func notices(after: Int64?, limit: Int) async throws -> HubNoticePage {
         var query = ["limit": String(limit)]
         if let after { query["after"] = String(after) }

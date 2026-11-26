@@ -19,6 +19,16 @@ public struct Binding: Codable, Sendable, Hashable {
 }
 
 /// What a node actually runs; absent on nodes reported by old runners.
+/// An agent's goal in brief, on lists (`api.GoalBrief`).
+public struct GoalBrief: Codable, Sendable, Hashable {
+    public var id: String
+    public var objective: String
+    public var round: Int
+    public var maxRounds: Int
+    public var nextWakeAt: Date?
+    public var state: String
+}
+
 public struct Runtime: Codable, Sendable, Hashable {
     /// What it may touch when it runs, in use: readonly, workspace, full.
     public var access: String? = nil
@@ -41,6 +51,9 @@ public struct Runtime: Codable, Sendable, Hashable {
     /// The models its CLI offers on that computer, in the CLI's order
     /// (Codex; runners from v0.21.1). Absent: use the known names.
     public var models: [RuntimeModel]?
+    /// The account's usage limits, as last reported (only its owner sees
+    /// them).
+    public var quota: Quota? = nil
 
     public init(
         cli: String? = nil, cliVersion: String? = nil, model: String? = nil, modelSource: String? = nil,
@@ -256,6 +269,10 @@ public struct AgentStatus: Codable, Sendable, Hashable, Identifiable {
     public var queued: Int
     public var inProgress: Int
     public var held: Int
+    /// Background waits it runs (`myco watch`, hubs from v0.22).
+    public var watching: Int? = nil
+    /// The goal it works on, in brief (hubs from v0.22).
+    public var goal: GoalBrief? = nil
     /// `session` (only while its own session waits) or `runner`.
     public var receiving: String?
     public var sessionInUse: Bool?

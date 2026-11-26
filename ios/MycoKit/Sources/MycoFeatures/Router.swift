@@ -54,6 +54,8 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
     case pinAddress(agent: String)
     /// A conversation's background (nil key: the default for all).
     case background(key: String?)
+    /// Setting a goal on an agent.
+    case goal(agent: String, project: String?)
 
     public var id: String {
         switch self {
@@ -66,6 +68,7 @@ public enum SheetRoute: Hashable, Identifiable, Sendable {
         case .files(let agent, let project): return "files:" + agent + ":" + (project ?? "")
         case .pinAddress(let agent): return "pin:" + agent
         case .background(let key): return "background:" + (key ?? "")
+        case .goal(let agent, let project): return "goal:" + agent + ":" + (project ?? "")
         case .superagent: return "superagent"
         case .superagentChat(let name): return "superagent:" + name
         }

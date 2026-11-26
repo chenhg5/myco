@@ -77,7 +77,28 @@ public actor FakeHub: HubAPI {
         automationRuns = Dictionary(grouping: world.automations.compactMap(\.lastRun), by: { $0.automationId ?? "" })
         workflowList = world.workflows
         runList = world.runs
-        if scenario != .empty { (noticeList, usageRows) = Self.seeded(now: now) }
+        if scenario != .empty {
+            (noticeList, usageRows) = Self.seeded(now: now)
+            (watchList, goalList, goalRounds) = Self.seededWork(now: now)
+            // The account limits its owner sees: the coordinator's Claude
+            // account comfortable, 后端工程师's Codex nearly out.
+            for index in agents.indices {
+                switch agents[index].agent.name {
+                case "cloud-lead":
+                    agents[index].agent.runtime?.quota = Quota(provider: "claude", source: "claude", plan: "claude_subscription", at: now.addingTimeInterval(-120), windows: [
+                        QuotaWindow(name: "five_hour", durationSec: 18_000, used: 0.38, resetsAt: now.addingTimeInterval(9_000)),
+                        QuotaWindow(name: "seven_day", durationSec: 604_800, used: 0.41, resetsAt: now.addingTimeInterval(300_000)),
+                    ])
+                case "studio-codex-7f3a":
+                    agents[index].agent.runtime?.quota = Quota(provider: "codex", source: "codex", plan: "chatgpt_subscription", at: now.addingTimeInterval(-300), windows: [
+                        QuotaWindow(name: "primary", durationSec: 18_000, used: 0.86, resetsAt: now.addingTimeInterval(4_000)),
+                        QuotaWindow(name: "secondary", durationSec: 604_800, used: 0.52, resetsAt: now.addingTimeInterval(400_000)),
+                    ])
+                default:
+                    break
+                }
+            }
+        }
         if scenario == .remote {
             remoteHosts = [RemoteComputer(machine: "app:fixture", name: "Fixture Mac", os: "darwin", control: true)]
             let page = Page(id: "pg_remote", name: "Remote controller probe", publisher: FakeHub.me, url: FakeHub.demoAddress.absoluteString + "/pages/pg_remote", createdAt: now, updatedAt: now)
@@ -98,6 +119,123 @@ public actor FakeHub: HubAPI {
                 body: "第一集在这：\(LinkPageFixture.link(episode: "第1集"))\n\n第二集：\(LinkPageFixture.link(episode: "第2集"))", status: "done",
                 createdAt: now.addingTimeInterval(-30)))
         }
+    }
+
+    // MARK: Watches and goals
+
+    private var watchList: [Watch] = []
+    private var goalList: [Goal] = []
+    private var goalRounds: [String: [GoalRound]] = [:]
+    /// The demo's workspace is from before watches and goals.
+    private var withoutWorkState = false
+
+    public func setWithoutWorkState(_ without: Bool) { withoutWorkState = without }
+
+    /// 运维 waits for CI in the background; 后端工程师 works on a goal.
+    private static func seededWork(now: Date) -> ([Watch], [Goal], [String: [GoalRound]]) {
+        let watch = Watch(
+            id: "wat_demo1", agent: "vps-codex-90aa", what: "等 CI 跑完再发版", kind: "workflow",
+            startedAt: now.addingTimeInterval(-720), deadline: now.addingTimeInterval(1_080), lastCheckAt: now.addingTimeInterval(-30),
+            lastResult: "还在跑：12/18 个任务", checks: 24)
+        let goal = Goal(
+            id: "gol_demo1", agent: "studio-codex-7f3a", project: "myco-ios", objective: "把推送接口做完并合进 main", doneWhen: "接口有测试、CI 绿、PR 合并",
+            everySec: 1_800, maxRounds: 16, deadline: now.addingTimeInterval(24_000), round: 3, noProgress: 0,
+            lastSummary: "设备登记的接口写完了，在补测试", nextStep: "补完测试，开 PR", nextWakeAt: now.addingTimeInterval(720),
+            startedAt: now.addingTimeInterval(-4_800), createdBy: Self.me)
+        let rounds = [
+            GoalRound(round: 1, startedAt: now.addingTimeInterval(-4_800), endedAt: now.addingTimeInterval(-4_200), summary: "看了现有的唤醒方式", nextStep: "写设备登记", progressed: true),
+            GoalRound(round: 2, startedAt: now.addingTimeInterval(-3_000), endedAt: now.addingTimeInterval(-2_300), summary: "设备登记的接口写完了", nextStep: "补测试", progressed: true),
+            GoalRound(round: 3, startedAt: now.addingTimeInterval(-1_100), endedAt: now.addingTimeInterval(-1_080), summary: "设备登记的接口写完了，在补测试", nextStep: "补完测试，开 PR", progressed: true),
+        ]
+        return ([watch], [goal], [goal.id: rounds])
+    }
+
+    private func checkWork() async throws {
+        try await check()
+        if withoutWorkState { throw HubError(error: "not_found", message: "not found", status: 404) }
+    }
+
+    public func watches(agent: String, all: Bool) async throws -> [Watch] {
+        try await checkWork()
+        return watchList.filter { $0.agent == agent && (all || $0.isOn) }
+    }
+
+    public func stopWatch(_ id: String) async throws -> Watch {
+        try await checkWork()
+        guard let index = watchList.firstIndex(where: { $0.id == id }), watchList[index].isOn else {
+            throw HubError(error: "conflict", message: "the watch has ended", status: 409)
+        }
+        watchList[index].state = "stopped"
+        watchList[index].endedAt = Date()
+        watchList[index].endedBy = Self.me
+        return watchList[index]
+    }
+
+    public func extendWatch(_ id: String, seconds: Int) async throws -> Watch {
+        try await checkWork()
+        guard let index = watchList.firstIndex(where: { $0.id == id }), watchList[index].isOn else {
+            throw HubError(error: "conflict", message: "the watch has ended", status: 409)
+        }
+        watchList[index].deadline = Date().addingTimeInterval(TimeInterval(seconds))
+        return watchList[index]
+    }
+
+    public func goals(agent: String, all: Bool) async throws -> [Goal] {
+        try await checkWork()
+        return goalList.filter { $0.agent == agent && (all || $0.isOn) }
+    }
+
+    public func goal(_ id: String) async throws -> (goal: Goal, rounds: [GoalRound]) {
+        try await checkWork()
+        guard let goal = goalList.first(where: { $0.id == id }) else { throw HubError(error: "not_found", message: "no such goal", status: 404) }
+        return (goal, goalRounds[id] ?? [])
+    }
+
+    public func startGoal(_ request: GoalRequest) async throws -> Goal {
+        try await checkWork()
+        if goalList.contains(where: { $0.agent == request.agent && $0.isOn }) {
+            throw HubError(error: "conflict", message: "it already has a goal", status: 409)
+        }
+        seq += 1
+        let now = Date()
+        let every = request.everySec ?? 1_800
+        let goal = Goal(
+            id: "gol_fake\(seq)", agent: request.agent, project: request.project, thread: request.thread, objective: request.objective,
+            doneWhen: request.doneWhen, everySec: every, baseEverySec: every, maxRounds: request.maxRounds ?? 16,
+            deadline: now.addingTimeInterval(TimeInterval(request.forSec ?? 28_800)), nextWakeAt: now.addingTimeInterval(TimeInterval(every)),
+            startedAt: now, createdBy: Self.me)
+        goalList.append(goal)
+        return goal
+    }
+
+    public func controlGoal(_ id: String, _ action: String) async throws -> Goal {
+        try await checkWork()
+        guard let index = goalList.firstIndex(where: { $0.id == id }), goalList[index].isOn else {
+            throw HubError(error: "conflict", message: "the goal has ended", status: 409)
+        }
+        switch action {
+        case "pause": goalList[index].state = "paused"; goalList[index].nextWakeAt = nil
+        case "resume": goalList[index].state = "active"; goalList[index].nextWakeAt = Date().addingTimeInterval(TimeInterval(goalList[index].everySec))
+        case "stop":
+            goalList[index].state = "stopped"
+            goalList[index].endedAt = Date()
+            goalList[index].endedBy = Self.me
+            goalList[index].outcome = "stopped"
+            goalList[index].nextWakeAt = nil
+        default: throw HubError(error: "invalid_argument", message: "unknown action", status: 400)
+        }
+        return goalList[index]
+    }
+
+    public func setGoalInterval(_ id: String, seconds: Int) async throws -> Goal {
+        try await checkWork()
+        guard let index = goalList.firstIndex(where: { $0.id == id }), goalList[index].isOn else {
+            throw HubError(error: "conflict", message: "the goal has ended", status: 409)
+        }
+        goalList[index].everySec = seconds
+        goalList[index].baseEverySec = seconds
+        if goalList[index].state == "active" { goalList[index].nextWakeAt = Date().addingTimeInterval(TimeInterval(seconds)) }
+        return goalList[index]
     }
 
     // MARK: Notices and usage
@@ -1284,8 +1422,15 @@ public actor FakeHub: HubAPI {
 
     /// An agent's status with what the simulation added on top.
     private func withLoad(_ status: AgentStatus) -> AgentStatus {
-        guard status.state != "offline" else { return status }
         var s = status
+        // What it waits for in the background, and its goal.
+        let name = status.agent.name
+        let watching = watchList.filter { $0.agent == name && $0.isOn }.count
+        s.watching = watchList.isEmpty ? nil : watching
+        s.goal = goalList.first { $0.agent == name && $0.isOn }.map {
+            GoalBrief(id: $0.id, objective: $0.objective, round: $0.round, maxRounds: $0.maxRounds, nextWakeAt: $0.nextWakeAt, state: $0.state)
+        }
+        guard status.state != "offline" else { return s }
         let open = messages.filter { $0.to == status.agent.name && $0.isOpen }
         s.inProgress = open.filter { $0.status == "acked" }.count
         s.queued = open.count - s.inProgress
