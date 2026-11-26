@@ -18,6 +18,7 @@ import (
 	msqlite "modernc.org/sqlite"
 
 	"github.com/myco-ai/myco/internal/perf"
+	"github.com/myco-ai/myco/internal/requestid"
 )
 
 // DefaultSlowStatement is when a statement is logged as slow.
@@ -75,13 +76,19 @@ func (c timedConnector) Connect(context.Context) (driver.Conn, error) {
 
 func (c timedConnector) Driver() driver.Driver { return baseDriver }
 
-func (t *Timing) done(name string, d time.Duration, rows int64) {
+// done records a statement; id is the request it ran for (X-Request-Id,
+// from its context), so a slow statement is found with its slow request.
+func (t *Timing) done(name string, d time.Duration, rows int64, id string) {
 	if !t.live.Load() {
 		return
 	}
 	t.Perf.Add(name, d, rows)
 	if t.Slow > 0 && d >= t.Slow && t.Log != nil {
-		t.Log.Warn("slow statement", "name", name, "duration", d.Round(100*time.Microsecond), "rows", rows)
+		args := []any{"name", name, "duration", d.Round(100 * time.Microsecond), "rows", rows}
+		if id != "" {
+			args = append(args, "id", id)
+		}
+		t.Log.Warn("slow statement", args...)
 	}
 }
 
@@ -109,7 +116,7 @@ func (c *timedConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.
 	if err != nil {
 		return nil, err
 	}
-	return &timedTx{Tx: tx, t: c.t, name: statementName("COMMIT")}, nil
+	return &timedTx{Tx: tx, t: c.t, name: statementName("COMMIT"), id: requestid.From(ctx)}, nil
 }
 
 // statementHook, set by tests, sees each statement a timed connection runs.
@@ -121,7 +128,7 @@ func (c *timedConn) ExecContext(ctx context.Context, query string, args []driver
 	}
 	start := time.Now()
 	res, err := c.Conn.(driver.ExecerContext).ExecContext(ctx, query, args)
-	c.t.exec(query, time.Since(start), res, err)
+	c.t.exec(ctx, query, time.Since(start), res, err)
 	return res, err
 }
 
@@ -131,7 +138,7 @@ func (c *timedConn) QueryContext(ctx context.Context, query string, args []drive
 	}
 	start := time.Now()
 	rows, err := c.Conn.(driver.QueryerContext).QueryContext(ctx, query, args)
-	return c.t.rows(query, time.Since(start), rows, err)
+	return c.t.rows(ctx, query, time.Since(start), rows, err)
 }
 
 func (c *timedConn) Ping(ctx context.Context) error { return c.Conn.(driver.Pinger).Ping(ctx) }
@@ -140,21 +147,22 @@ func (c *timedConn) ResetSession(ctx context.Context) error {
 }
 func (c *timedConn) IsValid() bool { return c.Conn.(driver.Validator).IsValid() }
 
-func (t *Timing) exec(query string, d time.Duration, res driver.Result, err error) {
+func (t *Timing) exec(ctx context.Context, query string, d time.Duration, res driver.Result, err error) {
 	var n int64
 	if err == nil && res != nil {
 		n, _ = res.RowsAffected()
 	}
-	t.done(statementName(query), d, n)
+	t.done(statementName(query), d, n, requestid.From(ctx))
 }
 
-func (t *Timing) rows(query string, d time.Duration, rows driver.Rows, err error) (driver.Rows, error) {
+func (t *Timing) rows(ctx context.Context, query string, d time.Duration, rows driver.Rows, err error) (driver.Rows, error) {
 	name := statementName(query)
+	id := requestid.From(ctx)
 	if err != nil {
-		t.done(name, d, 0)
+		t.done(name, d, 0, id)
 		return nil, err
 	}
-	return &timedRows{Rows: rows, t: t, name: name, d: d}, nil
+	return &timedRows{Rows: rows, t: t, name: name, d: d, id: id}, nil
 }
 
 type timedStmt struct {
@@ -166,26 +174,27 @@ type timedStmt struct {
 func (s *timedStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
 	start := time.Now()
 	res, err := s.Stmt.(driver.StmtExecContext).ExecContext(ctx, args)
-	s.t.exec(s.query, time.Since(start), res, err)
+	s.t.exec(ctx, s.query, time.Since(start), res, err)
 	return res, err
 }
 
 func (s *timedStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
 	start := time.Now()
 	rows, err := s.Stmt.(driver.StmtQueryContext).QueryContext(ctx, args)
-	return s.t.rows(s.query, time.Since(start), rows, err)
+	return s.t.rows(ctx, s.query, time.Since(start), rows, err)
 }
 
 type timedTx struct {
 	driver.Tx
 	t    *Timing
 	name string
+	id   string
 }
 
 func (x *timedTx) Commit() error {
 	start := time.Now()
 	err := x.Tx.Commit()
-	x.t.done(x.name, time.Since(start), 0)
+	x.t.done(x.name, time.Since(start), 0, x.id)
 	return err
 }
 
@@ -197,6 +206,7 @@ type timedRows struct {
 	name   string
 	d      time.Duration
 	n      int64
+	id     string
 	closed bool
 }
 
@@ -214,7 +224,7 @@ func (r *timedRows) Close() error {
 	err := r.Rows.Close()
 	if !r.closed {
 		r.closed = true
-		r.t.done(r.name, r.d, r.n)
+		r.t.done(r.name, r.d, r.n, r.id)
 	}
 	return err
 }

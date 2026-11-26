@@ -10,6 +10,7 @@ import (
 
 	"github.com/myco-ai/myco/internal/domain"
 	"github.com/myco-ai/myco/internal/perf"
+	"github.com/myco-ai/myco/internal/requestid"
 )
 
 // Statements are named after the repository method that ran them; a slow
@@ -33,7 +34,8 @@ func TestTimedStatementsAreNamedAndLogged(t *testing.T) {
 	if _, err := agents.Get(ctx, "secret-name-xyz"); err != nil {
 		t.Fatal(err)
 	}
-	list, err := agents.List(ctx)
+	// (a statement run for a request names it: X-Request-Id on its context)
+	list, err := agents.List(requestid.With(ctx, "req-list-1"))
 	if err != nil || len(list) != 2 {
 		t.Fatalf("list: %v %v", list, err)
 	}
@@ -65,7 +67,7 @@ func TestTimedStatementsAreNamedAndLogged(t *testing.T) {
 	find("sqlite: SELECT #")
 
 	out := log.String()
-	if !strings.Contains(out, `msg="slow statement" name="AgentRepo.List: SELECT agents #`) || !strings.Contains(out, "rows=2") {
+	if !strings.Contains(out, `msg="slow statement" name="AgentRepo.List: SELECT agents #`) || !strings.Contains(out, "rows=2 id=req-list-1") {
 		t.Fatalf("log: %s", out)
 	}
 	for _, secret := range []string{"secret-name-xyz", "hash-alpha"} {
