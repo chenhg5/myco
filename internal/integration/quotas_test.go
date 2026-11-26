@@ -1,6 +1,9 @@
 package integration_test
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,7 +26,8 @@ func TestAccountQuotaSharedBindingOwnerPrivacyAndRestart(t *testing.T) {
 	}
 	owner := h.client(ct.Token)
 	a := h.client(h.register(api.RegisterRequest{Name: "one", Binding: api.Binding{Harness: "codex", SessionID: "one"}}))
-	b := h.client(h.register(api.RegisterRequest{Name: "two", Binding: api.Binding{Harness: "codex", SessionID: "two"}}))
+	bToken := h.register(api.RegisterRequest{Name: "two", Binding: api.Binding{Harness: "codex", SessionID: "two"}})
+	b := h.client(bToken)
 	outsider := h.client(h.register(api.RegisterRequest{Name: "other"}))
 	for _, cl := range []*client.Client{a, b} {
 		if e = cl.ReportMachine(c, api.MachineReport{Fingerprint: strings.Repeat("a", 64), Name: "demo-mac", OS: "darwin"}); e != nil {
@@ -148,6 +152,9 @@ func TestAccountQuotaSharedBindingOwnerPrivacyAndRestart(t *testing.T) {
 	if get(viewer, "two") != nil {
 		t.Fatal("transferring the agent transferred a private computer account")
 	}
+	if get(b, "two") != nil {
+		t.Fatal("transferred agent token exposed former computer owner quota")
+	}
 	if get(owner, "two") == nil {
 		t.Fatal("computer owner lost account visibility")
 	}
@@ -158,8 +165,33 @@ func TestAccountQuotaSharedBindingOwnerPrivacyAndRestart(t *testing.T) {
 	if get(viewer, "two") != nil {
 		t.Fatal("legacy runtime bypassed computer-owner privacy")
 	}
-	if e = b.ReportRuntime(c, api.Runtime{CLI: "codex", Quota: &pending}); e != nil {
+	// The runtime write response must not resolve and expose a shared
+	// snapshot through the transferred credential either.
+	raw, e := json.Marshal(api.Runtime{CLI: "codex", Quota: &pending})
+	if e != nil {
 		t.Fatal(e)
+	}
+	req, e := http.NewRequestWithContext(c, http.MethodPut, h.url+"/v1/me/runtime", bytes.NewReader(raw))
+	if e != nil {
+		t.Fatal(e)
+	}
+	req.Header.Set("Authorization", "Bearer "+bToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, e := http.DefaultClient.Do(req)
+	if e != nil {
+		t.Fatal(e)
+	}
+	var rt api.Runtime
+	decodeErr := json.NewDecoder(resp.Body).Decode(&rt)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || decodeErr != nil {
+		t.Fatalf("runtime write failed: status=%d decode=%v", resp.StatusCode, decodeErr)
+	}
+	if rt.Quota != nil {
+		t.Fatal("runtime write response exposed the former owner's quota")
+	}
+	if get(b, "two") != nil {
+		t.Fatal("legacy runtime bypassed transferred-token filtering")
 	}
 	db, e := sqlite.Open(dbPath)
 	if e != nil {

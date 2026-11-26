@@ -285,18 +285,18 @@ func (s *Server) visibleQuota(r *http.Request, a *domain.Agent) *api.Quota {
 	if a.Runtime.Quota == nil {
 		return nil
 	}
+	owner := a.Owner
+	if s.machines != nil {
+		owner = s.machines.QuotaOwner(r.Context(), a)
+	}
 	if caller, ok := r.Context().Value(callerAgentKey{}).(*domain.Agent); ok {
-		if caller.Name != a.Name {
+		if caller.Name != a.Name || owner == "" || a.Owner != owner {
 			return nil
 		}
 	} else if s.isMasterAdmin(r) {
 		// The explicitly configured master credential retains recovery access.
 	} else {
 		actor := s.actorOf(r)
-		owner := a.Owner
-		if s.machines != nil {
-			owner = s.machines.QuotaOwner(r.Context(), a)
-		}
 		if actor.Member == nil || owner == "" || actor.Member.ID != owner {
 			return nil
 		}

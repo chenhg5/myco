@@ -1933,7 +1933,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		return
 	}
 	in.RunnerInstance, in.RestartingUntil, in.Away = a.Runtime.RunnerInstance, a.Runtime.RestartingUntil, a.Runtime.Away
-	in.Quota = quotaDTO(s.machines.AccountQuota(r.Context(), a))
+	in.Quota = s.visibleQuota(r, a)
 	writeJSON(w, http.StatusOK, in)
 }
 

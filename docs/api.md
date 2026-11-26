@@ -1595,7 +1595,9 @@ The Hub stores one snapshot per owner, machine, provider and login reference.
 Each agent's runtime stores its current reference. New bindings do not inherit
 old profile values, and a pending association does not overwrite an existing
 successful shared sample. Snapshot updates and binding updates are transactional.
-The default reader is the computer owner's console or the reporting agent itself.
+The default reader is the computer owner's console or the reporting agent itself
+while that agent still belongs to the same owner. Runtime write responses apply
+the same filtering as reads.
 Transferring an agent does not transfer its former computer owner's account data.
 Other agents, project coordinators and administrative member roles do not inherit
 account visibility. The explicitly configured Hub master credential retains
