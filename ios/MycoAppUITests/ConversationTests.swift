@@ -25,7 +25,10 @@ final class ConversationTests: XCTestCase {
     @MainActor
     private func swipeBack(_ app: XCUIApplication) {
         let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
-        from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)))
+        // (A quick flick: newer simulators read a slow drag from the edge
+        // as holding the page, not going back.)
+        from.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5)),
+                   withVelocity: .fast, thenHoldForDuration: 0)
     }
 
     @MainActor
