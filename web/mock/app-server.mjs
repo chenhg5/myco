@@ -169,6 +169,41 @@ const studioThread = process.env.MOCK_E2E
 // only when it has one of these messages.
 const CONSOLE = `@console:${"alice-mac"}`;
 
+// MOCK_LONG_CHAT=<agent>:<tasks> (e.g. pm-codex:400): a very long chat
+// between you and that agent, like a coordinator's after weeks: each task
+// its own thread with progress, two in three answered (some with a
+// myco-ui block or a file), the rest still open. For measuring how a long
+// chat opens; never in the smoke's own data.
+const longChatThreads = (() => {
+  const spec = process.env.MOCK_LONG_CHAT;
+  if (!spec) return {};
+  const [agent, n] = spec.split(":");
+  const out = {};
+  const count = Number(n) || 300;
+  for (let i = 0; i < count; i++) {
+    const ago = (count - i) * 600 + 120;
+    const th = `th_long_${i}`;
+    const open = i % 3 === 0 && i < count - 1;
+    const task = makeMessage({ thread_id: th, from: CONSOLE, to: agent, type: "task", status: open ? "acked" : "done",
+      body: `#${i} 看一下第 ${i} 个问题：${"把这块的行为、边界条件和测试都过一遍，有问题直接改，改完说一声。".repeat(3)}`,
+      created_at: iso(ago), updated_at: iso(open ? ago - 60 : ago - 300) });
+    const msgs = [task];
+    for (let p = 0; p < 6; p++) {
+      msgs.push(makeMessage({ thread_id: th, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: task.id,
+        body: `- [x] 第 ${p} 步：${"读代码、跑测试".repeat(4)}\n- [~] 正在改\n- [ ] 收尾`, created_at: iso(ago - 20 - p * 30), updated_at: iso(ago - 20 - p * 30) }));
+    }
+    if (!open) {
+      const ui = i % 10 === 5 ? ["", "```myco-ui", JSON.stringify({ type: "Table", props: { columns: ["项", "结果"], rows: [["测试", "通过"], ["vet", "通过"]] } }), "```"].join("\n") : "";
+      msgs.push(makeMessage({ thread_id: th, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: task.id,
+        body: `做完了 #${i}。${"改了两处，补了测试。".repeat(5)}${ui}`,
+        attachments: i % 7 === 3 ? [{ file_id: `f_long_${i}`, name: `report-${i}.log`, size: 2048, sha256: "", content_type: "text/plain" }] : undefined,
+        created_at: iso(ago - 300), updated_at: iso(ago - 300) }));
+    }
+    out[th] = msgs;
+  }
+  return out;
+})();
+
 // A task the node picked up and then went quiet on: long enough ago that its
 // result may never come back. Kept in the node's current work and its chat,
 // so the App can say "may be stuck" and offer to send it again.
@@ -747,7 +782,7 @@ const state = {
       ok: true,
       hub_version: "0.19.23",
       update_available: true,
-      threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, th_member_note: memberNote, ...consoleThreads },
+      threads: { th_release: studioThread, th_coord: coordThread, th_dispatch_docs: dispatchDocs, th_dispatch_release: dispatchRelease, th_member_note: memberNote, ...consoleThreads, ...longChatThreads },
       machines: [
         {
           id: "m_studio", name: "Studio Mac", hostname: "studio.local", os: "darwin", arch: "arm64",
