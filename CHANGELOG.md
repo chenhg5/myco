@@ -4,6 +4,18 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.18
+
+- Browser control: a blocked navigation is stopped before the page returns to the allowed one, background recording no longer disturbs the page you are driving, and the bundled browser component is 0.6.1.
+- Quotas: private account usage is collected and bound to agent runtimes, transferred agents no longer count against the computer's quota, and the App names the OpenCode Go and MiniMax windows.
+- Speech recognition: safer word rules, with names corrected by the model in the background.
+
+**中文**
+
+- 浏览器控制：被拦截的跳转会先停止再回到允许的页面，后台录制不再干扰正在操作的页面，内置浏览器组件升级到 0.6.1。
+- 额度：采集个人账号用量并绑定到 agent 运行时，转交的 agent 不再占用电脑账号额度，App 标出 OpenCode Go 与 MiniMax 的窗口名称。
+- 语音识别：更安全的用词规则，专有名称由模型在后台修正。
+
 ## v0.22.17
 
 - Browser control: screenshots, multiline clicks and long sessions keep working after the browser reconnects.
