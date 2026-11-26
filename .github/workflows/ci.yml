@@ -8,6 +8,16 @@ on:
     # the publishing workflow needs those same runners.
     branches-ignore: ["release/v*"]
   pull_request:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: "Exact source commit to qualify"
+        required: true
+        type: string
+      force_full:
+        description: "Run UI checks regardless of the latest push diff"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -16,12 +26,12 @@ permissions:
 # result would be stale, and the runners it holds delay the new run and
 # releases.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ inputs.source_sha || github.ref }}-${{ inputs.force_full && 'release-full' || 'push' }}
   # On main a running check finishes (a newer push waits, and only the newest
   # waiting one runs next): with many pushes an hour, cancelling left main
   # with no commit fully checked, and releases freeze the latest green one.
   # Other branches still cancel the older run.
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ !inputs.force_full && github.ref != 'refs/heads/main' }}
 
 jobs:
   # What changed, so the slow UI smoke runs only when the UI did.
@@ -32,9 +42,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.source_sha || github.sha }}
           fetch-depth: 0
       - id: c
+        env:
+          FORCE_FULL: ${{ inputs.force_full || false }}
         run: |
+          if [ "$FORCE_FULL" = true ]; then echo ui=true >> "$GITHUB_OUTPUT"; exit 0; fi
           base="${{ github.event.before }}"
           if [ "${{ github.event_name }}" = pull_request ]; then base="${{ github.event.pull_request.base.sha }}"; fi
           # Unknown base (a new branch, a force push): run everything.
@@ -52,6 +66,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -72,6 +88,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -104,6 +122,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -127,6 +147,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -146,26 +168,37 @@ jobs:
 
   ui:
     # The App UI smoke test (web/scripts/ui-smoke.mjs): every page and the
-    # main dialogs against the mock backend, one window size and theme per
-    # runner, so a release no longer has to run it on a laptop first.
+    # main dialogs against the mock backend, per window size and theme, each
+    # in three parts (--shard) running at once, so no job takes long.
+    # The smoke runs in Playwright's own image (browsers, their system
+    # libraries and CJK fonts already there): nothing is installed with apt,
+    # which stalled and failed on runners. The rest is prepared on the runner.
+    # PLAYWRIGHT is the image's version, and the Playwright it runs with:
+    # the image's browsers match only its own Playwright.
     needs: changes
     if: needs.changes.outputs.ui == 'true'
     runs-on: ubuntu-latest
-    # A hung download (apt, Playwright's Chromium) must not hold the run for
-    # GitHub's 6 hours: a release waits for main's ci to finish. The smoke
-    # itself takes about 12 minutes, the install up to 15 on a slow mirror.
-    timeout-minutes: 40
+    env:
+      PLAYWRIGHT: "1.57.0"
+      PLAYWRIGHT_IMAGE: "mcr.microsoft.com/playwright:v1.57.0-noble@sha256:3bed4b1a12f2338642f3d8cba28e291deef3c66bd4a964bbeb3e57bbff511dbd"
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         combo: [1200-light, 1200-dark, 760-light, 760-dark]
+        shard: [1, 2, 3]
+    name: ui (${{ matrix.combo }} ${{ matrix.shard }}/3)
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Pull the Playwright image (meanwhile)
+        run: (docker pull -q "$PLAYWRIGHT_IMAGE" > /tmp/pull.log 2>&1; echo $? > /tmp/pull.code) &
       - id: apps
         run: |
           commit=$(node -p 'require("./apps.lock.json").commit')
@@ -178,29 +211,37 @@ jobs:
           persist-credentials: false
       - name: Prepare pinned app UI fixtures
         run: python3 scripts/prepare-apps.py --apps-dir .cache/apps-source/dist/official
-      - name: Dependencies, Playwright and Chromium (with CJK fonts)
-        timeout-minutes: 15
+      - name: Dependencies (npm; the browser comes with the image)
+        timeout-minutes: 5
         run: |
           cd web && npm ci
-          npm install -g playwright@1
-          # Now and then a runner's apt or download stalls: give each try four
-          # minutes (slow apt mirrors need more than two) and try three times
-          # rather than wait out the step.
-          # A try that timed out can leave its apt-get running and holding the
-          # dpkg lock; apt then waits for that lock rather than failing at once.
-          echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99myco-lock-timeout >/dev/null
-          for try in 1 2 3; do
-            timeout 240 node "$(npm root -g)/playwright/cli.js" install --with-deps chromium &&
-              timeout 240 sudo apt-get install -y -q fonts-noto-cjk >/dev/null && break
-            echo "::warning::Playwright / font install try $try stalled or failed; trying again"
-            [ "$try" = 3 ] && exit 1
-          done
-      - name: UI smoke (${{ matrix.combo }})
-        run: cd web && NODE_PATH="$(npm root -g)" npm run test:ui -- --combo ${{ matrix.combo }}
+          # Playwright itself, at the image's version, where the smoke finds it.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save --no-audit --no-fund "playwright@$PLAYWRIGHT"
+          for i in $(seq 1 60); do [ -f /tmp/pull.code ] && break; sleep 2; done
+          if [ "$(cat /tmp/pull.code 2>/dev/null)" != 0 ]; then cat /tmp/pull.log; docker pull "$PLAYWRIGHT_IMAGE"; fi
+      - name: UI smoke (${{ matrix.combo }}, part ${{ matrix.shard }}/3)
+        # A step that fails is tried once more; passing then is listed as
+        # flaky in this job's summary and does not fail the job.
+        run: |
+          summary_dir=$(dirname "$GITHUB_STEP_SUMMARY")
+          docker run --rm --ipc=host --init -u "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/w" -v "$summary_dir:$summary_dir" -w /w/web \
+            -e HOME=/tmp -e CI -e GITHUB_STEP_SUMMARY \
+            "$PLAYWRIGHT_IMAGE" \
+            sh -c 'fc-list :lang=zh | grep -q . || echo "::warning::no CJK font in the Playwright image"; node scripts/ui-smoke.mjs --combo ${{ matrix.combo }} --shard ${{ matrix.shard }}/3'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-results-${{ matrix.combo }}-${{ matrix.shard }}
+          path: |
+            web/ui-smoke/flakes.json
+            web/ui-smoke/timings.json
+          retention-days: 7
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: ui-smoke-${{ matrix.combo }}
+          name: ui-smoke-${{ matrix.combo }}-${{ matrix.shard }}
           path: web/ui-smoke/
           retention-days: 7
 
@@ -211,6 +252,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod

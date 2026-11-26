@@ -587,6 +587,10 @@ func open(path string, t *Timing) (*sql.DB, error) {
 		// before loading message bodies, ordered by update rather than creation.
 		`CREATE INDEX IF NOT EXISTS idx_messages_from_updated ON messages(from_agent, updated_at DESC, id)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_to_updated ON messages(to_agent, updated_at DESC, id)`,
+		// Refresh lists and thread membership checks read metadata without
+		// fetching large message bodies from the table.
+		`CREATE INDEX IF NOT EXISTS idx_messages_recent ON messages(updated_at DESC, id, thread_id, from_agent, to_agent, project)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_thread_parties ON messages(thread_id, updated_at DESC, id, from_agent, to_agent, project)`,
 	} {
 		if _, err := db.Exec(ddl); err != nil {
 			db.Close()

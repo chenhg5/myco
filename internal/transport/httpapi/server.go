@@ -1618,6 +1618,9 @@ func (s *Server) pull(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 			pull = s.messages.PullWakingHeld
 		}
 	}
+	if req.WaitSeconds > 0 {
+		perf.MarkWaiting(r.Context())
+	}
 	msgs, err := pull(r.Context(), a, req.Limit, time.Duration(req.WaitSeconds)*time.Second, types...)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {

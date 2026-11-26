@@ -527,7 +527,7 @@ const DefaultSlowRequest = time.Second
 // event stream, which take long by design: never "slow".
 func waitsOnPurpose(r *http.Request) bool {
 	q := r.URL.Query()
-	return q.Has("wait") || q.Has("wait_seconds") || r.Header.Get("Upgrade") != "" ||
+	return perf.Waiting(r.Context()) || q.Has("wait") || q.Has("wait_seconds") || r.Header.Get("Upgrade") != "" ||
 		strings.Contains(r.Header.Get("Accept"), "text/event-stream")
 }
 

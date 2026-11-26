@@ -74,19 +74,19 @@ func TestRecentListsReadIndexesInOrder(t *testing.T) {
 		// and none sorts or scans the table
 		want []string
 	}{
-		{"recent (no filter)", func() { r.ListRecentThreads(ctx, domain.RecentFilter{Limit: 30}) }, []string{"idx_messages_updated"}},
-		{"recent, older page", func() { r.ListRecentThreads(ctx, domain.RecentFilter{Limit: 30, Before: 1}) }, []string{"idx_messages_updated", "idx_messages_thread"}},
+		{"recent (no filter)", func() { r.ListRecentThreads(ctx, domain.RecentFilter{Limit: 30}) }, []string{"idx_messages_recent"}},
+		{"recent, older page", func() { r.ListRecentThreads(ctx, domain.RecentFilter{Limit: 30, Before: 1}) }, []string{"idx_messages_recent", "idx_messages_thread_parties"}},
 		{"conversations", func() {
 			r.ListRecentThreads(ctx, domain.RecentFilter{SenderPrefix: console, Skip: []domain.AgentName{"n"}, Limit: 30})
 		},
-			[]string{"idx_messages_updated", "idx_messages_thread", "idx_messages_from", "idx_messages_inbox", "idx_messages_from_updated", "idx_messages_to_updated"}},
+			[]string{"idx_messages_recent", "idx_messages_thread_parties"}},
 		{"conversations of an agent", func() {
 			r.ListRecentThreads(ctx, domain.RecentFilter{SenderPrefix: console, Match: []domain.AgentName{"a"}, Limit: 30})
-		}, []string{"idx_messages_thread", "idx_messages_from", "idx_messages_inbox", "idx_messages_from_updated", "idx_messages_to_updated"}},
+		}, []string{"idx_messages_recent", "idx_messages_thread_parties"}},
 		{"pairs", func() {
 			r.ListRecentPairs(ctx, domain.RecentFilter{AllPairs: true, Skip: []domain.AgentName{"admin"}, Limit: 30})
 		},
-			[]string{"idx_messages_updated", "idx_messages_from"}},
+			[]string{"idx_messages_recent", "idx_messages_from"}},
 		{"between", func() { r.ListBetween(ctx, "a", "b", 5, 20) }, []string{"idx_messages_from", "INTEGER PRIMARY KEY"}},
 	}
 	// Some rows, so that each list has pairs and threads to look at.
@@ -134,7 +134,7 @@ func TestRecentListsReadIndexesInOrder(t *testing.T) {
 			}
 			rows.Close()
 			for _, step := range plan {
-				bad := step == "SCAN messages" || strings.HasPrefix(step, "SCAN messages ") && !strings.Contains(step, "idx_messages_updated") ||
+				bad := step == "SCAN messages" || strings.HasPrefix(step, "SCAN messages ") && !strings.Contains(step, "idx_messages_recent") && !strings.Contains(step, "idx_messages_thread_parties") ||
 					strings.Contains(step, "TEMP B-TREE FOR GROUP BY") || strings.Contains(step, "TEMP B-TREE FOR ORDER BY") && c.name != "conversations of an agent" && c.name != "between"
 				used := !strings.Contains(step, "messages") || strings.Contains(step, "subquery")
 				for _, w := range c.want {
