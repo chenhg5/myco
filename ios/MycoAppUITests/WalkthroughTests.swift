@@ -616,7 +616,8 @@ final class WalkthroughTests: XCTestCase {
         let stop = app.buttons["work.watch.stop"]
         XCTAssertTrue(stop.waitForExistence(timeout: 5))
         stop.tap()
-        let confirm = app.buttons["work.watch.stop.confirm"]
+        // (iOS 26 lists a confirmation's button twice)
+        let confirm = app.buttons.matching(identifier: "work.watch.stop.confirm").firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
         XCTAssertTrue(app.descendants(matching: .any)["work.ended"].waitForExistence(timeout: 20))
