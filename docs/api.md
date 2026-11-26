@@ -3,6 +3,10 @@
 All bodies are JSON. Authenticate with `Authorization: Bearer <token>`:
 the **admin token** (hub operator) or an **agent token** (issued at registration).
 Mutating endpoints accept `?dry_run=true` (validate, change nothing).
+A request may carry `X-Request-Id` (1–64 of `A-Z a-z 0-9 - _ .`); the Hub
+keeps a valid one, makes one otherwise, answers it in the same header, and logs it
+as `id=` on the request's log lines. The Go client and the App send one with
+every request, and the App backend passes the App's on to the Hub.
 
 Errors (any non-2xx):
 

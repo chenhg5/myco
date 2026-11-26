@@ -237,6 +237,8 @@ function reportProblems() {
 
 const intentionalPublicNotReady = new WeakSet();
 const intentionalPageOriginBusy = new WeakSet();
+// Pages whose app library is made to fail on purpose (出错 · 显示请求编号).
+const intentionalTemplatesFail = new WeakSet();
 
 function watchPage(page, size, scheme) {
   // Page events come outside this run's async context: keep it here.
@@ -256,6 +258,7 @@ function watchPage(page, size, scheme) {
     // This fixture deliberately returns the real backend's not-ready status.
     if (intentionalPublicNotReady.has(page) && msg.text().includes("503") && /\/app\/local\/hub:/.test(where)) return;
     // This fixture deliberately keeps the saved page origin occupied.
+    if (intentionalTemplatesFail.has(page) && msg.text().includes("500") && /\/app\/hubs\/[^/]+\/templates:/.test(where)) return;
     if (intentionalPageOriginBusy.has(page) && msg.text().includes("503") && /\/app\/hubs\/[^/]+\/pages\/pg_release\/open:/.test(where)) return;
     addProblem(r, "console", msg.text(), where);
   });
@@ -1475,6 +1478,41 @@ async function runMatrix(browser, size, scheme) {
         await clickVisible(page, page.locator(".pg-panel").getByRole("button", { name: /关闭/ }).first());
       }
       // (back where the steps after this one start: the project)
+      await go(page, "官网改版", narrow);
+      await page.locator(".sp-home, .sp-group").first().waitFor({ timeout: 10_000 });
+    });
+
+    // A failed request names its id (X-Request-Id), the one the App sent:
+    // the hub logs it, so the error can be found there. This one answers
+    // without an id of its own, as a timeout would.
+    await step("出错 · 显示请求编号", async () => {
+      const routeURL = /\/app\/hubs\/[^/]+\/templates(\?|$)/;
+      let sent = "";
+      intentionalTemplatesFail.add(page);
+      await page.route(routeURL, (route) => {
+        if (route.request().method() !== "GET") return route.continue();
+        sent = route.request().headers()["x-request-id"] || "";
+        return route.fulfill({ status: 500, json: { error: "internal", message: "database is locked" } });
+      });
+      try {
+        await go(page, "应用", narrow);
+        const id = page.locator(".tp .app-error-id").first();
+        await id.waitFor({ timeout: 10_000 });
+        if (!/^[0-9a-f]{16}$/.test(sent)) throw new Error(`App 应给每个请求带上 X-Request-Id，实际「${sent}」`);
+        const text = (await id.innerText()).trim();
+        if (text !== `请求编号 ${sent}`) throw new Error(`出错时应显示这次请求的编号「${sent}」，实际「${text}」`);
+        // (details show only where the message replaced the raw text)
+        const more = page.locator(".tp .app-error-more", { hasText: "详细信息" }).first();
+        if (await more.count()) {
+          await clickVisible(page, more);
+          const detail = await page.locator(".tp .app-error-detail").first().innerText();
+          if (!detail.includes(sent) || !/用时 \d/.test(detail)) throw new Error(`详细信息里也应有请求编号和用时，实际「${detail}」`);
+        }
+        await shot(page, size, scheme, "error-request-id");
+      } finally {
+        await page.unroute(routeURL);
+        intentionalTemplatesFail.delete(page);
+      }
       await go(page, "官网改版", narrow);
       await page.locator(".sp-home, .sp-group").first().waitFor({ timeout: 10_000 });
     });

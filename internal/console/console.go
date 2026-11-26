@@ -34,6 +34,7 @@ import (
 	"github.com/myco-ai/myco/internal/console/notices"
 	"github.com/myco-ai/myco/internal/harness/execnode"
 	"github.com/myco-ai/myco/internal/release"
+	"github.com/myco-ai/myco/internal/requestid"
 )
 
 // maxAttachUpload caps a file the app uploads to attach (read into memory
@@ -1425,7 +1426,22 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, out)
 	}))
-	return m
+	return withRequestID(m)
+}
+
+// withRequestID gives each request one id (X-Request-Id: the App's, or a
+// new one), answers it back, and carries it to every hub call made for it
+// (the client sends it on), so a slow or failed step can be found in the
+// hub's log by the id the App shows.
+func withRequestID(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := requestid.Valid(r.Header.Get(requestid.Header))
+		if id == "" {
+			id = requestid.New()
+		}
+		w.Header().Set(requestid.Header, id)
+		h.ServeHTTP(w, r.WithContext(requestid.With(r.Context(), id)))
+	})
 }
 
 // joinLinkOut is a join link as the App shows it: the command to run on the

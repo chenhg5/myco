@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/requestid"
 )
 
 // Error is a structured API or transport error.
@@ -68,7 +69,7 @@ func New(base, token string) (*Client, error) {
 		return nil, err
 	}
 	// No global timeout: do bounds each call (long-polls by their wait).
-	return &Client{base: u, token: token, http: &http.Client{Transport: forLANHub(u, hubTransport)}}, nil
+	return &Client{base: u, token: token, http: &http.Client{Transport: withRequestID{forLANHub(u, hubTransport)}}}, nil
 }
 
 // ValidateHubURL accepts only http(s) URLs without embedded credentials.
@@ -1345,4 +1346,29 @@ func (c *Client) CreateWorkspace(ctx context.Context, name string, dryRun bool) 
 // the server).
 func (c *Client) RemoveWorkspace(ctx context.Context, name string) error {
 	return c.do(ctx, http.MethodDelete, "/v1/server/workspaces/"+esc(name), nil, nil, nil)
+}
+
+// withRequestID sends every request to the hub with an id (X-Request-Id):
+// the one its context carries (the App backend gives each of its requests
+// one), else a new one, so the hub's log names the same request.
+type withRequestID struct{ base http.RoundTripper }
+
+func (t withRequestID) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Header.Get(requestid.Header) == "" {
+		id := requestid.From(req.Context())
+		if id == "" {
+			id = requestid.New()
+		}
+		req = req.Clone(req.Context())
+		req.Header.Set(requestid.Header, id)
+	}
+	return t.base.RoundTrip(req)
+}
+
+// CloseIdleConnections passes on to the transport underneath, so
+// http.Client.CloseIdleConnections still reaches it.
+func (t withRequestID) CloseIdleConnections() {
+	if c, ok := t.base.(interface{ CloseIdleConnections() }); ok {
+		c.CloseIdleConnections()
+	}
 }

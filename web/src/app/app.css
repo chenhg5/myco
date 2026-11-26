@@ -10672,4 +10672,7 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
   text-overflow: ellipsis;
 }
 .sp-nav-hidden-note:hover { color: var(--muted); background: var(--nav-hover); }
+/* An error's request id (ErrorText): faint, selectable, to look it up in
+   the logs. */
+.app-error-id { margin-top: 2px; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; user-select: text; }
 

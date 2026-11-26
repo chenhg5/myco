@@ -29,6 +29,7 @@ import (
 	"github.com/myco-ai/myco/internal/infra/tunnel"
 	"github.com/myco-ai/myco/internal/infra/wake"
 	"github.com/myco-ai/myco/internal/release"
+	"github.com/myco-ai/myco/internal/requestid"
 	"github.com/myco-ai/myco/internal/transport/httpapi"
 	"github.com/myco-ai/myco/internal/transport/ingress"
 	// Automations run in their own time zone, also where the system has
@@ -528,8 +529,16 @@ func logRequests(h http.Handler, log *slog.Logger, slow time.Duration) http.Hand
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		// One id per request: the caller's (X-Request-Id: the App backend,
+		// a runner, the CLI pass theirs on), or a new one; answered back,
+		// and in every log line, so one request is followed end to end.
+		id := requestid.Valid(r.Header.Get(requestid.Header))
+		if id == "" {
+			id = requestid.New()
+		}
+		w.Header().Set(requestid.Header, id)
 		rec := &statusRecorder{ResponseWriter: w, status: 200}
-		h.ServeHTTP(rec, r)
+		h.ServeHTTP(rec, r.WithContext(requestid.With(r.Context(), id)))
 		path := r.URL.Path
 		if strings.HasPrefix(path, "/r/") {
 			path = "/r/<redacted>" // agent recovery links carry a credential
@@ -544,13 +553,13 @@ func logRequests(h http.Handler, log *slog.Logger, slow time.Duration) http.Hand
 			path = "/c/<redacted>" // app links carry a console token
 		}
 		took := time.Since(start).Round(time.Millisecond)
-		log.Debug("request", "method", r.Method, "path", path, "status", rec.status, "duration", took)
+		log.Debug("request", "id", id, "method", r.Method, "path", path, "status", rec.status, "duration", took)
 		switch {
 		case rec.status >= 500:
 			// (the error the hub answered: a code and a message, no secrets)
-			log.Error("request failed", "method", r.Method, "path", path, "status", rec.status, "duration", took, "error", strings.TrimSpace(string(rec.head)))
+			log.Error("request failed", "id", id, "method", r.Method, "path", path, "status", rec.status, "duration", took, "error", strings.TrimSpace(string(rec.head)))
 		case slow > 0 && took >= slow && !waitsOnPurpose(r):
-			log.Warn("slow request", "method", r.Method, "path", path, "status", rec.status, "duration", took, "bytes", rec.size)
+			log.Warn("slow request", "id", id, "method", r.Method, "path", path, "status", rec.status, "duration", took, "bytes", rec.size)
 		}
 	})
 }

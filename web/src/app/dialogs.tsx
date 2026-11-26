@@ -71,10 +71,20 @@ export function ConfirmDialog({ open, onOpenChange, title, subject, description,
 
 /** What an error says underneath, for "详细信息": the status, the code and
  *  the raw text, so people can see or pass on why it failed. */
+/** An error's request id (X-Request-Id), to find it in the logs. */
+export function requestIdOf(error: unknown): string {
+  const id = (error as { requestId?: unknown } | null)?.requestId;
+  return typeof id === "string" ? id : "";
+}
+
 function errorDetail(error: unknown): string {
+  const id = requestIdOf(error);
+  const ms = (error as { elapsedMs?: unknown } | null)?.elapsedMs;
+  const tail = (id ? `\n${L("请求编号", "Request id")} ${id}` : "")
+    + (typeof ms === "number" ? `\n${L("用时", "Took")} ${ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`}` : "");
   if (error instanceof ApiError) {
     const head = [error.status ? `HTTP ${error.status}` : "", typeof error.code === "string" ? error.code : ""].filter(Boolean).join(" · ");
-    return head && error.message !== head && error.message !== `HTTP ${error.status}` ? `${head}\n${error.message}` : head || error.message;
+    return (head && error.message !== head && error.message !== `HTTP ${error.status}` ? `${head}\n${error.message}` : head || error.message) + tail;
   }
   if (error instanceof Error) return error.message || error.name;
   return String(error);
@@ -115,6 +125,8 @@ export function ErrorText({ error, onRetry, summary }: { error: unknown; onRetry
     <div className="app-error-text">
       <div>{message}</div>
       {suggestion && <div style={{ color: "var(--muted)", marginTop: 2 }}>{suggestion}</div>}
+      {/* (to find this request in the App backend's and the hub's logs) */}
+      {requestIdOf(error) && <div className="app-error-id" title={L("在工作区的日志里用这个编号找到这次请求", "Find this request in the workspace's log by this id")}>{L("请求编号", "Request id")} {requestIdOf(error)}</div>}
       {(onRetry || detail || transient) && (
         <div className="app-error-actions">
           {onRetry && <button type="button" className="app-btn app-btn-small" onClick={onRetry}>{L("重试", "Retry")}</button>}

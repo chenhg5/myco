@@ -39,9 +39,20 @@ func TestRequestLogSlowAndFailed(t *testing.T) {
 		}
 	}), logger, 20*time.Millisecond)
 	for _, p := range []string{"/fast", "/slow", "/poll?wait_seconds=30", "/fail"} {
-		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", p, nil))
+		req := httptest.NewRequest("GET", p, nil)
+		if p == "/slow" {
+			req.Header.Set("X-Request-Id", "app-1") // the caller's: kept
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if id := rec.Header().Get("X-Request-Id"); id == "" || (p == "/slow" && id != "app-1") {
+			t.Fatalf("%s: the request's id is answered back: %q", p, id)
+		}
 	}
 	out := log.String()
+	if !strings.Contains(out, "id=app-1") {
+		t.Fatalf("a log line names the request's id: %s", out)
+	}
 	if !strings.Contains(out, `msg="slow request"`) || !strings.Contains(out, "path=/slow") || !strings.Contains(out, "bytes=15") {
 		t.Fatalf("a slow request is logged with its size: %s", out)
 	}
