@@ -585,6 +585,56 @@ final class WalkthroughTests: XCTestCase {
     }
 
     @MainActor
+    func testAGoalAWaitAndTheUsageLimitAreAboveAndBesideTheChat() {
+        // 后端工程师 works on a goal, and its Codex account is nearly out.
+        var app = launch(["-myco-route", "agent:studio-codex-7f3a"])
+        let goal = app.buttons["work.goal"]
+        XCTAssertTrue(goal.waitForExistence(timeout: 20))
+        XCTAssertTrue(goal.label.contains("把推送接口做完"), goal.label)
+        XCTAssertTrue(goal.label.contains("Round 3/16"), goal.label)
+        let quota = app.buttons["composer.quota"]
+        XCTAssertTrue(quota.waitForExistence(timeout: 10))
+        XCTAssertTrue(quota.label.contains("14% left"), quota.label)
+        goal.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["work.goal.detail"].waitForExistence(timeout: 5))
+        shot("work-goal")
+        // Paused from its menu: it says so.
+        app.buttons["work.goal.more"].tap()
+        app.buttons["Pause"].tap()
+        expectation(for: NSPredicate(format: "label CONTAINS 'Paused'"), evaluatedWith: goal)
+        waitForExpectations(timeout: 10)
+        app.terminate()
+
+        // 运维 waits for CI in the background: the clock runs; stopped
+        // (asked first), it leaves a line.
+        app = launch(["-myco-route", "agent:vps-codex-90aa"])
+        let watch = app.descendants(matching: .any)["work.watch"]
+        XCTAssertTrue(watch.waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "等 CI 跑完再发版")).firstMatch.exists)
+        shot("work-watch")
+        app.buttons["work.watch.more"].tap()
+        app.buttons["Stop"].tap()
+        let confirm = app.buttons["Stop"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["work.ended"].waitForExistence(timeout: 20))
+        XCTAssertFalse(watch.exists)
+        // A goal set from the chat's menu.
+        app.buttons["conversation.more"].tap()
+        app.buttons["Set a goal…"].tap()
+        let objective = app.textFields["goal.objective"].exists ? app.textFields["goal.objective"] : app.textViews["goal.objective"]
+        XCTAssertTrue(objective.waitForExistence(timeout: 5))
+        objective.tap()
+        objective.typeText("Release 0.2")
+        let done = app.textFields["goal.done"].exists ? app.textFields["goal.done"] : app.textViews["goal.done"]
+        done.tap()
+        done.typeText("Tagged and published")
+        shot("goal-sheet")
+        app.buttons["goal.start"].tap()
+        XCTAssertTrue(app.buttons["work.goal"].waitForExistence(timeout: 20))
+    }
+
+    @MainActor
     func testASuperagentIsNamedAndItsRequestApproved() {
         let app = launch(["-myco-route", "sheet:workspace"])
         let setup = app.buttons["workspace.superagent.setup"]
