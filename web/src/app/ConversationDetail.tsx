@@ -2478,13 +2478,17 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </span>
         )}
       </header>}
-      {pins && (
-        <PinBar hubId={target.hubId} withWhom={target.agent} a={target.peer} pins={pins} setPins={(p) => pinState.setPins(p)}
-          onJump={(id) => setSeek({ id, tries: 0 })} adding={pinAdding} onAdding={setPinAdding} />
-      )}
-      {pinnedPlan && <PlanBar key={planTask} taskId={planTask} items={pinnedPlan.items} live={planTask === atWorkId} />}
-      <GoalBar hubId={target.hubId} goal={goals.current} onChanged={goals.put} />
-      <WatchBar hubId={target.hubId} watches={watches.active} onChanged={watches.put} />
+      {/* What stays on top while the chat scrolls (pins, plan, goal,
+          watches): one block on its own surface, apart from the messages. */}
+      <div className="conv-tops" data-testid="conv-tops">
+        {pins && (
+          <PinBar hubId={target.hubId} withWhom={target.agent} a={target.peer} pins={pins} setPins={(p) => pinState.setPins(p)}
+            onJump={(id) => setSeek({ id, tries: 0 })} adding={pinAdding} onAdding={setPinAdding} />
+        )}
+        {pinnedPlan && <PlanBar key={planTask} taskId={planTask} items={pinnedPlan.items} live={planTask === atWorkId} />}
+        <GoalBar hubId={target.hubId} goal={goals.current} onChanged={goals.put} />
+        <WatchBar hubId={target.hubId} watches={watches.active} onChanged={watches.put} />
+      </div>
       {pinMenu.element}
       {headMenu.element}
       <GoalDialog open={goalOpen} onOpenChange={setGoalOpen} hubId={target.hubId} agent={target.agent} name={agentName}

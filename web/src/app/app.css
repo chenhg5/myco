@@ -5,6 +5,8 @@
   --bg: #f8f8fa;
   --card: #ffffff;
   --chrome: #ebebef;
+  --tops-bg: color-mix(in srgb, var(--pill) 55%, var(--bg));
+  --tops-shadow: 0 6px 14px -10px rgba(0, 0, 0, 0.28);
   --focus: rgba(20, 22, 30, 0.34);
   --btn: #26262c;
   --btn-hover: #37373f;
@@ -46,6 +48,8 @@
   --bg: #1b1b1f;
   --card: #232327;
   --chrome: #121215;
+  --tops-bg: color-mix(in srgb, var(--card) 70%, var(--pill));
+  --tops-shadow: 0 8px 16px -8px rgba(0, 0, 0, 0.7);
   --focus: rgba(255, 255, 255, 0.36);
   --btn: #e8e8ed;
   --btn-hover: #ffffff;
@@ -8555,6 +8559,27 @@ body.is-resizing {
 
 /* 置顶 (pins.tsx): what the conversation keeps at hand, a row of small
    tabs under its header; drag to order, right-click to rename or unpin. */
+/* The bars that stay on top of a chat (pins, plan, goal, watches): one
+   block on a surface of its own, a hairline between its rows, and a soft
+   shadow over the messages that scroll beneath it. */
+.conv-tops {
+  flex: none;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--tops-bg);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--tops-shadow);
+}
+.conv-tops:empty { display: none; }
+.conv-tops > * { border-bottom: 1px solid var(--line-2) !important; }
+.conv-tops > :last-child { border-bottom: 0 !important; }
+/* chips on this surface: a step up so they still read as chips */
+.conv-tops .pin-chip { background: var(--card); box-shadow: 0 0 0 1px var(--line-2); }
+.conv-tops .pin-chip:hover { background: var(--pill-hover); }
+.conv-tops .pin-chip.is-add { background: none; box-shadow: none; }
+.conv-tops .pin-chip.is-add:hover { background: var(--nav-hover); }
 .pin-bar {
   flex: none;
   display: flex;
