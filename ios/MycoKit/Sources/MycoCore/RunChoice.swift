@@ -142,7 +142,8 @@ public struct RunChoice: Sendable, Hashable {
 
     /// What it runs with now, for the line under the choices.
     public var inUse: String {
-        let name = RunChoice.short(modelInUse)
+        // (the name its CLI or provider gave it, as the list shows it)
+        let name = modelInUse.isEmpty ? "" : self.name(of: modelInUse)
         return (name.isEmpty ? "—" : name) + (effortInUse.isEmpty ? "" : " · " + RunChoice.effortLabel(effortInUse))
     }
 
