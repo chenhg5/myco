@@ -2322,6 +2322,23 @@ const server = http.createServer(async (req, res) => {
     return send(res,200,{ok:true});
   }
 
+  // Synthetic self-test demo: the scene supplies the whole thread (demo forum
+  // data only); no native browser, grant or model request is involved.
+  if (process.env.MOCK_MEDIA_KIT === "1" && parts.join("/") === "app/mock/media-web-selftest" && method === "POST") {
+    const b = await readBody(req), hub = state.hubs[0];
+    const agent = hub.agents.find(a => a.name === "build-backend");
+    agent.display_name = b.display_name; agent.description = b.description; agent.status_text = b.status_text || "";
+    goalStore.set(hub.id, []); watchStore.set(hub.id, []);
+    for (const [id, messages] of Object.entries(hub.threads)) if (id !== "th_api" && messages.some(m=>m.from===agent.name || m.to===agent.name)) delete hub.threads[id];
+    const n = (b.messages || []).length;
+    const thread = (b.messages || []).map((m, i) => makeMessage({id:m.id,thread_id:"th_api",from:m.from === "me" ? CONSOLE : agent.name,to:m.from === "me" ? agent.name : CONSOLE,type:m.type,status:m.status || "done",reply_to:m.reply_to,trace:[],body:m.body,created_at:iso(n - i),updated_at:iso(n - i)}));
+    const task = thread.find(m => m.type === "task");
+    agent.current_thread = "th_api"; agent.current_from = CONSOLE; agent.current_id = task ? task.id : ""; agent.queued = 0;
+    hub.threads.th_api = thread;
+    hub.recent = hub.recent.filter(m => m.thread_id !== "th_api" && m.from !== agent.name && m.to !== agent.name).concat(thread).sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
+    return send(res,200,{ok:true});
+  }
+
   // Isolated promotional scenes: never enabled in the real App backend.
   if (process.env.MOCK_MEDIA_KIT === "1" && parts.join("/") === "app/mock/media-message" && method === "POST") {
     const b = await readBody(req), hub = state.hubs[0];
