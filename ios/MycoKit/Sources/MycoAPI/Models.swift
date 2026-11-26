@@ -27,6 +27,15 @@ public struct GoalBrief: Codable, Sendable, Hashable {
     public var maxRounds: Int
     public var nextWakeAt: Date?
     public var state: String
+
+    public init(id: String, objective: String, round: Int, maxRounds: Int, nextWakeAt: Date? = nil, state: String) {
+        self.id = id
+        self.objective = objective
+        self.round = round
+        self.maxRounds = maxRounds
+        self.nextWakeAt = nextWakeAt
+        self.state = state
+    }
 }
 
 public struct Runtime: Codable, Sendable, Hashable {
