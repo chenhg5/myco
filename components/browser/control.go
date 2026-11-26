@@ -640,6 +640,10 @@ func (e *engine) controlExecute(ctx context.Context, owner, method string, in co
 	return out, nil
 }
 func controlNativeError(err error) *controlError {
+	var privacy screenshotPrivacyError
+	if errors.As(err, &privacy) {
+		return controlFailure("sensitive_snapshot", string(privacy))
+	}
 	var invalid *BrowserReplayValidationError
 	if errors.As(err, &invalid) {
 		out := controlFailure("invalid_argument", "")

@@ -314,7 +314,8 @@ func browserControlFailure(err error, effectful bool) api.ActionJobComplete {
 func browserControlReason(reason string) string {
 	switch reason {
 	case "closed", api.BrowserControlOwnerStopped, "idle_timeout", "grant_expired", "grant_ended", "grant_check_failed",
-		"expired", "profile_disabled", "owner_window_open", "profile_in_use", "profile_starting", "host_closed", "app_exit", "browser_closed", "cleanup_pending", "component_unavailable", "cancelled":
+		"expired", "profile_disabled", "owner_window_open", "profile_in_use", "profile_starting", "host_closed", "app_exit", "browser_closed", "cleanup_pending", "component_unavailable", "cancelled",
+		"protected_content", "privacy_unavailable", "frame_unavailable", "privacy_changed":
 		return reason
 	default:
 		return ""

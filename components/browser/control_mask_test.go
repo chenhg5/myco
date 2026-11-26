@@ -43,6 +43,37 @@ func TestScreenshotMasksUseClipOriginAndPixelScale(t *testing.T) {
 	}
 }
 
+func TestScreenshotPrivacyIgnoresFragmentNavigation(t *testing.T) {
+	root := proto.PageFrameID("root")
+	before := screenshotPrivacyPlan{Documents: map[proto.PageFrameID]string{root: "https://example.com/t/123#reply11"}, Epochs: map[proto.PageFrameID]uint64{root: 7}}
+	after := screenshotPrivacyPlan{Documents: map[proto.PageFrameID]string{root: "https://example.com/t/123#reply12"}, Epochs: map[proto.PageFrameID]uint64{root: 7}}
+	if !sameScreenshotPrivacy(before, after) {
+		t.Fatal("same-document fragment navigation rejected a safe screenshot")
+	}
+	after.Documents[root] = "https://example.com/t/124#reply12"
+	if sameScreenshotPrivacy(before, after) {
+		t.Fatal("different document accepted")
+	}
+	after.Documents[root] = before.Documents[root]
+	after.Epochs[root]++
+	if sameScreenshotPrivacy(before, after) {
+		t.Fatal("replaced frame epoch accepted")
+	}
+}
+
+func TestScreenshotPrivacyReasonSurvivesReplayError(t *testing.T) {
+	for _, reason := range []screenshotPrivacyError{"protected_content", "privacy_unavailable", "frame_unavailable", "privacy_changed"} {
+		failure := controlNativeError(reason)
+		if failure.Code != "sensitive_snapshot" || failure.Reason != string(reason) {
+			t.Fatalf("reason %s lost from component error: %+v", reason, failure)
+		}
+		result := replayErrorDTO(failure)
+		if result.Code != "sensitive_snapshot" || result.Reason != string(reason) {
+			t.Fatalf("reason %s lost from replay error: %+v", reason, result)
+		}
+	}
+}
+
 func TestNativeChromeUnavailableFramesAreMaskedBeforeArtifactStorage(t *testing.T) {
 	if !*browserSmoke {
 		t.Skip("enable -browser-smoke with installed Chrome")

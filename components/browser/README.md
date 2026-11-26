@@ -164,7 +164,11 @@ redacted; typing into a sensitive field is refused. HTML and text extraction
 sanitize sensitive descendants. Screenshots redact unreadable iframe rectangles to opaque black before storing
 artifacts. Readable documents containing sensitive elements, including closed
 shadow roots, still refuse screenshots. A frame that cannot be located, or a
-layout/document change during capture, also refuses the screenshot.
+layout/document change during capture, also refuses the screenshot. A
+same-document URL fragment change does not count as a document replacement.
+Refusals retain the `sensitive_snapshot` code and include a fixed `reason`:
+`protected_content`, `privacy_unavailable`, `frame_unavailable`, or
+`privacy_changed`. Reasons never contain page content or URLs.
 The owner's control panel is excluded from snapshots, screenshots and drafts.
 
 Screenshot `clip` coordinates are relative to the top viewport in CSS pixels.
