@@ -598,8 +598,13 @@ struct ConversationBody: View {
                     })
                 }
                 // The plan still going, the newest first.
-                if !model.readOnly, let plan = model.pinnedPlan, plan.id != closedPlan {
-                    PlanBar(items: plan.items) { closedPlan = plan.id }
+                // (closed, it stays closed when the chat is opened again)
+                let planChat = ClosedPlans.chat(workspace: session.id, agent: model.agent, project: model.project)
+                if !model.readOnly, let plan = model.pinnedPlan, plan.id != (closedPlan ?? ClosedPlans.closed(in: planChat)) {
+                    PlanBar(items: plan.items) {
+                        closedPlan = plan.id
+                        ClosedPlans.close(plan.id, in: planChat)
+                    }
                 }
                 // Its goal and what it waits for in the background.
                 if !model.readOnly {

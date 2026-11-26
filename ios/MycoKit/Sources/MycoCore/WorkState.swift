@@ -169,3 +169,30 @@ public final class WorkStateModel {
         }
     }
 }
+
+/// The plans a person closed above a chat, kept on this device: closed, a
+/// plan stays closed when the chat is opened again, until a new plan comes.
+public enum ClosedPlans {
+    static let defaultsKey = "myco-closed-plans"
+    /// At most this many chats remembered (the oldest go first).
+    static let limit = 200
+
+    /// The plan closed in this chat, if any.
+    public static func closed(in chat: String, defaults: UserDefaults = .standard) -> String? {
+        (defaults.dictionary(forKey: defaultsKey) as? [String: String])?[chat]
+    }
+
+    /// Remembers that this plan was closed in this chat (the one before it
+    /// is forgotten: a new plan shows again).
+    public static func close(_ plan: String, in chat: String, defaults: UserDefaults = .standard) {
+        var all = defaults.dictionary(forKey: defaultsKey) as? [String: String] ?? [:]
+        all[chat] = plan
+        if all.count > limit { all.remove(at: all.startIndex) }
+        defaults.set(all, forKey: defaultsKey)
+    }
+
+    /// The key of a chat: the workspace, the agent and the project.
+    public static func chat(workspace: String, agent: String, project: String?) -> String {
+        [workspace, agent, project ?? ""].joined(separator: "|")
+    }
+}
