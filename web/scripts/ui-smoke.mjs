@@ -3998,6 +3998,38 @@ async function runMatrix(browser, size, scheme) {
       await row.waitFor({ state: "detached", timeout: 5_000 });
     });
 
+    // 侧栏显示: every entry shows until hidden, from Settings or by
+    // right-clicking it in the sidebar; shown again from Settings.
+    await step("设置 · 侧栏显示", async () => {
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+      const row = page.locator("[data-setting=nav-entries]");
+      await row.waitFor({ timeout: 5_000 });
+      const chip = (name) => row.locator(".nav-show-chip", { hasText: name });
+      if ((await row.locator(".nav-show-chip.is-on").count()) !== (await row.locator(".nav-show-chip").count())) throw new Error("默认应全部显示");
+      await chip("自动化").click();
+      await page.waitForFunction(() => !document.querySelector(".sp-nav-auto"), null, { timeout: 5_000 });
+      if (await chip("自动化").getAttribute("aria-pressed") !== "false") throw new Error("隐藏后按钮应显示为关");
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-nav-entries");
+      await page.keyboard.press("Escape");
+      await sidebar(page, true);
+      // right-click an entry: hide it
+      await page.locator(".sp-nav-workflows").click({ button: "right" });
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "在侧栏隐藏「工作流」" }).click();
+      await page.locator(".sp-nav-workflows").waitFor({ state: "detached", timeout: 5_000 });
+      // and back, from Settings
+      await go(page, "设置", narrow);
+      await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
+      await chip("自动化").click();
+      await chip("工作流").click();
+      await page.keyboard.press("Escape");
+      await sidebar(page, true);
+      await page.locator(".sp-nav-auto").waitFor({ timeout: 5_000 });
+      await page.locator(".sp-nav-workflows").waitFor({ timeout: 5_000 });
+      if (narrow) await sidebar(page, false);
+    });
+
     await step("设置 · 只看进度", async () => {
       await go(page, "设置", narrow);
       await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));

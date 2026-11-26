@@ -10601,4 +10601,23 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .im-steps a { color: var(--accent); }
 /* where a run's steps will show once it comes near the view (TraceView) */
 .trace-lazy { display: block; height: 1px; }
+/* Settings › Appearance › 侧栏显示: a chip per sidebar entry, on = shown. */
+.app-setting-line.app-setting-wrap { flex-wrap: wrap; }
+.nav-show-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; max-width: 100%; }
+.nav-show-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+}
+.nav-show-chip:hover { background: var(--nav-hover); }
+.nav-show-chip.is-on { border-color: transparent; background: var(--pill); color: var(--fg); }
+.nav-show-chip svg { width: 12px; height: 12px; }
 
