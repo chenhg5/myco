@@ -29,6 +29,7 @@ import (
 	"github.com/myco-ai/myco/internal/infra/tunnel"
 	"github.com/myco-ai/myco/internal/infra/wake"
 	"github.com/myco-ai/myco/internal/perf"
+	"github.com/myco-ai/myco/internal/provider"
 	"github.com/myco-ai/myco/internal/release"
 	"github.com/myco-ai/myco/internal/requestid"
 	"github.com/myco-ai/myco/internal/transport/httpapi"
@@ -285,6 +286,10 @@ func Build(o Options) (*Hub, error) {
 	srv.SetVoiceSettings(app.NewVoiceSettingsService(sqlite.NewSettingRepo(db)))
 	e2e := app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock)
 	srv.SetE2E(e2e)
+	srv.SetModelProviders(app.NewModelProviderService(sqlite.NewModelProviderRepo(db), e2e, clock, func(id string) bool {
+		_, ok := provider.VendorByID(id)
+		return ok
+	}))
 	// Agents acting on a computer through its App, with its owner's approval.
 	actionSvc := app.NewActionService(superagents, machineSvc, members, messages, e2e.Enabled, audit, ids, clock)
 	srv.SetActions(actionSvc)

@@ -494,7 +494,7 @@ func open(path string, t *Timing) (*sql.DB, error) {
 	// A single writer connection serializes transactions and keeps
 	// ":memory:" databases shared across the pool.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema + usageSchema + projectInvitationSchema + pageAttachmentSchema + watchSchema + goalSchema); err != nil {
+	if _, err := db.Exec(schema + usageSchema + projectInvitationSchema + pageAttachmentSchema + watchSchema + goalSchema + modelProviderSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

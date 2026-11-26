@@ -1651,3 +1651,65 @@ characters, no line breaks) asks the runner to list the provider's models again;
 it is stored in `run_settings.models_refresh` and nothing else changes. Runners
 that read it report `runtime.features: ["models_refresh"]`; they read it within
 a minute while their agent uses another vendor. Older Hubs ignore the field.
+
+## Model providers (i115)
+
+A member's model providers: a vendor (a catalogue id from
+`internal/provider` — `opencode_go`, `deepseek`, `kimi`, `minimax`, `zhipu`,
+`qwen`, `doubao`, `openrouter` — or `custom`), its two base URLs
+(`anthropic_base` for Claude Code, `openai_base` for Codex; at least one), an
+optional `small_model`, the models last read with the key (`models`,
+`models_at`), and the API key as an end-to-end envelope, `key_sealed`, with
+`key_version`. Every computer the member adds an agent on can use them.
+
+| Route | Who | |
+|---|---|---|
+| `GET /v1/console/providers` | a member's device | `{e2e, providers: [...]}`: the caller's own providers only |
+| `POST /v1/console/providers` | a member's device | `{id, name, vendor, anthropic_base?, openai_base?, small_model?, key_sealed, key_version: 1}` → the provider. The client picks `id` (`prv_` and 8 to 40 lowercase letters or digits): the key is sealed for it |
+| `PATCH /v1/console/providers/{id}` | its member | Only what is set changes. A new `key_sealed` comes with `key_version`: the current one plus one for a new key, or the current one when the same key is sealed again for the member's devices now (rewrap); anything else is `conflict` |
+| `DELETE /v1/console/providers/{id}` | its member | Agents it was sent to keep what was written on their computers |
+
+**The key.** `key_sealed` is an e2e envelope (`e2e.Seal`) with header
+`e2e.ProviderKeyHeader(member id, provider id, key_version)`; its payload is
+`{"api_key": "..."}`. The hub keeps it only when it is signed by one of the
+member's device keys and readable by those devices alone
+(`e2e.VerifySealedFor`); it cannot open it, and it never logs it (the audit log
+says `provider.create`, `provider.key key_version=N`, `provider.delete`). New
+providers need the workspace's end-to-end encryption on (`e2e_required`, HTTP
+409, otherwise). Agents, superagents and other members get `permission_denied`
+or `not_found`.
+
+**A new device.** A device added after a key was sealed cannot open it. Any of
+the member's devices that can (the App, at its next look at the list) sees that
+the envelope's readers are not the member's devices now, opens it and seals it
+again for them (`PATCH` with the same `key_version`). A removed device is left
+out the same way. If none of the devices that could open it is left, the key is
+entered again.
+
+**To an agent.** The App opens the key and seals the custom provider for the
+agent as before (`provider: "custom"` with `provider_encrypted`, see Remote
+provider settings) and records `run_settings.provider_ref: {id, key_version}`
+(only the agent's owner, and only to a provider of theirs; runners ignore it).
+After a key changes, the App offers to send it again to every agent whose
+`provider_ref.key_version` is older. The custom provider may carry
+`small_model` (Claude Code's haiku tier and background work); older runners
+ignore it.
+
+**A new agent.** `POST /v1/machines/{id}/spawn` takes `provider_encrypted`
+(sealed for that machine's node, by one of the person's devices; checked like an
+agent's) and `provider_ref`, for `claude` and `codex` sessions only. A machine
+node with the `sealed_spawn` feature opens it, runs the session's first turn
+with it and writes it to the new agent's env file (with the machine node's own
+variables besides, mode 0600); the hub then records the new agent's provider as
+`custom` with that `provider_ref`. `GET /v1/machines` names each machine's node
+(`node`) for this. An older machine node (no `sealed_spawn`, or no key
+registered yet) is sent the request without a provider; the App sends the
+provider to the new agent once its runner has registered its key, before
+anything is sent to it.
+
+**Not shared.** A provider is its member's only; there is no workspace-wide
+shared provider. A key sealed for every member's devices cannot be taken back
+when one of them leaves (only changing the key at the vendor does that), whose
+usage and quota it is would be unclear, and one person adding agents on their
+computers needs only their own. Sharing (for a project, say) would be a change
+of its own.

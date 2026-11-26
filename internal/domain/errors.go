@@ -25,6 +25,9 @@ const (
 	// CodeUnsupported: this hub, computer or component cannot do that (an
 	// older version, or a feature off there); not worth retrying (HTTP 501).
 	CodeUnsupported ErrorCode = "unsupported"
+	// CodeE2ERequired: it needs the workspace's end-to-end encryption on
+	// (HTTP 409).
+	CodeE2ERequired ErrorCode = "e2e_required"
 )
 
 // Error is a domain error carrying a code and an optional recovery hint.

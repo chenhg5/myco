@@ -13,8 +13,21 @@ import (
 func (b *Backend) putRemoteAgentProvider(w http.ResponseWriter, r *http.Request, c *client.Client) {
 	var in struct {
 		Manual *ManualProvider `json:"manual"`
+		// Workspace is one of the member's model providers (i115), with
+		// the model the agent runs.
+		Workspace string `json:"workspace,omitempty"`
+		Model     string `json:"model,omitempty"`
 	}
 	if !decode(w, r, &in) {
+		return
+	}
+	if in.Workspace != "" {
+		a, err := useProviderFor(r.Context(), c, r.PathValue("name"), in.Workspace, in.Model)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
 		return
 	}
 	if in.Manual == nil {

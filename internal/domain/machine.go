@@ -213,6 +213,15 @@ type RunSettings struct {
 	// ModelsRefresh is the App's last request to list the provider's
 	// models again (a time); the runner asks when it changes.
 	ModelsRefresh string `json:"models_refresh,omitempty"`
+	// ProviderRef is the member's model provider a custom provider came
+	// from, and its key's version (i115); zero when none.
+	ProviderRef ProviderRef `json:"provider_ref,omitzero"`
+}
+
+// ProviderRef points at a model provider and a version of its key.
+type ProviderRef struct {
+	ID         string `json:"id,omitempty"`
+	KeyVersion int    `json:"key_version,omitempty"`
 }
 
 // Accesses are the permission levels, lowest first.

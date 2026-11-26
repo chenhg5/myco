@@ -410,6 +410,7 @@ func (b *Backend) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
 	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/provider", b.withHub(b.putRemoteAgentProvider))
+	b.registerModelProviders(m)
 	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/run-settings", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in api.RunSettingsPatch
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -962,15 +963,44 @@ func (b *Backend) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, res)
 	}))
-	m.HandleFunc("POST /app/hubs/{id}/machines/{mid}/spawn", b.withHubTimeout(6*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
-		var in api.SpawnRequest
+	m.HandleFunc("POST /app/hubs/{id}/machines/{mid}/spawn", b.withHubTimeout(7*time.Minute, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		// provider: one of the member's model providers (i115) for the new
+		// agent, sealed for that computer here; never sent in the clear.
+		var in struct {
+			api.SpawnRequest
+			Provider string `json:"provider,omitempty"`
+		}
 		if !decode(w, r, &in) {
 			return
 		}
-		res, err := c.SpawnOnMachine(r.Context(), r.PathValue("mid"), in, 5*time.Minute)
+		sr := in.SpawnRequest
+		sr.ProviderEncrypted, sr.ProviderRef = nil, nil
+		var (
+			prov   *api.ModelProvider
+			key    string
+			sealed bool
+		)
+		if in.Provider != "" {
+			var err error
+			if prov, key, sealed, err = sealedSpawn(r.Context(), c, r.PathValue("mid"), &sr, in.Provider); err != nil {
+				writeErr(w, err)
+				return
+			}
+		}
+		res, err := c.SpawnOnMachine(r.Context(), r.PathValue("mid"), sr, 5*time.Minute)
 		if err != nil {
 			writeErr(w, err)
 			return
+		}
+		if prov != nil && !sealed && res.Agent != "" && res.Error == "" {
+			// An older machine: the provider goes to the new agent once it
+			// has joined, before anything is sent to it.
+			ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+			defer cancel()
+			if err := deliverAfterJoin(ctx, c, *prov, key, res.Agent, sr.Model); err != nil {
+				writeErr(w, err)
+				return
+			}
 		}
 		writeJSON(w, http.StatusOK, res)
 	}))

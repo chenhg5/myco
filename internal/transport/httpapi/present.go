@@ -81,6 +81,9 @@ func (s *Server) agentDTO(r *http.Request, a *domain.Agent) api.Agent {
 	}
 	if rs := a.RunSettings; rs != (domain.RunSettings{}) {
 		out.RunSettings = &api.RunSettings{Model: rs.Model, Effort: rs.Effort, Access: rs.Access, MCPTools: &rs.MCPTools, Provider: rs.Provider, ModelsRefresh: rs.ModelsRefresh}
+		if rs.ProviderRef.ID != "" {
+			out.RunSettings.ProviderRef = &api.ProviderRef{ID: rs.ProviderRef.ID, KeyVersion: rs.ProviderRef.KeyVersion}
+		}
 		if rs.ProviderEncrypted != nil {
 			e := rs.ProviderEncrypted
 			out.RunSettings.ProviderEncrypted = &api.EncryptedProvider{ID: e.ID, From: e.From, Body: e.Body}
@@ -94,7 +97,7 @@ func (s *Server) agentDTO(r *http.Request, a *domain.Agent) api.Agent {
 
 func (s *Server) machineDTO(v *app.MachineView) api.Machine {
 	out := api.Machine{ID: v.ID, Name: v.Name, Hostname: v.Hostname, OS: v.OS, Arch: v.Arch, MycoVersion: v.MycoVersion,
-		Updating: v.Updating, Online: v.Online, LastSeenAt: timePtr(v.LastSeenAt), CanSpawn: v.SpawnNode != "", Legacy: v.Legacy, Agents: []string{},
+		Updating: v.Updating, Online: v.Online, LastSeenAt: timePtr(v.LastSeenAt), CanSpawn: v.SpawnNode != "", Node: string(v.SpawnNode), Legacy: v.Legacy, Agents: []string{},
 		OwnerID: v.Owner, Owner: s.ownerName(v.Owner)}
 	for _, a := range v.Agents {
 		out.Agents = append(out.Agents, string(a))
@@ -212,6 +215,7 @@ var statusByCode = map[domain.ErrorCode]int{
 	domain.CodeInternal:         http.StatusInternalServerError,
 	domain.CodeRateLimited:      http.StatusTooManyRequests,
 	domain.CodeUnsupported:      http.StatusNotImplemented,
+	domain.CodeE2ERequired:      http.StatusConflict,
 	domain.CodeReplaced:         http.StatusUnauthorized,
 }
 
