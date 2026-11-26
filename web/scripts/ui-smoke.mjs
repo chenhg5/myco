@@ -5162,6 +5162,62 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
+    // An agent in its own session (inbox wait: a Claude cloud session) has
+    // no computer to read a quota on; its session reports it
+    // (myco agent runtime quota: source_kind cloud_session, no machine_id).
+    // The member card, its card's 额度 and the composer all show it.
+    await step("成员 · 会话上报的额度", async () => {
+      const at = new Date(Date.now() - 5 * 60e3).toISOString();
+      const quota = {
+        source: "claude", provider: "claude", source_kind: "cloud_session", status: "ok", at, checked_at: at,
+        windows: [
+          { name: "five_hour", used: 0.17, status: "allowed", duration_sec: 18000, resets_at: new Date(Date.now() + 3 * 3600e3).toISOString() },
+          { name: "seven_day", used: 0.48, status: "allowed", duration_sec: 604800, resets_at: new Date(Date.now() + 4 * 86400e3).toISOString() },
+        ],
+      };
+      const put = (v) => {
+        if (Array.isArray(v)) { v.forEach(put); return; }
+        if (!v || typeof v !== "object") return;
+        if (v.name === "grok-agent-7c2e" && v.runtime) v.runtime = { ...v.runtime, quota };
+        for (const x of Object.values(v)) put(x);
+      };
+      const routeURL = /\/app\/overview(\?|$)/;
+      await page.route(routeURL, async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        put(json);
+        await route.fulfill({ response, json });
+      });
+      try {
+        await go(page, "成员", narrow);
+        const card = page.locator(".mb-card", { hasText: "Myco (Grok)" });
+        const tag = card.locator(".app-quota-tag");
+        await tag.waitFor({ timeout: 15_000 });
+        if (!compactText(await tag.innerText()).includes("剩 52%")) throw new Error(`会话上报的额度应在成员卡上显示最紧的窗口「剩 52%」，实际「${await tag.innerText()}」`);
+        if (!(await tag.getAttribute("title")).includes("会话上报")) throw new Error(`额度应说明是会话上报的，实际「${await tag.getAttribute("title")}」`);
+        await card.click();
+        await page.locator(".ms").waitFor({ timeout: 10_000 });
+        await clickVisible(page, page.locator(".ms .ms-fold"));
+        const body = page.locator(".ms .ms-fold-body");
+        await body.getByText("模型由它自己的会话管理，myco 改不了；额度是它的会话上报的。").waitFor({ timeout: 5_000 });
+        const rows = compactText(await body.locator(".app-quota").allInnerTexts().then((x) => x.join(" | ")));
+        if (!rows.includes("剩 83%") || !rows.includes("剩 52%")) throw new Error(`卡片的额度应列出两个窗口，实际「${rows}」`);
+        await settle(page, 200);
+        await shot(page, size, scheme, "member-quota-session");
+        await page.keyboard.press("Escape");
+        await page.locator(".ms").waitFor({ state: "hidden" });
+        await openMember(page, narrow, "聊天", "Myco (Grok)");
+        const pill = page.locator(".conv-detail [data-testid=quota-pill]");
+        await pill.waitFor({ timeout: 10_000 });
+        if (!compactText(await pill.innerText()).includes("剩 52%")) throw new Error(`输入框的额度应是「剩 52%」，实际「${await pill.innerText()}」`);
+      } finally {
+        await page.unroute(routeURL);
+      }
+      // (back where the next step starts: the members page)
+      await go(page, "成员", narrow);
+      await page.locator(".mb-card", { hasText: "PM (Codex)" }).waitFor({ timeout: 15_000 });
+    });
+
     await step("成员 · 模型和额度", async () => {
       // A manager picks a model and an effort: each goes to the App backend
       // at once with both fields. The quota rows say whose usage it is
@@ -5306,7 +5362,7 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ timeout: 10_000 });
       await clickVisible(page, page.locator(".ms .ms-fold"));
       const inbox = page.locator(".ms .ms-fold-body");
-      await inbox.getByText("模型和额度由它自己的会话管理，myco 拿不到也改不了。").waitFor({ timeout: 5_000 });
+      await inbox.getByText("模型和额度由它自己的会话管理；会话上报额度后，这里就能看到。").waitFor({ timeout: 5_000 });
       if (await inbox.locator("select").count()) throw new Error("inbox wait 的 agent 不该有可编辑控件");
       const inboxText = compactText(await inbox.innerText());
       if (!inboxText.includes("grok-4") || !inboxText.includes("它自己报的")) {

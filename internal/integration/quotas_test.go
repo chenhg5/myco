@@ -217,3 +217,56 @@ func TestAccountQuotaSharedBindingOwnerPrivacyAndRestart(t *testing.T) {
 		t.Fatal("restart lost quota or binding")
 	}
 }
+
+// An agent in a cloud session (inbox wait) has no computer: its session
+// reports the quota itself (myco agent runtime quota: cloud_session, no
+// machine, no profile). Its owner's App (a console token) gets it in the
+// overview it shows and on the agent; another member does not.
+func TestSessionReportedQuotaReachesTheOwnersApp(t *testing.T) {
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	admin := h.admin()
+	ct, e := admin.CreateConsoleToken(c, "glenn-device")
+	if e != nil {
+		t.Fatal(e)
+	}
+	owner := h.client(ct.Token)
+	cloudy := h.client(h.register(api.RegisterRequest{Name: "cloudy", Binding: api.Binding{Harness: "inbox"}}))
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	q := api.Quota{Source: "claude", Provider: "claude", SourceKind: "cloud_session", Status: "ok", At: now, CheckedAt: now,
+		Windows: []api.QuotaWindow{{Name: "five_hour", Used: .17, DurationSec: 18000}, {Name: "seven_day", Used: .48, DurationSec: 604800}}}
+	if e = cloudy.ReportRuntime(c, api.Runtime{CLI: "inbox", Quota: &q}); e != nil {
+		t.Fatal(e)
+	}
+	ag, e := owner.GetAgent(c, "cloudy")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if ag.Runtime == nil || ag.Runtime.Quota == nil || len(ag.Runtime.Quota.Windows) != 2 || ag.Runtime.Quota.SourceKind != "cloud_session" {
+		t.Fatalf("the owner cannot see the session's quota: %+v", ag.Runtime)
+	}
+	ov, e := owner.Overview(c, 0)
+	if e != nil {
+		t.Fatal(e)
+	}
+	found := false
+	for _, x := range ov.Agents {
+		if x.Agent.Name == "cloudy" {
+			found = x.Agent.Runtime != nil && x.Agent.Runtime.Quota != nil && len(x.Agent.Runtime.Quota.Windows) == 2
+		}
+	}
+	if !found {
+		t.Fatal("the owner's overview lacks the session's quota")
+	}
+	inv, e := admin.InviteMember(c, api.InviteRequest{Name: "someone"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	paired, e := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "someone-device")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if ag, e = h.client(paired.Token).GetAgent(c, "cloudy"); e != nil || (ag.Runtime != nil && ag.Runtime.Quota != nil) {
+		t.Fatalf("another member read the session's quota: %v %+v", e, ag)
+	}
+}

@@ -164,7 +164,9 @@ export function quotaSourceText(q: Quota, machines: Machine[] = []): string {
   const p = q.provider === "unknown" ? "" : q.provider || q.source;
   const who = providerNames[p] || p || "";
   const machine = q.machine_id ? machines.find((m) => m.id === q.machine_id)?.name : undefined;
-  return [who, q.plan ? planName(q.plan) : "", machine || ""].filter(Boolean).join(" · ");
+  // (read in no computer: what its session reported, e.g. a cloud session)
+  const where = machine || (q.source_kind === "cloud_session" ? L("会话上报", "reported by its session") : "");
+  return [who, q.plan ? planName(q.plan) : "", where].filter(Boolean).join(" · ");
 }
 
 /** The tightest window: the one with the least left (spent first). */
