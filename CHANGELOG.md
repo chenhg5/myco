@@ -4,6 +4,22 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.17
+
+- Browser control: screenshots, multiline clicks and long sessions keep working after the browser reconnects.
+- App quota: shows what is left and whose it is, explains failed reads, and stays quiet when there is no usage to read.
+- Voice input can use Doubao speech recognition, with hot words for names and terms.
+- App layout: pins get their own row, and the bars above a chat are set apart from its messages.
+- App permissions survive app upgrades, and screen and browser access can be allowed permanently.
+
+**中文**
+
+- 浏览器控制：修复截图与多行点击，浏览器重连后长会话仍可继续控制。
+- 额度：显示剩余额度及归属，说明读取失败原因，无可读用量时不再占位。
+- 语音输入支持豆包识别，可配置热词提升专有名词准确率。
+- 界面：置顶项独立成行，聊天上方工具条与消息区分开。
+- 权限在应用升级后保留，屏幕与浏览器权限可设为始终允许。
+
 ## v0.22.16
 
 - Goals: set a bounded goal on a chat and the agent takes it up on idle turns instead of waiting for your next message.
