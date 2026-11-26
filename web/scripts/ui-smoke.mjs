@@ -4106,6 +4106,9 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-nav-workflows").click({ button: "right" });
       await page.locator(".conv-menu").getByRole("menuitem", { name: "在侧栏隐藏「工作流」" }).click();
       await page.locator(".sp-nav-workflows").waitFor({ state: "detached", timeout: 5_000 });
+      // Hidden is never silent: the sidebar says what, and a click opens the setting.
+      const note = page.locator("[data-testid=nav-hidden-note]");
+      if (!(await note.innerText()).includes("工作流")) throw new Error(`侧栏应写明隐藏了什么，实际「${await note.innerText()}」`);
       // and back, from Settings
       await go(page, "设置", narrow);
       await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
@@ -4115,6 +4118,25 @@ async function runMatrix(browser, size, scheme) {
       await sidebar(page, true);
       await page.locator(".sp-nav-auto").waitFor({ timeout: 5_000 });
       await page.locator(".sp-nav-workflows").waitFor({ timeout: 5_000 });
+      if (await page.locator("[data-testid=nav-hidden-note]").count()) throw new Error("全部显示时不该有「已隐藏」提示");
+      if (narrow) await sidebar(page, false);
+    });
+
+    // An App updated from before 侧栏显示, or with a setting it cannot read:
+    // everything shows (projects and chats above all).
+    await step("设置 · 侧栏显示（升级上来）", async () => {
+      for (const v of [null, "not json", "{\"projects\":true}"]) {
+        await page.evaluate((x) => { if (x === null) localStorage.removeItem("myco-nav-hidden"); else localStorage.setItem("myco-nav-hidden", x); }, v);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await sidebar(page, true);
+        await page.locator(".app-sidebar").getByText("官网改版", { exact: true }).first().waitFor({ timeout: 15_000 });
+        await page.locator(".app-sidebar").getByText("PM (Codex)", { exact: true }).first().waitFor({ timeout: 5_000 });
+        for (const sel of [".sp-nav-auto", ".sp-nav-workflows", ".sp-nav-templates", ".sp-nav-computers", ".sp-nav-projects", ".sp-nav-chats"]) {
+          if (!(await page.locator(sel).count())) throw new Error(`没有存过或读不出侧栏设置时（${v}）应全部显示，缺 ${sel}`);
+        }
+        if (await page.locator("[data-testid=nav-hidden-note]").count()) throw new Error("没有隐藏时不该有「已隐藏」提示");
+      }
+      await page.evaluate(() => localStorage.removeItem("myco-nav-hidden"));
       if (narrow) await sidebar(page, false);
     });
 

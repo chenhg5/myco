@@ -10653,4 +10653,23 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .nav-show-chip:hover { background: var(--nav-hover); }
 .nav-show-chip.is-on { border-color: transparent; background: var(--pill); color: var(--fg); }
 .nav-show-chip svg { width: 12px; height: 12px; }
+/* The sidebar says when something is hidden (侧栏显示), faintly, at the end
+   of its lists; a click opens the setting. */
+.sp-nav-hidden-note {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 10px 8px 4px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--faint);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sp-nav-hidden-note:hover { color: var(--muted); background: var(--nav-hover); }
 
