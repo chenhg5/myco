@@ -3798,6 +3798,7 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
    behind them, the walking mushroom is a quiet dot, intro cards are put
    away, and small coloured tags become faint words. ---------- */
 .ui-clean .app-sidebar .app-nav-item > .pa,
+.ui-clean .app-hub-switch .app-hub-avatar,
 .ui-clean .conv-head-faces,
 .ui-clean .handoff-who .pa,
 .ui-clean .conv-bg,

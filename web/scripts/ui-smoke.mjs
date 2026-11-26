@@ -4335,13 +4335,13 @@ async function runMatrix(browser, size, scheme) {
       const look = await page.evaluate(() => {
         const shown = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).display !== "none";
         return {
-          sideFaces: [...document.querySelectorAll(".app-sidebar .app-nav-item > .pa")].filter(shown).length,
+          sideFaces: [...document.querySelectorAll(".app-sidebar .app-nav-item > .pa, .app-hub-switch .app-hub-avatar")].filter(shown).length,
           headFaces: [...document.querySelectorAll(".conv-head-faces")].filter(shown).length,
           memberFace: Math.max(0, ...[...document.querySelectorAll(".sp-side .sp-member > .pa")].map((e) => e.getBoundingClientRect().width)),
           mushrooms: [...document.querySelectorAll("svg.work-sprite")].filter((e) => e.getBoundingClientRect().width > 12).length,
         };
       });
-      if (look.sideFaces) throw new Error("清爽模式下侧栏不该有头像");
+      if (look.sideFaces) throw new Error("清爽模式下侧栏（含左下工作区）不该有头像");
       if (look.headFaces) throw new Error("清爽模式下会话标题不该有头像");
       if (look.memberFace > 12) throw new Error(`清爽模式下成员栏只留状态点，实际宽 ${look.memberFace}px`);
       if (look.mushrooms) throw new Error("清爽模式下不该有走路的小蘑菇");
