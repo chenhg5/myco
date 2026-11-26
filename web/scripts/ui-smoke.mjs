@@ -2527,7 +2527,7 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 200);
       await shot(page, size, scheme, "chat-quota-pill");
       await page.keyboard.press("Escape");
-      await page.locator(".sp-home .run-pill-scrim").click({ force: true }).catch(() => {});
+      await page.locator(".sp-home .quota-pill-scrim").click({ force: true }).catch(() => {});
       if (await page.locator(".sp-home .conv-quota-out").count()) throw new Error("没用完时不该提示");
       // Review's account is out: said above the box, the box still sends.
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");

@@ -46,16 +46,16 @@ export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
   const read = quota.checked_at || quota.at;
   const title = L(`额度：${quotaWindowLabel(worst)}${text}（点开看全部）`, `Quota: ${quotaWindowLabel(worst)} ${text} (click for all)`);
   return (
-    <span className="run-pill-wrap">
-      <button type="button" className={cn("run-pill quota-pill", `is-${level}`, (status || stale) && "is-stale")} title={title} aria-label={title}
+    <span className="quota-pill-wrap">
+      <button type="button" className={cn("quota-pill", `is-${level}`, (status || stale) && "is-stale")} title={title} aria-label={title}
         aria-expanded={open} onClick={() => setOpen((o) => !o)} onMouseDown={(e) => e.preventDefault()} data-testid="quota-pill">
         <Gauge className="quota-pill-icon" aria-hidden />
-        <span className="run-pill-text">{label}</span>
+        <span className="quota-pill-text">{label}</span>
       </button>
       {open && (
         <>
-          <span className="run-pill-scrim" onClick={() => setOpen(false)} />
-          <div className="run-pill-menu quota-pill-menu" role="dialog" aria-label={L("额度", "Quota")} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
+          <span className="quota-pill-scrim" onClick={() => setOpen(false)} />
+          <div className="quota-pill-menu" role="dialog" aria-label={L("额度", "Quota")} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
             <div className="run-pill-group">{L("额度", "Quota")}</div>
             {quota.windows.map((w) => (
               <div key={`${w.name}/${w.model_scope || ""}`} className={cn("quota-pill-row", `is-${quotaPillLevel(w)}`)}>

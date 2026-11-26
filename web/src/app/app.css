@@ -8061,11 +8061,13 @@ body.is-resizing {
 
 /* The model and effort beside the message box (RunSettings' RunPill): a
    quiet label in the bar, a menu above it to switch (when it may be). */
-.run-pill-wrap {
+.run-pill-wrap,
+.quota-pill-wrap {
   position: relative;
   min-width: 0;
 }
-.run-pill {
+.run-pill,
+.quota-pill {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -8081,11 +8083,14 @@ body.is-resizing {
   cursor: default;
 }
 .run-pill:hover,
-.run-pill[aria-expanded="true"] {
+.run-pill[aria-expanded="true"],
+.quota-pill:hover,
+.quota-pill[aria-expanded="true"] {
   background: var(--nav-hover);
   color: var(--fg-2);
 }
-.run-pill-text {
+.run-pill-text,
+.quota-pill-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -8128,7 +8133,8 @@ body.is-resizing {
   background: var(--amber);
   vertical-align: middle;
 }
-.run-pill-scrim {
+.run-pill-scrim,
+.quota-pill-scrim {
   position: fixed;
   inset: 0;
   z-index: 40;
@@ -8154,7 +8160,8 @@ body.is-resizing {
 .quota-pill-status { color: var(--amber); }
 /* Out of quota: said above the box before a send (it is not stopped). */
 .dot.over { background: var(--red); }
-.run-pill-menu {
+.run-pill-menu,
+.quota-pill-menu {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
