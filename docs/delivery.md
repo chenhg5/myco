@@ -234,3 +234,33 @@ send a short summary to the creator. Goals do not authorize additional actions:
 ask for human confirmation where the original task requires it. CLI mutations
 support `--dry-run`; `myco schema` describes every command. Older Hubs require an
 upgrade to use goals.
+
+## Account quota collection
+
+Long-running local runners collect account quota independently of task arrivals
+for Codex, Claude Code and supported providers used through OpenCode. Sampling
+uses no model turn and does not wake an agent. Agents using the same login on
+one computer share a private local snapshot and a cross-process acquisition lock.
+Their Hub runtimes refer to the same owner/machine/provider/login snapshot.
+Provider or login changes select a new opaque reference, and late samples cannot
+become the replacement login's values.
+
+Codex uses its native `app-server` account protocol and existing transcript quota
+events. Claude uses native rate-limit events and matching local usage caches;
+the runner neither calls Claude's private OAuth usage endpoint nor runs `/usage`
+to refresh credentials. An old cache retains its actual observation time.
+
+OpenCode Go and MiniMax use their own official quota endpoints with the current
+provider's key. Runners reuse selected cc-switch settings, saved provider env
+files or native CLI settings. They do not create an additional plaintext key
+store. An unconfigured supported provider reports `no_credentials`; configure
+its provider key using the existing provider settings. Missing native login is
+`auth_required`; log in through the CLI itself. Unrecognized gateways, project-level account overrides, or custom launch
+arguments whose effective account cannot be determined are `unsupported`, and their keys are never sent to a different quota provider.
+
+Sampling normally occurs at most once per five minutes per local account;
+Claude caches are re-read once per minute. Errors are cached for fifteen minutes,
+with a longer `Retry-After` respected on HTTP 429. HTTP redirects are not followed.
+Only normalized numbers, window times and safe status codes are uploaded; tokens,
+account IDs, emails and credential file paths remain on the computer. No reminder,
+automatic account switch, credit purchase, or quota-based scheduling is performed.

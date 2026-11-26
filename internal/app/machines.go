@@ -259,6 +259,17 @@ func (s *MachineService) SetRuntime(ctx context.Context, a *domain.Agent, rt dom
 		a.Runtime = old
 		return nil // a late goodbye from a process the new runner replaced
 	}
+	if rt.Quota != nil && rt.Quota.ProfileRef != "" && (rt.Quota.CheckedAt.After(now.Add(5*time.Minute)) || rt.Quota.At.After(rt.Quota.CheckedAt.Add(time.Minute))) {
+		return domain.Errf(domain.CodeInvalidArgument, "quota observation time is in the future; check the computer clock")
+	}
+	if rt.Quota != nil && rt.Quota.ProfileRef != "" {
+		q := *rt.Quota
+		q.MachineID = current.MachineID
+		rt.Quota = &q
+		if q.MachineID == "" {
+			return domain.Errf(domain.CodeConflict, "report the machine before account quota")
+		}
+	}
 	a.Runtime = rt
 	return s.agents.SetRuntime(ctx, a.Name, rt)
 }
@@ -463,4 +474,36 @@ func (s *MachineService) SetOwner(ctx context.Context, id, memberID string) (*do
 	}
 	m.Owner = memberID
 	return m, s.machines.Save(ctx, m)
+}
+
+// AccountQuota resolves an agent's current reference, never another profile.
+func (s *MachineService) AccountQuota(ctx context.Context, a *domain.Agent) *domain.Quota {
+	q := a.Runtime.Quota
+	if q == nil || q.ProfileRef == "" {
+		return q
+	}
+	repo, ok := s.agents.(domain.QuotaRepository)
+	if !ok {
+		return nil
+	}
+	out, err := repo.GetQuota(ctx, s.QuotaOwner(ctx, a), a.MachineID, q.Provider, q.ProfileRef)
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
+// QuotaOwner follows the computer's owner for machine-local paid accounts.
+// Transferring an agent must not transfer the former owner's login statistics.
+func (s *MachineService) QuotaOwner(ctx context.Context, a *domain.Agent) string {
+	if a.Runtime.Quota != nil && a.MachineID != "" {
+		m, err := s.machines.Get(ctx, a.MachineID)
+		if err != nil {
+			return ""
+		}
+		if m.Owner != "" {
+			return m.Owner
+		}
+	}
+	return a.Owner
 }

@@ -14,6 +14,16 @@ import (
 )
 
 const schema = `
+-- Account quota snapshots are scoped to the agent owner and authenticated machine.
+CREATE TABLE IF NOT EXISTS account_quotas (
+ owner TEXT NOT NULL,
+ machine TEXT NOT NULL,
+ provider TEXT NOT NULL,
+ profile TEXT NOT NULL,
+ snapshot TEXT NOT NULL,
+ PRIMARY KEY(owner,machine,provider,profile)
+);
+
 CREATE TABLE IF NOT EXISTS agents (
   id           TEXT PRIMARY KEY,
   name         TEXT NOT NULL UNIQUE,

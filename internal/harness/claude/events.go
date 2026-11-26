@@ -242,13 +242,14 @@ func orStr(a, b string) string {
 // "unifiedWindows":{"five_hour":{"utilization":0.17,"resetsAt":...,"status":"allowed"},
 // "seven_day":{...}}}.
 type rateLimitInfo struct {
-	Status         string `json:"status"`
-	RateLimitType  string `json:"rateLimitType"`
-	ResetsAt       int64  `json:"resetsAt"`
+	Status         string   `json:"status"`
+	RateLimitType  string   `json:"rateLimitType"`
+	ResetsAt       int64    `json:"resetsAt"`
+	Utilization    *float64 `json:"utilization"`
 	UnifiedWindows map[string]struct {
-		Utilization float64 `json:"utilization"`
-		ResetsAt    int64   `json:"resetsAt"`
-		Status      string  `json:"status"`
+		Utilization *float64 `json:"utilization"`
+		ResetsAt    int64    `json:"resetsAt"`
+		Status      string   `json:"status"`
 	} `json:"unifiedWindows"`
 }
 
@@ -256,10 +257,10 @@ func (r *rateLimitInfo) quota() *harness.Quota {
 	if r == nil {
 		return nil
 	}
-	q := &harness.Quota{Source: "claude"}
+	q := &harness.Quota{Source: "claude", At: time.Now().UTC()}
 	for _, name := range []string{"five_hour", "seven_day"} {
-		if w, ok := r.UnifiedWindows[name]; ok {
-			q.Windows = append(q.Windows, harness.QuotaWindow{Name: name, Used: w.Utilization, ResetsAt: unix(w.ResetsAt), Status: w.Status})
+		if w, ok := r.UnifiedWindows[name]; ok && w.Utilization != nil {
+			q.Windows = append(q.Windows, harness.QuotaWindow{Name: name, Used: *w.Utilization, ResetsAt: unix(w.ResetsAt), Status: w.Status})
 		}
 	}
 	var others []string // any other window, after the known two, in name order
@@ -271,10 +272,13 @@ func (r *rateLimitInfo) quota() *harness.Quota {
 	sort.Strings(others)
 	for _, name := range others {
 		w := r.UnifiedWindows[name]
-		q.Windows = append(q.Windows, harness.QuotaWindow{Name: name, Used: w.Utilization, ResetsAt: unix(w.ResetsAt), Status: w.Status})
+		if w.Utilization == nil {
+			continue
+		}
+		q.Windows = append(q.Windows, harness.QuotaWindow{Name: name, Used: *w.Utilization, ResetsAt: unix(w.ResetsAt), Status: w.Status})
 	}
-	if len(q.Windows) == 0 && r.RateLimitType != "" { // older shape: one window, no utilization
-		q.Windows = append(q.Windows, harness.QuotaWindow{Name: r.RateLimitType, ResetsAt: unix(r.ResetsAt), Status: r.Status})
+	if len(q.Windows) == 0 && r.RateLimitType != "" && r.Utilization != nil { // a single measured window
+		q.Windows = append(q.Windows, harness.QuotaWindow{Name: r.RateLimitType, Used: *r.Utilization, ResetsAt: unix(r.ResetsAt), Status: r.Status})
 	}
 	if len(q.Windows) == 0 {
 		return nil

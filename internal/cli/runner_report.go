@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -21,6 +22,7 @@ import (
 	"github.com/myco-ai/myco/internal/harness"
 	"github.com/myco-ai/myco/internal/harness/codex"
 	"github.com/myco-ai/myco/internal/machineid"
+	"github.com/myco-ai/myco/internal/quota"
 	"github.com/myco-ai/myco/internal/runner"
 )
 
@@ -35,14 +37,21 @@ type runtimeReporter struct {
 	restartPath string
 	cfg         string // runner.model, if set
 
-	mu     sync.Mutex
-	base   *api.Runtime // nil until the CLI version is known
-	choice providerChoice
-	model  string // the agent's run settings from the hub ("" = none)
-	effort string
-	access string
-	slots  *api.RunnerSlots
-	quota  *api.Quota // the account's limits, as the CLI last reported them
+	mu               sync.Mutex
+	base             *api.Runtime // nil until the CLI version is known
+	choice           providerChoice
+	model            string // the agent's run settings from the hub ("" = none)
+	effort           string
+	access           string
+	slots            *api.RunnerSlots
+	quota            *api.Quota // the account's limits, as the CLI last reported them
+	quotaStore       *quota.Store
+	quotaCancel      context.CancelFunc
+	quotaSource      quota.Source
+	runQuotaRef      string
+	runQuotaStarted  time.Time
+	runQuotaIdentity quota.Source
+	quotaInput       func(providerChoice) quota.Input
 	// maxAccess is the machine's spawn.max_access as last read, when it has
 	// changed since the start ("" = as at the start).
 	maxAccess string
@@ -118,19 +127,44 @@ func (r *runtimeReporter) Quota(q harness.Quota) {
 	if r == nil {
 		return
 	}
-	out := &api.Quota{Source: q.Source, At: time.Now().UTC(), Windows: []api.QuotaWindow{}}
+	r.mu.Lock()
+	store, input, ch, runRef, started, identity := r.quotaStore, r.quotaInput, r.choice, r.runQuotaRef, r.runQuotaStarted, r.runQuotaIdentity
+	r.mu.Unlock()
+	if store == nil || input == nil {
+		return
+	}
+	src := store.Discover(input(ch))
+	if src.Ref != runRef || !src.CanRecord(identity) || src.Status != "ok" || q.Source != src.Provider || len(q.Windows) == 0 || (q.Source == "codex" && (q.At.IsZero() || q.At.Before(started))) {
+		return
+	}
+	at := q.At
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	out := &api.Quota{Source: q.Source, Provider: src.Provider, ProfileRef: src.Ref, Plan: src.Plan, SourceKind: "event", Status: "ok", At: at, CheckedAt: time.Now().UTC(), Windows: []api.QuotaWindow{}}
 	for _, w := range q.Windows {
-		aw := api.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, Status: w.Status}
+		if math.IsNaN(w.Used) || math.IsInf(w.Used, 0) || w.Used < 0 || w.Used > 1 {
+			return
+		}
+		aw := api.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, Status: w.Status, DurationSec: w.DurationSec}
+		if aw.Status == "allowed_warning" {
+			aw.Status = "allowed"
+		}
+		if w.Name == "five_hour" {
+			aw.DurationSec = 18000
+		}
+		if strings.HasPrefix(w.Name, "seven_day") {
+			aw.DurationSec = 604800
+		}
 		if !w.ResetsAt.IsZero() {
 			t := w.ResetsAt
 			aw.ResetsAt = &t
 		}
 		out.Windows = append(out.Windows, aw)
 	}
-	r.mu.Lock()
-	r.quota = out
-	r.mu.Unlock()
-	r.flushLater()
+	if merged := store.Event(src, *out); merged != nil {
+		r.setQuota(src.Ref, merged)
+	}
 }
 
 // MaxAccess records the machine's spawn.max_access (machine.yaml) after it
@@ -186,7 +220,17 @@ func (r *runtimeReporter) Provider(ch providerChoice) {
 	}
 	r.mu.Lock()
 	r.choice = ch
+	store, input := r.quotaStore, r.quotaInput
 	r.mu.Unlock()
+	if store != nil && input != nil {
+		src := store.Discover(input(ch))
+		r.bindQuota(src)
+		r.mu.Lock()
+		r.runQuotaRef = src.Ref
+		r.runQuotaIdentity = src
+		r.runQuotaStarted = time.Now().UTC()
+		r.mu.Unlock()
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -245,7 +289,7 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		if err == nil {
 			r.last = rt
 		}
-		again := err == nil && (!reflect.DeepEqual(*r.base, base) || r.choice.name != ch.name || r.choice.host != ch.host || r.choice.source != ch.source || r.choice.model != ch.model || !reflect.DeepEqual(r.slots, rt.RunnerSlots))
+		again := err == nil && (!reflect.DeepEqual(*r.base, base) || r.choice.name != ch.name || r.choice.host != ch.host || r.choice.source != ch.source || r.choice.model != ch.model || !reflect.DeepEqual(r.slots, rt.RunnerSlots) || !reflect.DeepEqual(r.quota, rt.Quota))
 		r.mu.Unlock()
 		if err != nil {
 			r.log.Debug("runtime report failed (older hub?)", "err", err)
@@ -348,6 +392,9 @@ func (r *runtimeReporter) Goodbye() {
 	}
 	r.mu.Lock()
 	r.stopped = true
+	if r.quotaCancel != nil {
+		r.quotaCancel()
+	}
 	if r.base == nil {
 		r.mu.Unlock()
 		return

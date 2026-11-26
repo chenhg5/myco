@@ -187,6 +187,9 @@ func (r *AgentRepo) SetMachine(ctx context.Context, name domain.AgentName, machi
 }
 
 func (r *AgentRepo) SetRuntime(ctx context.Context, name domain.AgentName, rt domain.Runtime) error {
+	if rt.Quota != nil && rt.Quota.ProfileRef != "" {
+		return r.setAccountRuntime(ctx, name, rt)
+	}
 	return r.setColumn(ctx, name, "runtime", runtimeJSON(rt))
 }
 

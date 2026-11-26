@@ -19,6 +19,7 @@ import (
 	"github.com/myco-ai/myco/internal/client"
 	"github.com/myco-ai/myco/internal/config"
 	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/quota"
 	"github.com/myco-ai/myco/internal/runner"
 )
 
@@ -179,4 +180,40 @@ func TestRuntimeReporterSendsQueueAndAdmission(t *testing.T) {
 	a.Done()
 	wait(false)
 	b.Done()
+}
+
+// A slow sample cannot install itself after the agent changed its provider.
+func TestQuotaLateResultDoesNotCrossBinding(t *testing.T) {
+	r := &runtimeReporter{}
+	first := api.Quota{Provider: "codex", ProfileRef: "one", Status: "ok", At: time.Now(), Windows: []api.QuotaWindow{{Name: "weekly", Used: .82}}}
+	r.quotaSource = quota.Source{Provider: "minimax", Ref: "two"}
+	r.quota = &api.Quota{Provider: "minimax", ProfileRef: "two", Status: "no_credentials", Windows: []api.QuotaWindow{}}
+	r.setQuota(first.ProfileRef, &first)
+	if r.quota.ProfileRef != "two" || len(r.quota.Windows) != 0 {
+		t.Fatal("late result crossed account binding")
+	}
+}
+
+func TestOldTranscriptQuotaCannotBecomeNewLoginSample(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".codex")
+	if e := os.MkdirAll(dir, 0700); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.WriteFile(filepath.Join(dir, "auth.json"), []byte(`{"tokens":{"account_id":"new-login","access_token":"fixture-token"}}`), 0600); e != nil {
+		t.Fatal(e)
+	}
+	store, e := quota.NewStore(filepath.Join(home, "quota"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	input := func(providerChoice) quota.Input {
+		return quota.Input{CLI: "codex", Home: home, Env: map[string]string{}}
+	}
+	src := store.Discover(input(providerChoice{}))
+	r := &runtimeReporter{quotaStore: store, quotaInput: input, quotaSource: src, runQuotaRef: src.Ref, runQuotaStarted: time.Now(), runQuotaIdentity: src, quota: &api.Quota{ProfileRef: src.Ref, Windows: []api.QuotaWindow{}}}
+	r.Quota(harness.Quota{Source: "codex", At: time.Now().Add(-time.Hour), Windows: []harness.QuotaWindow{{Name: "primary", Used: .99}}})
+	if len(r.quota.Windows) != 0 {
+		t.Fatal("old transcript attached to new login")
+	}
 }

@@ -314,9 +314,9 @@ type rateLimits struct {
 }
 
 type rateWindow struct {
-	UsedPercent   float64 `json:"used_percent"`
-	WindowMinutes int64   `json:"window_minutes"`
-	ResetsAt      int64   `json:"resets_at"`
+	UsedPercent   *float64 `json:"used_percent"`
+	WindowMinutes int64    `json:"window_minutes"`
+	ResetsAt      int64    `json:"resets_at"`
 	// Older Codex versions said how long until the reset instead.
 	ResetsInSeconds int64 `json:"resets_in_seconds"`
 }
@@ -362,6 +362,11 @@ func sessionQuota(id string) *harness.Quota {
 			last, at = ev.Payload.RateLimits, ev.Timestamp
 		}
 	}
+	// File modification time is not the quota event time: unrelated later
+	// transcript writes must not make a previous login's quota look fresh.
+	if at.IsZero() {
+		return nil
+	}
 	return last.quota(at)
 }
 
@@ -372,15 +377,15 @@ func (r *rateLimits) quota(at time.Time) *harness.Quota {
 	if at.IsZero() {
 		at = time.Now()
 	}
-	q := &harness.Quota{Source: "codex"}
+	q := &harness.Quota{Source: "codex", At: at.UTC()}
 	for _, w := range []struct {
 		name string
 		win  *rateWindow
 	}{{"primary", r.Primary}, {"secondary", r.Secondary}} {
-		if w.win == nil {
+		if w.win == nil || w.win.UsedPercent == nil {
 			continue
 		}
-		qw := harness.QuotaWindow{Name: w.name, Label: windowLabel(w.win.WindowMinutes), Used: w.win.UsedPercent / 100}
+		qw := harness.QuotaWindow{Name: w.name, Label: windowLabel(w.win.WindowMinutes), Used: *w.win.UsedPercent / 100, DurationSec: int(w.win.WindowMinutes * 60)}
 		switch {
 		case w.win.ResetsAt > 0:
 			qw.ResetsAt = time.Unix(w.win.ResetsAt, 0).UTC()

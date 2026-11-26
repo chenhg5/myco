@@ -930,11 +930,23 @@ func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 		}
 	}
 	var err error
-	for attempt := 0; attempt < 5; attempt++ {
+	for attempt := 0; attempt < 6; attempt++ {
 		err = c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
 		// Older hubs reject unknown JSON fields. Retry only that specific schema
 		// rejection, leaving authentication and other validation failures intact.
 		var apiErr *Error
+		if r.Quota != nil && r.Quota.ProfileRef != "" && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest {
+			for _, field := range []string{"profile_ref", "machine_id", "source_kind", "status", "checked_at", "error_code", "plan", "duration_sec", "model_scope", "provider"} {
+				if strings.Contains(apiErr.Message, `unknown field "`+field+`"`) {
+					// Do not downgrade private account data to a public legacy runtime.
+					r.Quota = nil
+					break
+				}
+			}
+			if r.Quota == nil {
+				continue
+			}
+		}
 		if (r.RunnerInstance != "" || !r.RestartingUntil.IsZero()) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "runner_instance"`) || strings.Contains(apiErr.Message, `unknown field "restarting_until"`)) {
 			r.RunnerInstance, r.RestartingUntil = "", time.Time{}
 			continue

@@ -157,6 +157,15 @@ func (r Runtime) ModelList() []RuntimeModel {
 
 // Quota is a CLI account's usage limits at one moment.
 type Quota struct {
+	Provider   string    `json:"provider,omitempty"`
+	ProfileRef string    `json:"profile_ref,omitempty"`
+	MachineID  string    `json:"machine_id,omitempty"`
+	SourceKind string    `json:"source_kind,omitempty"`
+	Status     string    `json:"status,omitempty"`
+	CheckedAt  time.Time `json:"checked_at,omitzero"`
+	ErrorCode  string    `json:"error_code,omitempty"`
+	Plan       string    `json:"plan,omitempty"`
+
 	// Source is the CLI that reported it: claude or codex.
 	Source  string        `json:"source"`
 	At      time.Time     `json:"at"`
@@ -165,6 +174,8 @@ type Quota struct {
 
 // QuotaWindow is one limit: how much of it is used (0..1) and when it resets.
 type QuotaWindow struct {
+	DurationSec int    `json:"duration_sec,omitempty"`
+	ModelScope  string `json:"model_scope,omitempty"`
 	// Name: five_hour, seven_day (Claude Code), primary, secondary (Codex).
 	Name string `json:"name"`
 	// Label describes the window when its name does not, e.g. "5h" or "7d".
@@ -259,6 +270,9 @@ func orNone(h string) string {
 
 // Validate keeps runtime fields short single lines.
 func (r Runtime) Validate() error {
+	if err := r.Quota.Validate(); err != nil {
+		return err
+	}
 	if len(r.Providers) > 32768 {
 		return Errf(CodeInvalidArgument, "provider inventory too large")
 	}

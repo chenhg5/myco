@@ -1560,3 +1560,48 @@ session with `reason:"grant_check_failed"`, which does not claim revocation. The
 session's local grant deadline remains enforced throughout this grace period.
 Expiry and confirmed terminal grants retain `grant_expired` and `grant_ended`
 respectively.
+
+### Private account quota snapshots
+
+`PUT /v1/me/runtime` accepts an optional extended `quota`. Agent list, agent
+get and overview responses resolve the agent's current account binding under
+`runtime.quota`; clients do not need an additional request. Existing `source`,
+`at` and `windows` remain supported. New optional fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `provider` | `codex`, `claude`, `opencode_go`, `minimax`, or `unknown` |
+| `profile_ref` | Opaque machine-local login reference, not a path or account identifier |
+| `machine_id` | Assigned by the Hub from the authenticated agent, never trusted from input |
+| `plan` | `chatgpt_subscription`, `claude_subscription`, `go`, or `coding_plan` |
+| `source_kind` | `native`, `event`, `cache`, or `official_api` |
+| `status` | `ok`, `unsupported`, `no_credentials`, `auth_required`, `throttled`, `transient_error`, or `schema_changed` |
+| `checked_at` | Time of the latest actual acquisition attempt |
+| `error_code` | Safe constant reason; never a raw HTTP body, token, or process error |
+
+Windows add optional `duration_sec` and `model_scope`. `used` remains the share
+used, in `[0,1]`; remaining is `1-used`. A missing window or reset is unknown,
+not a full allowance. In particular, `primary` is not necessarily a five-hour
+window. When native events update individual windows, `at` is the oldest included
+observation, so an untouched weekly window is never made fresh by a five-hour
+update. Missing numeric measurements are omitted, never reported as zero used.
+An unsuccessful check
+preserves the previous numbers and their original time. No successful sample
+means an empty `windows` array and zero `at`; do not display numeric remaining
+quota in that case. Show the original data time when a sample is old (for
+example, over 15 minutes) or a subsequent check failed.
+
+The Hub stores one snapshot per owner, machine, provider and login reference.
+Each agent's runtime stores its current reference. New bindings do not inherit
+old profile values, and a pending association does not overwrite an existing
+successful shared sample. Snapshot updates and binding updates are transactional.
+The default reader is the computer owner's console or the reporting agent itself.
+Transferring an agent does not transfer its former computer owner's account data.
+Other agents, project coordinators and administrative member roles do not inherit
+account visibility. The explicitly configured Hub master credential retains
+recovery access. Unauthorized responses omit the entire `quota`, including its
+reference. Legacy runner quotas receive the same private response filtering.
+
+New runners connecting to older Hubs with strict schemas omit the extended quota
+on a schema rejection, rather than downgrade private values to legacy public
+runtime fields. Other runtime fields continue to report normally.

@@ -251,7 +251,7 @@ func (s *Server) setAgentOwner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r, "agent.owner", string(a.Name), "now owned by "+m.Name)
-	writeJSON(w, http.StatusOK, s.agentDTO(a))
+	writeJSON(w, http.StatusOK, s.agentDTO(r, a))
 }
 
 func (s *Server) setMachineOwner(w http.ResponseWriter, r *http.Request) {

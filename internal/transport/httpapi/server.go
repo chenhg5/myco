@@ -428,7 +428,7 @@ func (s *Server) agent(h func(http.ResponseWriter, *http.Request, *domain.Agent)
 			writeError(w, err)
 			return
 		}
-		h(w, r, a)
+		h(w, r.WithContext(context.WithValue(r.Context(), callerAgentKey{}, a)), a)
 	}
 }
 
@@ -493,7 +493,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		}
 		s.record(r, action, string(out.Agent.Name), "")
 	}
-	writeJSON(w, status, api.RegisterResponse{Agent: s.agentDTO(out.Agent), Token: out.Token, Created: out.Created, DryRun: dry})
+	writeJSON(w, status, api.RegisterResponse{Agent: s.agentDTO(r, out.Agent), Token: out.Token, Created: out.Created, DryRun: dry})
 }
 
 func (s *Server) removeAgent(w http.ResponseWriter, r *http.Request) {
@@ -509,7 +509,7 @@ func (s *Server) removeAgent(w http.ResponseWriter, r *http.Request) {
 	if !dry {
 		s.record(r, "agent.remove", string(a.Name), "")
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"agent": s.agentDTO(a), "removed": !dry, "dry_run": dry})
+	writeJSON(w, http.StatusOK, map[string]any{"agent": s.agentDTO(r, a), "removed": !dry, "dry_run": dry})
 }
 
 // cleanupAgents removes the nodes offline for a while that the caller may
@@ -544,7 +544,7 @@ func (s *Server) cleanupAgents(w http.ResponseWriter, r *http.Request) {
 			}
 			s.record(r, "agent.remove", string(a.Name), fmt.Sprintf("cleanup: offline %d+ days", req.OfflineDays))
 		}
-		out.Agents = append(out.Agents, s.agentDTO(a))
+		out.Agents = append(out.Agents, s.agentDTO(r, a))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -562,7 +562,7 @@ func (s *Server) kickAgent(w http.ResponseWriter, r *http.Request) {
 	if !dry {
 		s.record(r, "agent.kick", string(a.Name), "")
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"agent": s.agentDTO(a), "kicked": !dry, "dry_run": dry})
+	writeJSON(w, http.StatusOK, map[string]any{"agent": s.agentDTO(r, a), "kicked": !dry, "dry_run": dry})
 }
 
 func (s *Server) createConsoleToken(w http.ResponseWriter, r *http.Request) {
@@ -624,7 +624,7 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 	v := s.viewerOf(r)
 	for _, a := range list {
 		if v.Sees(a) {
-			out.Agents = append(out.Agents, s.agentDTO(a))
+			out.Agents = append(out.Agents, s.agentDTO(r, a))
 		}
 	}
 	ptrs := make([]*api.Agent, len(out.Agents))
@@ -645,14 +645,14 @@ func (s *Server) getAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	dto := s.agentDTO(a)
+	dto := s.agentDTO(r, a)
 	s.attachResume(r, a, &dto)
 	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
-	dto := s.agentDTO(a)
+	dto := s.agentDTO(r, a)
 	if s.resume != nil {
 		if c, err := s.resume.Get(r.Context(), a.Name); err == nil {
 			info := s.resumeInfo(c)
@@ -673,7 +673,7 @@ func (s *Server) bind(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, s.agentDTO(a))
+	writeJSON(w, http.StatusOK, s.agentDTO(r, a))
 }
 
 func (s *Server) waitPending(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
@@ -940,7 +940,7 @@ func (s *Server) enrollSession(w http.ResponseWriter, r *http.Request) {
 	if out.Created && !dry {
 		status = http.StatusCreated
 	}
-	writeJSON(w, status, api.RegisterResponse{Agent: s.agentDTO(out.Agent), Token: out.Token, Created: out.Created, DryRun: dry})
+	writeJSON(w, status, api.RegisterResponse{Agent: s.agentDTO(r, out.Agent), Token: out.Token, Created: out.Created, DryRun: dry})
 }
 
 // by is the agent changing itself (nil: a person); see recordEdit.
@@ -959,7 +959,7 @@ func (s *Server) setLabels(w http.ResponseWriter, r *http.Request, name string, 
 		return
 	}
 	s.recordEdit(r, by, was, a)
-	writeJSON(w, http.StatusOK, s.agentDTO(a))
+	writeJSON(w, http.StatusOK, s.agentDTO(r, a))
 }
 
 func (s *Server) setSkills(w http.ResponseWriter, r *http.Request, name string, by *domain.Agent) {
@@ -977,7 +977,7 @@ func (s *Server) setSkills(w http.ResponseWriter, r *http.Request, name string, 
 		return
 	}
 	s.recordEdit(r, by, was, a)
-	dto := s.agentDTO(a)
+	dto := s.agentDTO(r, a)
 	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
 }
@@ -999,7 +999,7 @@ func (s *Server) setVisibility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(r, "agent.visibility", string(a.Name), string(a.Visibility))
-	dto := s.agentDTO(a)
+	dto := s.agentDTO(r, a)
 	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
 }
@@ -1043,7 +1043,7 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name stri
 	if admin && req.AllowFrom != nil {
 		s.record(r, "agent.update", string(a.Name), "allow_from: "+orNone(strings.Join(*req.AllowFrom, ", ")))
 	}
-	dto := s.agentDTO(a)
+	dto := s.agentDTO(r, a)
 	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
 }
@@ -1107,7 +1107,7 @@ func (s *Server) myStatus(w http.ResponseWriter, r *http.Request, a *domain.Agen
 		writeError(w, err)
 		return
 	}
-	dto := s.agentDTO(got)
+	dto := s.agentDTO(r, got)
 	s.enrich(r.Context(), &dto)
 	writeJSON(w, http.StatusOK, dto)
 }
@@ -1267,7 +1267,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		if !see.Sees(a.Agent) {
 			continue
 		}
-		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held, Watching: a.Watching, Asking: a.Asking,
+		st := api.AgentStatus{Agent: s.agentDTO(r, a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held, Watching: a.Watching, Asking: a.Asking,
 			Stale: a.Stale, StaleTasks: a.StaleIDs}
 		st.Agent.Watching = a.Watching
 		st.Goal = goalBrief(a.Goal)
@@ -1933,6 +1933,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		return
 	}
 	in.RunnerInstance, in.RestartingUntil, in.Away = a.Runtime.RunnerInstance, a.Runtime.RestartingUntil, a.Runtime.Away
+	in.Quota = quotaDTO(s.machines.AccountQuota(r.Context(), a))
 	writeJSON(w, http.StatusOK, in)
 }
 
