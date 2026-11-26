@@ -219,7 +219,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		}
 	} else {
 		h, err = sh.registry.New(name, harness.Options{Binary: first(ov.binary, rc.Binary), Args: args, Command: first(ov.command, rc.Command),
-			Model: first(ov.model, rc.Model), Access: access, Template: rc.Template, Exec: execSpec})
+			Model: first(ov.model, rc.Model), Access: access, Template: rc.Template, Exec: execSpec, ACPTransport: rc.ACPTransport})
 		if err != nil {
 			return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
 		}

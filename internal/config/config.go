@@ -55,14 +55,15 @@ type Config struct {
 
 // Runner configures `myco runner start`.
 type Runner struct {
-	Harness     string   `yaml:"harness,omitempty" json:"harness,omitempty"`
-	Binary      string   `yaml:"binary,omitempty" json:"binary,omitempty"`
-	Args        []string `yaml:"args,omitempty" json:"args,omitempty"`
-	Command     string   `yaml:"command,omitempty" json:"command,omitempty"`
-	Workdir     string   `yaml:"workdir,omitempty" json:"workdir,omitempty"`
-	Timeout     string   `yaml:"timeout,omitempty" json:"timeout,omitempty"`
-	Concurrency int      `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
-	PollWait    string   `yaml:"poll_wait,omitempty" json:"poll_wait,omitempty"`
+	ACPTransport string   `yaml:"acp_transport,omitempty" json:"acp_transport,omitempty"`
+	Harness      string   `yaml:"harness,omitempty" json:"harness,omitempty"`
+	Binary       string   `yaml:"binary,omitempty" json:"binary,omitempty"`
+	Args         []string `yaml:"args,omitempty" json:"args,omitempty"`
+	Command      string   `yaml:"command,omitempty" json:"command,omitempty"`
+	Workdir      string   `yaml:"workdir,omitempty" json:"workdir,omitempty"`
+	Timeout      string   `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Concurrency  int      `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
+	PollWait     string   `yaml:"poll_wait,omitempty" json:"poll_wait,omitempty"`
 	// EnvFile holds KEY=VALUE lines passed only to this agent's CLI (e.g.
 	// CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`). Keep it chmod 600.
 	EnvFile string `yaml:"env_file,omitempty" json:"env_file,omitempty"`

@@ -174,6 +174,8 @@ type Harness interface {
 
 // Options configures a harness instance.
 type Options struct {
+	// ACPTransport overrides the ACP transport (stdio or streamable-http).
+	ACPTransport string
 	// Binary overrides the executable (e.g. a full path to claude).
 	Binary string
 	// Args are extra arguments appended to the harness invocation.

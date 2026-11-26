@@ -82,7 +82,7 @@ var ACPPresets = map[string]acp.Spec{
 	"goose":     {Binary: "goose", Args: []string{"acp"}, Login: "run goose configure on this machine"},
 	"copilot":   {Binary: "copilot", Args: []string{"--acp"}, Login: "run copilot on this machine and sign in"},
 	"auggie":    {Binary: "auggie", Args: []string{"--acp"}, Login: "run auggie login on this machine"},
-	"codebuddy": {Binary: "codebuddy", Args: []string{"--acp"}, Login: "run codebuddy on this machine and sign in"},
+	"codebuddy": {Binary: "codebuddy", Transport: "streamable-http", Args: []string{"--acp"}, ModelArgs: []string{"--model", "{model}"}, Login: "run codebuddy on this machine and sign in"},
 	"kilo":      {Binary: "kilo", Args: []string{"acp"}, Login: "run kilo on this machine and sign in"},
 	"cline":     {Binary: "cline", Args: []string{"--acp"}, Login: "run cline on this machine and sign in"},
 	"grok":      {Binary: "grok", Args: []string{"agent", "stdio"}, Login: "run grok on this machine and sign in"},
@@ -153,7 +153,7 @@ func Binary(name string) string {
 		return p.Binary
 	}
 	if p, ok := ACPPresets[name]; ok {
-		return p.Binary
+		return harness.ResolveAgentBinary(p.Binary)
 	}
 	return ""
 }

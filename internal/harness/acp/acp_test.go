@@ -28,6 +28,10 @@ func TestMain(m *testing.M) {
 // fakeAgent speaks just enough ACP for the scenarios below. It writes what
 // it saw (arguments, methods, permission answers) to MYCO_FAKE_LOG.
 func fakeAgent(scenario string) {
+	if strings.HasPrefix(scenario, "http-") {
+		fakeHTTPAgent()
+		return
+	}
 	logf, _ := os.Create(os.Getenv("MYCO_FAKE_LOG"))
 	defer logf.Close()
 	note := func(format string, a ...any) { fmt.Fprintf(logf, format+"\n", a...) }
