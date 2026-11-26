@@ -3577,6 +3577,15 @@ const server = http.createServer(async (req, res) => {
           : `th_c_${state.counter += 1}`;
       const atts = (Array.isArray(body.attachments) ? body.attachments : []).map((id) => uploads.get(id)).filter(Boolean);
       if (Array.isArray(body.attachments) && atts.length !== body.attachments.length) return fail(res, 404, "not_found", "附件不存在");
+      // (a note in your name, as a workflow sends one: nothing to answer)
+      if (body.type === "note") {
+        // (in the thread of the message it names, when it names one)
+        const of = typeof body.of === "string" ? Object.values(hub.threads || {}).flat().find((m) => m.id === body.of) : null;
+        const note = makeMessage({ thread_id: of ? of.thread_id : threadId, from: CONSOLE, to, type: "note", status: "done", body: text, created_at: iso(0), updated_at: iso(0) });
+        if (!hub.threads) hub.threads = {};
+        (hub.threads[note.thread_id] ||= []).push(note);
+        return send(res, 201, note);
+      }
       const msg = makeMessage({
         thread_id: threadId, from: CONSOLE, to, type: "task", status: afterTask ? "held" : "queued",
         body: text, created_at: iso(0), updated_at: iso(0),

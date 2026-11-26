@@ -319,11 +319,11 @@ const NEXT_KEY = process.platform === "darwin" ? "Meta+Enter" : "Control+Enter";
 
 /** A message written from "another device": straight to the mock, so two
  *  tasks can be on their way at once (the box adds to the running one now). */
-async function sendFromElsewhere(hubId, agent, body) {
+async function sendFromElsewhere(hubId, agent, body, extra = {}) {
   const r = await fetch(`http://${HOST}:${mockPort()}/app/hubs/${hubId}/messages`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ to: agent, body }),
+    body: JSON.stringify({ to: agent, body, ...extra }),
   });
   if (!r.ok) throw new Error(`直接发一条失败：HTTP ${r.status}`);
   return r.json();
@@ -2937,6 +2937,54 @@ async function runMatrix(browser, size, scheme) {
     // A chat with nothing in it yet: the agent, large, and a question.
     // What was typed and not sent stays with its chat when you go to
     // another and come back; an empty box is one line, whatever its hint.
+    // A note in your name (a workflow sends one when it is done) that comes
+    // while your task is still at work: what the agent does after it goes
+    // on under the note, never above it.
+    await step("单聊 · 运行中来的备注", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      await box.fill("保留任务：运行中来一条备注");
+      await box.press("Enter");
+      const mine = page.locator(".conv-detail .conv-msg.is-me", { hasText: "保留任务：运行中来一条备注" }).last();
+      await mine.waitFor({ timeout: 10_000 });
+      await page.waitForFunction(() => {
+        const els = [...document.querySelectorAll(".conv-detail .conv-msg.is-me[data-msg]")].filter((e) => e.textContent.includes("保留任务：运行中来一条备注"));
+        return els.length && !els[els.length - 1].getAttribute("data-msg").startsWith("pending");
+      }, null, { timeout: 10_000 });
+      const task = { id: await mine.getAttribute("data-msg") };
+      await sleep(600);
+      const note = await sendFromElsewhere("hub_studio", "review-cloud", "[工作流「发版演练」完成了] 运行 run_smoke", { type: "note", of: task.id });
+      const noteEl = page.locator(`.conv-detail [data-msg="${note.id}"]`);
+      await noteEl.waitFor({ timeout: 15_000 });
+      const after = new Date(new Date(note.created_at).getTime() + 500).toISOString();
+      const traceURL = `**/app/hubs/hub_studio/messages/${task.id}/trace*`;
+      await page.route(traceURL, async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        const seq = Math.max(0, ...(json.events || []).map((e) => e.seq)) + 1;
+        json.events = [...(json.events || []),
+          { seq, kind: "step", at: after, data: { kind: "text", text: "备注之后接着做的事" } },
+          { seq: seq + 1, kind: "step", at: after, data: { kind: "tool", tool: "Bash", id: "after-note", input: "git status" } }];
+        await route.fulfill({ response, json });
+      });
+      try {
+        await page.locator(".conv-detail .trace-say", { hasText: "备注之后接着做的事" }).first().waitFor({ timeout: 15_000 });
+        const order = await page.evaluate((id) => {
+          const n = document.querySelector(`.conv-detail [data-msg="${id}"]`);
+          const says = [...document.querySelectorAll(".conv-detail .trace-say")].filter((e) => e.textContent.includes("备注之后接着做的事"));
+          return { n: says.length, below: !!n && says.every((x) => !!(n.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING)) };
+        }, note.id);
+        if (order.n !== 1 || !order.below) throw new Error(`备注之后对方做的事应接在备注下面，只出现一处（实际 ${order.n} 处，${order.below ? "在下面" : "有在上面的"}）`);
+        await settle(page, 200);
+        await shot(page, size, scheme, "chat-note-mid-run");
+      } finally {
+        await page.unroute(traceURL);
+        await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/messages/${task.id}/stop`, { method: "POST" });
+      }
+      await noRound(page);
+    });
+
     await step("单聊 · 发文件", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const box = page.locator(".conv-compose-box");

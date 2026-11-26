@@ -2075,6 +2075,26 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (!host || !inRun(byId.get(host))) continue;
     laterSteers.set(host, [...(laterSteers.get(host) || []), m].sort((a, b) => a.created_at.localeCompare(b.created_at)));
   }
+  // A note of yours (one a workflow sends in your name, say) that comes
+  // while a task of yours is still at work cuts its run the same way: what
+  // it does after goes on under the note, not above it. (Not a decision
+  // you made: that is one quiet line.)
+  const partTask = new Map<string, string>();
+  for (const m of shown || []) {
+    if (m.type !== "note" || !isMe(m.from, row?.hub) || decisionOf(m.body)) continue;
+    let task: Message | undefined;
+    for (const x of shown || []) {
+      if (x.type !== "task" || !inRun(x) || x.created_at >= m.created_at) continue;
+      const ans = answerOf.get(x.id);
+      if (ans ? ans.created_at <= m.created_at : !isOpen(x.status)) continue;
+      if (!task || x.created_at > task.created_at) task = x;
+    }
+    if (!task) continue;
+    const host = hostOf(task.id, m.created_at);
+    if (!host || !inRun(byId.get(host))) continue;
+    partTask.set(m.id, task.id);
+    laterSteers.set(host, [...(laterSteers.get(host) || []), m].sort((a, b) => a.created_at.localeCompare(b.created_at)));
+  }
   // Each addition's part: the task it adds to, from when it was sent; and
   // the run it cut (host), when that is another task, whose own steps go on
   // there too.
@@ -2082,7 +2102,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   for (const [hid, list] of laterSteers) {
     const hostTask = byId.get(hid)!;
     list.forEach((s, i) => {
-      const task = byId.get(s.reply_to!)!;
+      const task = byId.get(partTask.get(s.id) || s.reply_to!)!;
       steerWindow.set(s.id, { task, host: hostTask.id !== task.id ? hostTask : undefined, from: s.created_at, until: list[i + 1]?.created_at ?? untilOf.get(hid), last: i === list.length - 1 });
     });
   }
@@ -2351,7 +2371,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         {/* What you added later, drawn where you sent it: the task's steps
             and progress since then go on under it (its loading too, while
             this is the last part). */}
-        {m.type === "steer" && steerWindow.has(m.id) && (() => {
+        {(m.type === "steer" || m.type === "note") && steerWindow.has(m.id) && (() => {
           const w = steerWindow.get(m.id)!;
           const t = w.task;
           const live = w.last && !w.until;
