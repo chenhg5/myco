@@ -45,12 +45,13 @@ type Agent struct {
 	// State is working (has a task in progress or held), pending (tasks
 	// queued, none started), idle or offline; Queued/InProgress/Held count
 	// open messages addressed to it.
-	State      string `json:"state,omitempty"`
-	Queued     int    `json:"queued"`
-	InProgress int    `json:"in_progress"`
-	Held       int    `json:"held"`
-	Watching   int    `json:"watching"`
-	Asking     int    `json:"asking,omitempty"`
+	State      string     `json:"state,omitempty"`
+	Queued     int        `json:"queued"`
+	InProgress int        `json:"in_progress"`
+	Held       int        `json:"held"`
+	Watching   int        `json:"watching"`
+	Goal       *GoalBrief `json:"goal,omitempty"`
+	Asking     int        `json:"asking,omitempty"`
 	// StatusText is the agent's public progress line (myco agent status set).
 	StatusText  string     `json:"status_text,omitempty"`
 	StatusAt    *time.Time `json:"status_at,omitempty"`
@@ -752,12 +753,13 @@ type Viewer struct {
 
 // AgentStatus is one agent with live counters (GET /v1/overview).
 type AgentStatus struct {
-	Agent      Agent  `json:"agent"`
-	State      string `json:"state"` // working | pending | idle | offline
-	Queued     int    `json:"queued"`
-	InProgress int    `json:"in_progress"`
-	Held       int    `json:"held"`
-	Watching   int    `json:"watching"`
+	Agent      Agent      `json:"agent"`
+	State      string     `json:"state"` // working | pending | idle | offline
+	Queued     int        `json:"queued"`
+	InProgress int        `json:"in_progress"`
+	Held       int        `json:"held"`
+	Watching   int        `json:"watching"`
+	Goal       *GoalBrief `json:"goal,omitempty"`
 	// Asking counts held tasks waiting on a question to their sender
 	// (myco message ask); they are in Held too. Absent on older hubs.
 	Asking int `json:"asking,omitempty"`

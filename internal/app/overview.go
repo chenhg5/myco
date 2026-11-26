@@ -34,6 +34,7 @@ type AgentOverview struct {
 	StaleIDs []string
 	Held     int
 	Watching int
+	Goal     *domain.Goal
 	// Asking counts held tasks waiting on a question to their sender (they
 	// are in Held too).
 	Asking int
@@ -52,6 +53,7 @@ type Overview struct {
 
 // OverviewService builds dashboard snapshots.
 type OverviewService struct {
+	goals   domain.GoalRepository
 	watches domain.WatchRepository
 
 	agents       domain.AgentRepository
@@ -88,6 +90,22 @@ func NewOverviewService(agents domain.AgentRepository, messages domain.MessageRe
 	return &OverviewService{agents: agents, messages: messages, clock: clock, onlineWindow: onlineWindow}
 }
 
+func (s *OverviewService) SetGoals(g domain.GoalRepository) { s.goals = g }
+func (s *OverviewService) goalMap(ctx context.Context) (map[string]*domain.Goal, error) {
+	out := map[string]*domain.Goal{}
+	if s.goals == nil {
+		return out, nil
+	}
+	rs, e := s.goals.List(ctx, true)
+	if e != nil {
+		return nil, e
+	}
+	for _, r := range rs {
+		g := r.Goal
+		out[g.Agent] = &g
+	}
+	return out, nil
+}
 func (s *OverviewService) SetWatches(w domain.WatchRepository) { s.watches = w }
 func (s *OverviewService) watchCounts(ctx context.Context) (map[string]int, error) {
 	out := map[string]int{}
@@ -119,6 +137,10 @@ func (s *OverviewService) States(ctx context.Context) (map[domain.AgentName]Agen
 	if err != nil {
 		return nil, err
 	}
+	goals, err := s.goalMap(ctx)
+	if err != nil {
+		return nil, err
+	}
 	watching, err := s.watchCounts(ctx)
 	if err != nil {
 		return nil, err
@@ -128,6 +150,7 @@ func (s *OverviewService) States(ctx context.Context) (map[domain.AgentName]Agen
 	for _, a := range agents {
 		v := s.stateOf(a, counts[a.Name], acts[a.Name], now)
 		v.Watching = watching[string(a.Name)]
+		v.Goal = goals[string(a.Name)]
 		out[a.Name] = v
 	}
 	return out, nil
@@ -180,6 +203,10 @@ func (s *OverviewService) Snapshot(ctx context.Context, viewer *domain.Agent, re
 	if err != nil {
 		return nil, err
 	}
+	goals, err := s.goalMap(ctx)
+	if err != nil {
+		return nil, err
+	}
 	watching, err := s.watchCounts(ctx)
 	if err != nil {
 		return nil, err
@@ -189,6 +216,7 @@ func (s *OverviewService) Snapshot(ctx context.Context, viewer *domain.Agent, re
 	for _, a := range agents {
 		o := s.stateOf(a, counts[a.Name], acts[a.Name], now)
 		o.Watching = watching[string(a.Name)]
+		o.Goal = goals[string(a.Name)]
 		if (viewer == nil || viewer.Name == a.Name) && o.InProgress+o.Stale+o.Held+o.Queued > 0 {
 			if o.Current, err = s.messages.ListOpen(ctx, a.Name, 10); err != nil {
 				return nil, err

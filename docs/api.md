@@ -1446,3 +1446,56 @@ The public bridge preserves these reasons without exposing process paths.
 Deleting the last dedicated agent profile also disables its automatic recreation
 on this App configuration. Create a new personal profile and explicitly allow
 agent access if you want to use browser actions again.
+
+## Goals: bounded work on an objective
+
+Goals are plaintext objectives set by a person or project coordinator for an agent.
+Only its owner, creator, Hub administrators, or its current project coordinator
+may create/manage a goal; the target agent may read it and report its own turns,
+but cannot grant itself more time, resume, or change the objective. An unrelated
+agent and another agent sharing the target's owner do not inherit human authority.
+Shell/exec and machine nodes cannot be goal targets.
+One active or paused goal is allowed per agent. The objective and success criteria
+are immutable. Existing Hubs return 404; existing runners need no new protocol.
+
+| Method | Path | Body / response |
+|---|---|---|
+| POST | `/v1/goals` | `{agent,objective,done_when,project?,thread?,every_sec?,max_rounds?,for_sec?}` → Goal |
+| GET | `/v1/goals?agent=&project=&state=active\|all` | `{goals: Goal[]}`; active includes paused goals |
+| GET | `/v1/goals/{id}` | `{goal: Goal, rounds: GoalRound[]}` |
+| POST | `/v1/goals/{id}/pause`, `/resume`, `/stop` | `{reason?}` → Goal |
+| PATCH | `/v1/goals/{id}` | `{every_sec?,max_rounds?,for_sec?}` → Goal |
+| POST | `/v1/goals/{id}/rounds` | `{message,summary,progressed,next_step?,blocked?,achieved?,abandoned?,reason?}` → Goal |
+
+Mutations support `?dry_run=true` without persistence, wakes, or audit side effects.
+Defaults: 1800 seconds, 16 turns, 28800 seconds. Base intervals are 900/1800/3600
+seconds; turn limits are 1–256. Deadlines, including patches calculated from now,
+must remain within eight hours of the original start. Resume preserves the deadline,
+round count, and no-progress count. Paused goals still expire. `round_limit` ends
+in state `stopped`. Other states are `active`, `paused`, `achieved`, `abandoned`,
+`expired`, and `stopped`. All timestamps are RFC3339.
+
+Goal fields are `id` (`gol_...`), `agent`, `project?`, `thread`, `objective`,
+`done_when`, `every_sec`, `base_every_sec`, `max_rounds`, `deadline`, `round`,
+`no_progress`, `last_summary?`, `next_step?`, `next_wake_at?`, `state`, `started_at`,
+`ended_at?`, `ended_by?`, `outcome?`, and `created_by`. A round contains `goal`,
+`round`, `started_at`, `ended_at?`, `summary`, `next_step`, `progressed`, `blocked`,
+and its wake-task `message`. Dispatch increments `round`. A report's `ended_at`
+marks report completion; scheduling additionally waits for its task to finish.
+
+Reports require the current acknowledged round's `message` and explicit boolean
+`progressed`. A duplicate identical report is idempotent; conflicting or stale
+reports are rejected. Achieved/abandoned require a reason. Two consecutive turns
+without progress double the interval, subsequent unsuccessful turns double it
+again (maximum four hours); four unsuccessful turns or `blocked` pause and notify
+the creator. Progress resets the interval. A terminal task without a report counts
+as no progress. No next turn is dispatched while its predecessor is open.
+
+Task creation, round state, pause/terminal notification are committed atomically.
+Pausing/ending removes a wake which is only queued or delivered; an already
+acknowledged/held task is not interrupted. Any later report cannot revive an ended
+goal. Human notifications return to their console thread; agent coordinators get
+a note in the goal thread. Goal creation/control/report operations are audited.
+Agent lists and overview include optional `goal: {id,objective,round,max_rounds,
+next_wake_at?,state}`; objective is truncated to 200 characters. This is independent
+of `watching`, `held`, and `queued`.

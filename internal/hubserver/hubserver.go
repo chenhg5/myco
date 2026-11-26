@@ -106,6 +106,7 @@ type Hub struct {
 	Automations *app.AutomationService
 	// Workflows walks the workspace's workflow runs (Run).
 	Workflows *app.WorkflowService
+	Goals     *app.GoalService
 	Watches   *app.WatchService
 	Close     func() error
 	// SetPublicURL changes the URL used in join links (e.g. a tunnel's).
@@ -295,6 +296,9 @@ func Build(o Options) (*Hub, error) {
 	messages.SetWatches(watches)
 	overview.SetWatches(sqlite.NewWatchRepo(db))
 	srv.SetWatches(watches)
+	goals := app.NewGoalService(sqlite.NewGoalRepo(db), agentsRepo, messages, projectSvc, audit, bus, ids, clock)
+	srv.SetGoals(goals)
+	overview.SetGoals(sqlite.NewGoalRepo(db))
 	// Notices: what each person should hear about. Sources read the
 	// features' events; sinks (a push relay, chat apps) are added here.
 	person := func(ctx context.Context, name string) string {
@@ -373,7 +377,7 @@ func Build(o Options) (*Hub, error) {
 		return nil, fmt.Errorf("open private browser screenshots: %w", err)
 	}
 	actionSvc.SetBrowserScreenshots(screenshots)
-	h := &Hub{PageAttachments: pageAttachments, Actions: actionSvc, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows, Watches: watches,
+	h := &Hub{PageAttachments: pageAttachments, Actions: actionSvc, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows, Watches: watches, Goals: goals,
 		browserScreenshotsPath: screenshotPath, Close: func() error { return errors.Join(screenshots.Close(), db.Close()) }, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}
 	if bk != nil {
 		// The first a few minutes after start, spread so that the
@@ -408,6 +412,7 @@ func Run(ctx context.Context, o Options) error {
 	go hub.Automations.Run(ctx, AutomationTick)
 	go hub.Workflows.Run(ctx, WorkflowTick)
 	go hub.Watches.Run(ctx)
+	go hub.Goals.Run(ctx)
 	if hub.RunBackups != nil {
 		go hub.RunBackups(ctx)
 	}

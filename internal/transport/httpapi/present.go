@@ -116,6 +116,7 @@ func (s *Server) enrich(ctx context.Context, dtos ...*api.Agent) {
 		for _, d := range dtos {
 			if st, ok := states[domain.AgentName(d.Name)]; ok {
 				d.Watching = st.Watching
+				d.Goal = goalBrief(st.Goal)
 				d.State, d.Queued, d.InProgress, d.Held, d.Asking = string(st.State), st.Queued, st.InProgress, st.Held, st.Asking
 			}
 		}
@@ -268,4 +269,15 @@ func modelsDTO(in []domain.RuntimeModel) []api.RuntimeModel {
 		out = append(out, api.RuntimeModel{ID: m.ID, Name: m.Name, Efforts: m.Efforts})
 	}
 	return out
+}
+
+func goalBrief(g *domain.Goal) *api.GoalBrief {
+	if g == nil {
+		return nil
+	}
+	objective := []rune(g.Objective)
+	if len(objective) > 200 {
+		objective = objective[:200]
+	}
+	return &api.GoalBrief{ID: g.ID, Objective: string(objective), Round: g.Round, MaxRounds: g.MaxRounds, NextWakeAt: g.NextWakeAt, State: g.State}
 }

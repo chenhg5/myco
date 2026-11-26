@@ -151,6 +151,7 @@ export interface Agent {
   updating?: boolean;
   /** what it is watching for in the background (myco watch); absent on older hubs */
   watching?: number;
+  goal?: GoalBrief;
   id: string; name: string; display_name?: string; aliases?: string[]; description: string;
   /** the face people chose: "look:c3-p1-f2-s1" (a drawn one) or "pic:<hash>"
    *  (a picture: GET /v1/agents/{name}/avatar); absent = drawn from the id */

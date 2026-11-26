@@ -59,3 +59,11 @@ export interface GoalStartRequest {
 export interface GoalPatchRequest { every_sec?: number; max_rounds?: number; for_sec?: number }
 /** an agent's goal at work, as agent lists and the overview show it */
 export interface GoalBrief { id: string; objective: string; round: number; max_rounds?: number; next_wake_at?: string; state?: Goal["state"] }
+
+/** Detail endpoint wraps public goal metadata and persisted turns. */
+export interface GoalDetail { goal: Goal; rounds: GoalRound[] }
+/** Reports bind to one acknowledged task, preventing delayed retries crossing turns. */
+export interface GoalReportRequest {
+  message: string; summary: string; progressed: boolean; next_step?: string;
+  blocked?: boolean; achieved?: boolean; abandoned?: boolean; reason?: string;
+}

@@ -29,6 +29,7 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
+	goals   *app.GoalService
 	watches *app.WatchService
 
 	projectInvites *app.ProjectInvitationService
@@ -252,6 +253,7 @@ func (s *Server) routes() {
 	s.automationRoutes(m)
 	s.workflowRoutes(m)
 	s.watchRoutes(m)
+	s.goalRoutes(m)
 	s.superagentRoutes(m)
 	s.actionRoutes(m)
 	s.pageRoutes(m)
@@ -1268,6 +1270,8 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		st := api.AgentStatus{Agent: s.agentDTO(a.Agent), State: string(a.State), Queued: a.Queued, InProgress: a.InProgress, Held: a.Held, Watching: a.Watching, Asking: a.Asking,
 			Stale: a.Stale, StaleTasks: a.StaleIDs}
 		st.Agent.Watching = a.Watching
+		st.Goal = goalBrief(a.Goal)
+		st.Agent.Goal = st.Goal
 		if viewer != nil {
 			if viewer.Name == a.Agent.Name && s.resume != nil {
 				if c, err := s.resume.Get(r.Context(), a.Agent.Name); err == nil {

@@ -199,3 +199,38 @@ support commands. `--task <open-task-id>` uses the same atomic hold/resume as ot
 watches; otherwise completion or expiry sends the agent one event. `watch stop` and
 `watch extend` use the existing owner/coordinator controls. The App shows the latest
 check result and time in the existing watch bar.
+
+## Goal turns
+
+A person or project coordinator may set a bounded goal for an agent. The Hub
+creates the first task as soon as the agent is idle, then waits for each round
+task to finish before scheduling another. Ordinary queued work gets priority;
+delivered or acknowledged tasks defer a wake. The runner handles an ordinary task
+in the existing session and thread, so older runners remain compatible.
+
+```bash
+myco goal start --agent worker --objective "Prepare the reviewed patch" \
+  --done-when "Tests pass and the reviewer accepts" --every 30m --for 8h --max-rounds 16
+myco goal list --agent worker
+myco goal get --id gol_example
+# Inside its round, before replying to the wake task:
+myco goal report --id gol_example --summary "Implemented validation and passed tests" \
+  --next "Ask the reviewer" --progressed
+myco goal report --id gol_example --summary "Reviewer accepted" --progressed \
+  --achieved --reason "All success criteria met"
+# Owner/coordinator controls:
+myco goal pause --id gol_example --reason "Wait for a decision"
+myco goal resume --id gol_example
+myco goal set --id gol_example --every 60m --max-rounds 8
+myco goal stop --id gol_example --reason "Priorities changed"
+```
+
+Report binds to `MYCO_MESSAGE_ID`, or explicit `--message <wake-task-id>` outside a
+runner. Use exactly one of `--progressed`/`--no-progress`; use `--blocked` when human
+help is needed, or `--abandoned --reason ...` when the objective is impossible.
+Do not substitute a task reply for a goal report. The Hub counts missing reports
+as no progress, backs off after two, and pauses after four. Pauses and all endings
+send a short summary to the creator. Goals do not authorize additional actions:
+ask for human confirmation where the original task requires it. CLI mutations
+support `--dry-run`; `myco schema` describes every command. Older Hubs require an
+upgrade to use goals.
