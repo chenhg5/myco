@@ -173,7 +173,7 @@ Common problems:
 | Port 443 refused or timing out from outside | The cloud provider's security group does not allow 443; or check `journalctl -u caddy -n 50 --no-pager` |
 | The client sometimes reports `unavailable` with HTTP 502 | The Hub is restarting; retry (exit 6) |
 
-Managing the service: `systemctl status myco-hub caddy`; logs with `journalctl -u myco-hub -f`.
+Managing the service: `systemctl status myco-hub caddy`; logs with `journalctl -u myco-hub -f`. The hub logs every request that takes a second or longer as `slow request` (method, path, status, duration, bytes; long polls are left out) and every request that failed on its side (5xx) as `request failed` with the error it answered: `journalctl -u myco-hub --since today | grep -E "slow request|request failed"` shows what is slow and what breaks. Change the threshold with `myco hub serve --slow-request 500ms` (`0s` turns it off). A hub on your own computer writes the same lines to `~/.myco/hub/hub.log`.
 
 ### 1.1 No VPS: run the Hub on your own computer
 

@@ -173,7 +173,7 @@ curl -sS <HUB_URL>/v1/health        # 正常返回 {"ok":true,"version":"v1"}
 | 外部访问 443 被拒绝或超时 | 云服务商的安全组没有放行 443；或者看 `journalctl -u caddy -n 50 --no-pager` |
 | 客户端偶尔报 `unavailable` 并提示 HTTP 502 | Hub 正在重启，可以重试（exit 6） |
 
-服务管理：`systemctl status myco-hub caddy`，日志用 `journalctl -u myco-hub -f`。
+服务管理：`systemctl status myco-hub caddy`，日志用 `journalctl -u myco-hub -f`。Hub 会把每个耗时一秒及以上的请求记成 `slow request`（方法、路径、状态码、耗时、字节数；长轮询不算），把每个在 Hub 这边失败的请求（5xx）记成 `request failed`，并带上它返回的错误：`journalctl -u myco-hub --since today | grep -E "slow request|request failed"` 就能看到哪里慢、哪里坏。阈值用 `myco hub serve --slow-request 500ms` 调（`0s` 关掉）。在自己电脑上跑的 Hub，同样的内容写在 `~/.myco/hub/hub.log`。
 
 ### 1.1 没有 VPS：在自己的电脑上开 Hub
 

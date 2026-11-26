@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/myco-ai/myco/internal/app"
 	. "github.com/myco-ai/myco/internal/cli/cmdkit"
@@ -34,6 +35,7 @@ func hubCommands() *Command {
 			{Name: "max-attempts", Kind: Int, Default: "5", Help: "Deliveries before an unacked message fails"},
 			{Name: "online-window", Kind: Duration, Default: "90s", Help: "Agents seen within this window count as online"},
 			{Name: "log-level", Kind: Enum, Values: []string{"debug", "info", "warn", "error"}, Default: "info", Help: "Log verbosity (stderr)"},
+			{Name: "slow-request", Kind: Duration, Default: "1s", Help: "Log requests that take this long or longer as \"slow request\" (0s: never; long polls are left out)"},
 			{Name: "public-url", Kind: String, Help: "Hub URL as agents see it (included in wake messages)"},
 			{Name: "wake-cooldown", Kind: Duration, Default: "2m", Help: "Minimum time between wakes of the same push agent"},
 			{Name: "github-webhook-secret-file", Kind: String, Help: "Enable POST /v1/ingress/github with this webhook secret"},
@@ -115,6 +117,7 @@ func hubCommands() *Command {
 				Tunnel:          tun, Version: Version, UpdateCheck: check, Apps: apps,
 				Addr: in.String("addr"), DBPath: in.String("db"), AdminToken: tok, Policy: p,
 				OnlineWindow: in.Duration("online-window"), Log: newLogger(in.String("log-level")),
+				SlowRequest:         slowRequest(in.Duration("slow-request")),
 				Dispatch:            app.DispatchPolicy{Cooldown: in.Duration("wake-cooldown"), PublicURL: in.String("public-url")},
 				GitHubWebhookSecret: ghSecret, GitHubReplyFrom: in.List("github-reply-from"),
 				FilesDir: in.String("files-dir"), Backups: backupsKeep(in.Int("backups")),
@@ -191,4 +194,13 @@ func pageAttachmentPolicy(in *Invocation) (app.PageAttachmentPolicy, error) {
 		return p, errorf("invalid_argument", ExitUsage, "", "--page-bytes-max must be an integer byte count")
 	}
 	return p, p.Validate()
+}
+
+// slowRequest: the flag's duration, 0 meaning never (the hub's own 0 means
+// its default).
+func slowRequest(d time.Duration) time.Duration {
+	if d <= 0 {
+		return -1
+	}
+	return d
 }

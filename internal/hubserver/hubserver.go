@@ -55,6 +55,10 @@ type Options struct {
 	// GitHubReplyFrom restricts which GitHub logins can answer messages.
 	GitHubReplyFrom []string
 	Log             *slog.Logger
+	// SlowRequest: a request taking this long or longer is logged as a
+	// warning (0: DefaultSlowRequest; negative: never). Long polls and
+	// streams, which wait on purpose, are left out.
+	SlowRequest time.Duration
 	// Ready, if set, receives the bound address once listening.
 	Ready func(addr string)
 	// Tunnel, if set, publishes the hub (listening on localhost) at a
@@ -432,7 +436,7 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return err
 	}
-	srv := &http.Server{Handler: logRequests(h, o.Log), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: logRequests(h, o.Log, o.SlowRequest), ReadHeaderTimeout: 10 * time.Second}
 	o.Log.Info("myco hub listening", "addr", ln.Addr().String(), "db", o.DBPath)
 	if ta, ok := ln.Addr().(*net.TCPAddr); ok && ta.IP.IsUnspecified() && o.Tunnel == nil {
 		// Reachable on the LAN: links made over localhost get the LAN address
@@ -475,9 +479,21 @@ func Run(ctx context.Context, o Options) error {
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
+	// bytes written, and the start of a failed answer's body (its error)
+	size int64
+	head []byte
 }
 
 func (s *statusRecorder) WriteHeader(code int) { s.status = code; s.ResponseWriter.WriteHeader(code) }
+
+func (s *statusRecorder) Write(b []byte) (int, error) {
+	if s.status >= 500 && len(s.head) < 512 {
+		s.head = append(s.head, b[:min(len(b), 512-len(s.head))]...)
+	}
+	n, err := s.ResponseWriter.Write(b)
+	s.size += int64(n)
+	return n, err
+}
 
 // Unwrap lets http.ResponseController reach the connection (a WebSocket, a
 // forwarded live page, streaming).
@@ -491,7 +507,25 @@ func (s *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 // Flush passes streaming on.
 func (s *statusRecorder) Flush() { _ = http.NewResponseController(s.ResponseWriter).Flush() }
 
-func logRequests(h http.Handler, log *slog.Logger) http.Handler {
+// DefaultSlowRequest is when a request is logged as slow.
+const DefaultSlowRequest = time.Second
+
+// waitsOnPurpose: a long poll (?wait=, ?wait_seconds=), a WebSocket or an
+// event stream, which take long by design: never "slow".
+func waitsOnPurpose(r *http.Request) bool {
+	q := r.URL.Query()
+	return q.Has("wait") || q.Has("wait_seconds") || r.Header.Get("Upgrade") != "" ||
+		strings.Contains(r.Header.Get("Accept"), "text/event-stream")
+}
+
+// logRequests logs every request at debug level; one that took slow or
+// longer as a warning ("slow request"), and one that failed on the hub's
+// side (5xx) as an error with what it answered ("request failed"), so a
+// hub run at the usual info level shows what is slow and what breaks.
+func logRequests(h http.Handler, log *slog.Logger, slow time.Duration) http.Handler {
+	if slow == 0 {
+		slow = DefaultSlowRequest
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: 200}
@@ -509,6 +543,14 @@ func logRequests(h http.Handler, log *slog.Logger) http.Handler {
 		if strings.HasPrefix(path, "/c/") {
 			path = "/c/<redacted>" // app links carry a console token
 		}
-		log.Debug("request", "method", r.Method, "path", path, "status", rec.status, "duration", time.Since(start).Round(time.Millisecond))
+		took := time.Since(start).Round(time.Millisecond)
+		log.Debug("request", "method", r.Method, "path", path, "status", rec.status, "duration", took)
+		switch {
+		case rec.status >= 500:
+			// (the error the hub answered: a code and a message, no secrets)
+			log.Error("request failed", "method", r.Method, "path", path, "status", rec.status, "duration", took, "error", strings.TrimSpace(string(rec.head)))
+		case slow > 0 && took >= slow && !waitsOnPurpose(r):
+			log.Warn("slow request", "method", r.Method, "path", path, "status", rec.status, "duration", took, "bytes", rec.size)
+		}
 	})
 }
