@@ -258,6 +258,7 @@ flowchart TB
 | [Antigravity](https://antigravity.google) | `google-antigravity-acp`（[社区适配器](https://github.com/sibbl/google-antigravity-acp)） | `antigravity` | ACP：实验性 |
 | [AtomCode](https://atomgit.com/atomgit_atomcode/atomcode) | `atomcode acp` | `atomcode` | ACP：实验性 |
 
+WorkBuddy 接入为实验性，需要先在 WorkBuddy 里登录。
 [CodeBuddy / WorkBuddy 接入及传输说明](docs/acp-http.md)。
 
 **原生适配**是专门写的适配器；**预设**是内置的命令行模板；**ACP** 通过 [Agent Client Protocol](https://agentclientprotocol.com) 驱动，每一步实时可见。**实验性**表示还没经过长期真实使用，欢迎反馈。Kiro 需要先 `uv tool install kiro-acp-gateway`。Antigravity 需要先 `npm install -g google-antigravity-acp`，并在这台电脑上登录 `agy`；这个适配器没法把审批转给 myco，所以权限低于「完全」时，需要审批的操作 agy 会直接拒绝；Google 的条款不允许用个人账号通过第三方工具访问 Antigravity，请改用 AI Studio 或 Vertex AI 的密钥。

@@ -18,7 +18,8 @@ precedence. When no `codebuddy` command is found, myco checks the unpacked CLI i
   The exact CLI file must exist and be executable; Linux packaging has not been
   exercised on a real machine. Custom installations can set `runner.binary`.
 
-Sign in through the CLI on that computer before starting an agent. A successful
+For WorkBuddy, sign in through WorkBuddy on that computer before starting an
+agent. For standalone CodeBuddy Code, sign in through its CLI. A successful
 ACP initialization does not imply the account is signed in: `session/new` can
 still return an authentication-required error. myco does not copy credentials
 between CodeBuddy and WorkBuddy accounts or regions.
