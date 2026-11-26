@@ -61,10 +61,18 @@ type Policy struct {
 type Plan struct {
 	CLI, Name, Workdir string
 	Access             harness.Access
+	// ProviderVars, from a provider sealed for this node (i115), go to the
+	// new agent's env file; ProviderID is that delivery's id.
+	ProviderVars map[string]string `json:"-"`
+	ProviderID   string            `json:"-"`
 }
 
 // Deps are the effects a spawn needs, injected by the CLI layer.
 type Deps struct {
+	// SealedProvider opens a provider sealed for this node with a spawn
+	// request (i115): the variables for the new agent's env file and the
+	// settings its first turn runs with. Nil: not offered.
+	SealedProvider func(ctx context.Context, cli string, p api.EncryptedProvider) (map[string]string, *harness.ProviderSettings, error)
 	// ProviderFor is how a session of cli started here signs in (the
 	// machine node's pinned provider or env-file API settings); nil: none.
 	ProviderFor func(cli string) *harness.ProviderSettings
@@ -191,8 +199,20 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	if err != nil {
 		return failed(plan, "cannot prepare %s: %v", plan.CLI, err)
 	}
+	// The machine's own sign-in, or the provider sent sealed for this node.
+	prov := n.providerFor(plan.CLI, req.Provider)
+	if sr.ProviderEncrypted != nil {
+		if n.Deps.SealedProvider == nil {
+			return denied("machine %s cannot take a provider sent with the request; update myco there", n.Machine)
+		}
+		vars, ps, err := n.Deps.SealedProvider(ctx, plan.CLI, *sr.ProviderEncrypted)
+		if err != nil {
+			return failed(plan, "the provider sent with the request could not be opened here: %v", err)
+		}
+		plan.ProviderVars, plan.ProviderID, prov = vars, sr.ProviderEncrypted.ID, ps
+	}
 	if sr.TakeOver != "" {
-		return n.takeOver(ctx, h, plan, sr, req.Env, n.providerFor(plan.CLI, req.Provider))
+		return n.takeOver(ctx, h, plan, sr, req.Env, prov)
 	}
 	if _, ok := h.(harness.Forker); sr.ForkFrom != "" && !ok {
 		return denied("%v", harness.ErrForkUnsupported)
@@ -223,7 +243,7 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	defer cancel()
 	// The machine node's provider (a pinned cc-switch provider, or API
 	// variables in its env file) is how sessions started here sign in.
-	first := harness.Request{Prompt: n.firstPrompt(req.From, plan, sr), Workdir: plan.Workdir, Env: req.Env, Provider: n.providerFor(plan.CLI, req.Provider)}
+	first := harness.Request{Prompt: n.firstPrompt(req.From, plan, sr), Workdir: plan.Workdir, Env: req.Env, Provider: prov}
 	if sr.ForkFrom != "" {
 		first.SessionID, first.Fork = sr.ForkFrom, true
 	}

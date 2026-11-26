@@ -19,6 +19,9 @@ type Manual struct {
 	APIKey  string `json:"api_key,omitempty"`
 	Model   string `json:"model,omitempty"`
 	WireAPI string `json:"wire_api,omitempty"`
+	// SmallModel is for Claude Code's background work and its haiku tier
+	// (from a model provider, i115); "" leaves them to the runner.
+	SmallModel string `json:"small_model,omitempty"`
 }
 
 func (m *Manual) Validate(app string) error {
@@ -32,7 +35,8 @@ func (m *Manual) Validate(app string) error {
 	if app != "claude" && app != "codex" {
 		return fmt.Errorf("custom providers require Claude Code or Codex")
 	}
-	if m.APIKey == "" || strings.ContainsAny(m.APIKey+m.Model+m.BaseURL, "\r\n\x00") {
+	m.SmallModel = strings.TrimSpace(m.SmallModel)
+	if m.APIKey == "" || strings.ContainsAny(m.APIKey+m.Model+m.BaseURL+m.SmallModel, "\r\n\x00") {
 		return fmt.Errorf("enter a nonempty single-line key and model without control characters")
 	}
 	if app == "codex" {
@@ -55,6 +59,9 @@ func (m Manual) Variables(app string) map[string]string {
 	vars := map[string]string{"ANTHROPIC_BASE_URL": m.BaseURL, "ANTHROPIC_AUTH_TOKEN": m.APIKey}
 	if m.Model != "" {
 		vars["ANTHROPIC_MODEL"] = m.Model
+	}
+	if m.SmallModel != "" {
+		vars["ANTHROPIC_DEFAULT_HAIKU_MODEL"], vars["ANTHROPIC_SMALL_FAST_MODEL"] = m.SmallModel, m.SmallModel
 	}
 	return vars
 }

@@ -10,6 +10,7 @@ from pathlib import Path
 REQUIRED = {"go", "windows", "web", "app-macos"}
 UI_COMBOS = ("1200-light", "1200-dark", "760-light", "760-dark")
 UI_LEGACY = {f"ui ({combo})" for combo in UI_COMBOS}
+UI_SINGLE = {f"ui ({combo} 1/1)" for combo in UI_COMBOS}
 UI_SHARDED = {f"ui ({combo} {part}/3)" for combo in UI_COMBOS for part in (1, 2, 3)}
 
 
@@ -29,7 +30,7 @@ def green(jobs, *, full=False):
         return False
     if full:
         ui = {name for name in by_name if name.startswith("ui (")}
-        if ui not in (UI_LEGACY, UI_SHARDED):
+        if ui not in (UI_LEGACY, UI_SINGLE, UI_SHARDED):
             return False
         return all(by_name[name].get("conclusion") == "success" for name in ui)
     return True

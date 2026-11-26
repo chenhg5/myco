@@ -57,22 +57,8 @@ func resolveProvider(cli, ref, envFile string) providerChoice {
 				}
 			}
 			if len(env) > 0 {
+				ps, base, model := providerFromVars(app, env)
 				name := "env file"
-				base, model := env["ANTHROPIC_BASE_URL"], env["ANTHROPIC_MODEL"]
-				ps := &harness.ProviderSettings{Env: env}
-				if app == "codex" {
-					// Custom URLs select an isolated provider. A key alone (as
-					// myco join keeps from the session) is only passed on:
-					// Codex's config.toml keeps choosing the provider, which
-					// may well be a custom one whose env_key is OPENAI_API_KEY.
-					base, model = env["OPENAI_BASE_URL"], env["OPENAI_MODEL"]
-					if base != "" {
-						ps.ConfigArgs, ps.Env = provider.CustomCodex(base, env["OPENAI_API_KEY"], model, env["OPENAI_WIRE_API"])
-					} else if model != "" {
-						ps.ConfigArgs = []string{"-c", "model=" + strconv.Quote(model)}
-					}
-				}
-				ps.Model = model
 				if u, err := url.Parse(base); err == nil && u.Host != "" {
 					name = u.Host
 				}
@@ -96,6 +82,28 @@ func resolveProvider(cli, ref, envFile string) providerChoice {
 		ch.source = "machine"
 	}
 	return ch
+}
+
+// providerFromVars is how a run of app uses provider variables (from an
+// env file, or a provider sent sealed): the settings, the base URL and the
+// model they name.
+func providerFromVars(app string, env map[string]string) (ps *harness.ProviderSettings, base, model string) {
+	base, model = env["ANTHROPIC_BASE_URL"], env["ANTHROPIC_MODEL"]
+	ps = &harness.ProviderSettings{Env: env}
+	if app == "codex" {
+		// Custom URLs select an isolated provider. A key alone (as
+		// myco join keeps from the session) is only passed on:
+		// Codex's config.toml keeps choosing the provider, which
+		// may well be a custom one whose env_key is OPENAI_API_KEY.
+		base, model = env["OPENAI_BASE_URL"], env["OPENAI_MODEL"]
+		if base != "" {
+			ps.ConfigArgs, ps.Env = provider.CustomCodex(base, env["OPENAI_API_KEY"], model, env["OPENAI_WIRE_API"])
+		} else if model != "" {
+			ps.ConfigArgs = []string{"-c", "model=" + strconv.Quote(model)}
+		}
+	}
+	ps.Model = model
+	return ps, base, model
 }
 
 // isProviderVar: variables that select Claude Code's model provider.

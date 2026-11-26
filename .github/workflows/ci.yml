@@ -39,6 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       ui: ${{ steps.c.outputs.ui }}
+      shards: ${{ steps.c.outputs.shards }}
+      parts: ${{ steps.c.outputs.parts }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,6 +50,15 @@ jobs:
         env:
           FORCE_FULL: ${{ inputs.force_full || false }}
         run: |
+          # Older frozen releases have an unsharded smoke script. Run each
+          # window once, rather than silently running it in full three times.
+          if grep -q 'const SHARD =' web/scripts/ui-smoke.mjs; then
+            echo 'shards=[1,2,3]' >> "$GITHUB_OUTPUT"
+            echo parts=3 >> "$GITHUB_OUTPUT"
+          else
+            echo 'shards=[1]' >> "$GITHUB_OUTPUT"
+            echo parts=1 >> "$GITHUB_OUTPUT"
+          fi
           if [ "$FORCE_FULL" = true ]; then echo ui=true >> "$GITHUB_OUTPUT"; exit 0; fi
           base="${{ github.event.before }}"
           if [ "${{ github.event_name }}" = pull_request ]; then base="${{ github.event.pull_request.base.sha }}"; fi
@@ -186,8 +197,8 @@ jobs:
       fail-fast: false
       matrix:
         combo: [1200-light, 1200-dark, 760-light, 760-dark]
-        shard: [1, 2, 3]
-    name: ui (${{ matrix.combo }} ${{ matrix.shard }}/3)
+        shard: ${{ fromJSON(needs.changes.outputs.shards) }}
+    name: ui (${{ matrix.combo }} ${{ matrix.shard }}/${{ needs.changes.outputs.parts }})
     steps:
       - uses: actions/checkout@v4
         with:
@@ -219,7 +230,7 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save --no-audit --no-fund "playwright@$PLAYWRIGHT"
           for i in $(seq 1 60); do [ -f /tmp/pull.code ] && break; sleep 2; done
           if [ "$(cat /tmp/pull.code 2>/dev/null)" != 0 ]; then cat /tmp/pull.log; docker pull "$PLAYWRIGHT_IMAGE"; fi
-      - name: UI smoke (${{ matrix.combo }}, part ${{ matrix.shard }}/3)
+      - name: UI smoke (${{ matrix.combo }}, part ${{ matrix.shard }}/${{ needs.changes.outputs.parts }})
         # A step that fails is tried once more; passing then is listed as
         # flaky in this job's summary and does not fail the job.
         run: |
@@ -228,7 +239,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/w" -v "$summary_dir:$summary_dir" -w /w/web \
             -e HOME=/tmp -e CI -e GITHUB_STEP_SUMMARY \
             "$PLAYWRIGHT_IMAGE" \
-            sh -c 'fc-list :lang=zh | grep -q . || echo "::warning::no CJK font in the Playwright image"; node scripts/ui-smoke.mjs --combo ${{ matrix.combo }} --shard ${{ matrix.shard }}/3'
+            sh -c 'fc-list :lang=zh | grep -q . || echo "::warning::no CJK font in the Playwright image"; node scripts/ui-smoke.mjs --combo ${{ matrix.combo }} --shard ${{ matrix.shard }}/${{ needs.changes.outputs.parts }}'
       - uses: actions/upload-artifact@v4
         if: always()
         with:

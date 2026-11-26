@@ -220,3 +220,29 @@ func TestPrivateQuotaDoesNotDowngradeToOlderPublicRuntime(t *testing.T) {
 		t.Fatalf("expected one schema fallback, got %d", calls.Load())
 	}
 }
+
+// A hub from before provider model lists keeps the models, without where
+// they came from (it refuses unknown fields).
+func TestRuntimeModelSourceFallsBackForOlderHubs(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["models_from"] != nil || body["models_at"] != nil {
+			w.WriteHeader(400)
+			fmt.Fprint(w, `{"error":"invalid_argument","message":"invalid JSON body: json: unknown field \"models_from\""}`)
+			return
+		}
+		if models, _ := body["models"].([]any); len(models) != 1 {
+			t.Errorf("fallback lost the models: %+v", body)
+		}
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, "token")
+	at := time.Now()
+	if err := c.ReportRuntime(context.Background(), api.Runtime{CLI: "claude", Models: []api.RuntimeModel{{ID: "kimi-k3"}}, ModelsFrom: "provider", ModelsAt: &at}); err != nil || calls != 2 {
+		t.Fatalf("old Hub fallback: %v calls %d", err, calls)
+	}
+}

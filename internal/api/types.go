@@ -270,6 +270,10 @@ type RunSettings struct {
 	// Access: readonly, workspace or full ("" follows the machine). Only the
 	// agent's owner may change it; left out of a request, it stays as it is.
 	Access string `json:"access,omitempty"`
+	// ProviderRef names the member's model provider (i115) the agent's
+	// custom provider came from, and which version of its key: the App
+	// offers to push a newer key. Runners ignore it.
+	ProviderRef *ProviderRef `json:"provider_ref,omitempty"`
 	// ModelsRefresh asks the runner to list the provider's models again:
 	// the App sets it to a new value (the time) and the runner asks when
 	// it changes. Runners with the "models_refresh" feature only.
@@ -285,6 +289,63 @@ type RunSettingsPatch struct {
 	Provider          *string            `json:"provider,omitempty"`
 	ProviderEncrypted *EncryptedProvider `json:"provider_encrypted,omitempty"`
 	ModelsRefresh     *string            `json:"models_refresh,omitempty"`
+	// ProviderRef, with a custom provider: the model provider it came
+	// from; {"id": ""} clears it.
+	ProviderRef *ProviderRef `json:"provider_ref,omitempty"`
+}
+
+// ProviderRef points at one of a member's model providers and the
+// version of its key that was sent.
+type ProviderRef struct {
+	ID         string `json:"id"`
+	KeyVersion int    `json:"key_version,omitempty"`
+}
+
+// ModelProvider is one of a member's model providers (i115): a vendor and
+// its addresses, kept in the workspace for every computer they add an
+// agent on. KeySealed is the API key as an end-to-end envelope that only
+// the member's own devices open (e2e.ProviderKeyHeader); the hub cannot.
+type ModelProvider struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Vendor string `json:"vendor"`
+	// AnthropicBase is for Claude Code, OpenAIBase for Codex.
+	AnthropicBase string `json:"anthropic_base,omitempty"`
+	OpenAIBase    string `json:"openai_base,omitempty"`
+	SmallModel    string `json:"small_model,omitempty"`
+	// Models as last read with the key, at ModelsAt.
+	Models     []RuntimeModel `json:"models,omitempty"`
+	ModelsAt   *time.Time     `json:"models_at,omitempty"`
+	KeySealed  string         `json:"key_sealed"`
+	KeyVersion int            `json:"key_version"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+}
+
+// ModelProviderList is a member's model providers. E2E says whether the
+// workspace has end-to-end encryption on (without it none can be added).
+type ModelProviderList struct {
+	E2E       bool            `json:"e2e"`
+	Providers []ModelProvider `json:"providers"`
+}
+
+// ModelProviderRequest adds one (POST: ID, Name, Vendor, KeySealed with
+// KeyVersion 1 required; the client picks the id, prv_..., since the key
+// is sealed for it) or changes one (PATCH: only what is set). A new
+// KeySealed comes with KeyVersion: the current one plus one for a new key,
+// or the current one when the same key is sealed again for the owner's
+// devices now.
+type ModelProviderRequest struct {
+	ID            string          `json:"id,omitempty"`
+	Name          *string         `json:"name,omitempty"`
+	Vendor        *string         `json:"vendor,omitempty"`
+	AnthropicBase *string         `json:"anthropic_base,omitempty"`
+	OpenAIBase    *string         `json:"openai_base,omitempty"`
+	SmallModel    *string         `json:"small_model,omitempty"`
+	Models        *[]RuntimeModel `json:"models,omitempty"`
+	ModelsAt      *time.Time      `json:"models_at,omitempty"`
+	KeySealed     *string         `json:"key_sealed,omitempty"`
+	KeyVersion    *int            `json:"key_version,omitempty"`
 }
 
 // Machine is a computer, server or cloud environment agents run on.
@@ -300,6 +361,9 @@ type Machine struct {
 	LastSeenAt  *time.Time `json:"last_seen_at,omitempty"`
 	// CanSpawn: its machine node is online, so sessions can be started on it.
 	CanSpawn bool `json:"can_spawn"`
+	// Node is that machine node's name (a provider is sealed for it, i115);
+	// absent from older hubs.
+	Node string `json:"node,omitempty"`
 	// Legacy: its runners predate machine reporting (grouped by host name).
 	Legacy bool     `json:"legacy,omitempty"`
 	Agents []string `json:"agents"`
@@ -852,6 +916,13 @@ type SpawnRequest struct {
 	// into the new agent instead of starting an empty one: it keeps the
 	// original's context, and the original is left untouched.
 	ForkFrom string `json:"fork_from,omitempty"`
+	// ProviderEncrypted, from the App (i115): the new agent's custom
+	// provider sealed for the machine node (its key, never in the clear),
+	// which uses it for the session's first turn and writes it to the new
+	// agent's env file. Machines with the "sealed_spawn" feature only.
+	// ProviderRef is the member's model provider it came from.
+	ProviderEncrypted *EncryptedProvider `json:"provider_encrypted,omitempty"`
+	ProviderRef       *ProviderRef       `json:"provider_ref,omitempty"`
 	// TakeOver, from the hub only (POST /v1/agents/{name}/handover): a
 	// take-over link token. The new session takes that node over instead of
 	// joining as a new agent; Brief is its first prompt (the handover note).

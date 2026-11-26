@@ -924,7 +924,7 @@ func (c *Client) ReportMachine(ctx context.Context, r api.MachineReport) error {
 func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 	if c.Sealer != nil && c.Sealer.ID != nil {
 		for _, f := range r.Features {
-			if f == "remote_provider" {
+			if f == "remote_provider" || f == "sealed_spawn" {
 				_ = c.RegisterKeys(ctx)
 				break
 			}
@@ -954,6 +954,12 @@ func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 		}
 		if r.RunnerSlots != nil && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "runner_slots"`) {
 			r.RunnerSlots = nil
+			continue
+		}
+		// Hubs before provider model lists: the models stay, without where
+		// they came from.
+		if (r.ModelsFrom != "" || r.ModelsAt != nil) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "models_from"`) || strings.Contains(apiErr.Message, `unknown field "models_at"`)) {
+			r.ModelsFrom, r.ModelsAt = "", nil
 			continue
 		}
 		if (r.ProviderHost != "" || r.Providers != nil) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "provider_host"`) || strings.Contains(apiErr.Message, `unknown field "providers"`)) {

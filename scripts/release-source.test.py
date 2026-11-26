@@ -38,6 +38,7 @@ class Gates(unittest.TestCase):
     def test_complete_legacy_and_sharded_matrices(self):
         self.assertTrue(source.green(self.full_jobs(), full=True))
         self.assertTrue(source.green(self.full_jobs(source.UI_LEGACY), full=True))
+        self.assertTrue(source.green(self.full_jobs(source.UI_SINGLE), full=True))
 
     def test_code_only_success_is_not_full_proof(self):
         self.assertFalse(source.green(self.jobs(), full=True))
@@ -145,6 +146,23 @@ WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/release.yml"
 CHECK = textwrap.dedent(WORKFLOW.read_text().split(
     "          # BEGIN release tag check", 1
 )[1].split("          # END release tag check.", 1)[0].split("\n", 1)[1])
+
+
+class UIShardCompatibility(unittest.TestCase):
+    def test_legacy_script_runs_each_window_once_and_new_script_uses_three_parts(self):
+        ci = WORKFLOW.with_name("ci.yml").read_text()
+        prefix = textwrap.dedent(ci.split("        run: |\n", 1)[1].split("          if [ \"$FORCE_FULL\"", 1)[0])
+        for script, count in (("async function runMatrix() {}", "1"), ("const SHARD = {};", "3")):
+            with self.subTest(count=count), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                (root / "web/scripts").mkdir(parents=True)
+                (root / "web/scripts/ui-smoke.mjs").write_text(script)
+                output = root / "output"
+                subprocess.run(["bash", "-euo", "pipefail", "-c", prefix], cwd=root,
+                               env={**os.environ, "GITHUB_OUTPUT": str(output)}, check=True)
+                values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+                self.assertEqual(values["parts"], count)
+                self.assertEqual(values["shards"], "[1]" if count == "1" else "[1,2,3]")
 
 
 class ReleaseTags(unittest.TestCase):

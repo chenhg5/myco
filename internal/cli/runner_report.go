@@ -394,6 +394,10 @@ func runnerFeatures(h harness.Harness) []string {
 	if h.Name() != "exec" && h.Name() != "machine" {
 		return []string{"usage", "command_watch"}
 	}
+	if h.Name() == "machine" {
+		// It opens a new agent's provider sealed for it (i115).
+		return []string{"usage", "sealed_spawn"}
+	}
 	return []string{"usage"}
 }
 

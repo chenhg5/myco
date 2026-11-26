@@ -65,6 +65,29 @@ export interface RunSettings {
   access?: RuntimeAccess | "";
   /** the App's last request to list the provider's models again (a time); runners with "models_refresh" ask when it changes */
   models_refresh?: string;
+  /** the member's model provider its custom provider came from, and the version of its key (i115) */
+  provider_ref?: { id: string; key_version?: number };
+}
+
+/** One of the member's model providers (i115), as the App's backend lists it:
+ *  never the key, only whether this device can open it and its last four characters. */
+export interface ModelProvider {
+  id: string;
+  name: string;
+  /** a catalogue id (opencode_go, deepseek, kimi, minimax, zhipu, qwen, doubao, openrouter) or "custom" */
+  vendor: string;
+  anthropic_base?: string;
+  openai_base?: string;
+  small_model?: string;
+  models?: RuntimeModel[];
+  models_at?: string;
+  key_version: number;
+  key_readable: boolean;
+  key_hint?: string;
+  /** this device sealed the key again for the member's devices now */
+  rewrapped?: boolean;
+  created_at: string;
+  updated_at: string;
 }
 /** What the node actually runs; absent on nodes reported by old runners. */
 /** A model a CLI offers: the id --model takes, a display name, the efforts it supports. */
@@ -220,6 +243,8 @@ export interface Machine {
   online: boolean; last_seen_at?: string;
   /** False when the runner is too old or not running; such a machine cannot spawn. */
   can_spawn: boolean;
+  /** its machine node's name (a provider is sealed for it; hubs with model providers) */
+  node?: string;
   /** Names of the nodes on it (machine nodes excluded). */
   agents: string[];
   /** Its runners predate machine reporting: grouped by host name, cannot be renamed. */

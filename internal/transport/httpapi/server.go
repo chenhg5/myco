@@ -84,6 +84,7 @@ type Server struct {
 	appSync         func(context.Context) api.AppSync
 	appFreshen      func(context.Context)
 	voice           *app.VoiceSettingsService
+	modelProviders  *app.ModelProviderService
 	activity        sync.Map   // message id -> time.Time; transient task heartbeat
 	aliasesMu       sync.Mutex // serialize alias permission checks with writes
 	namesMu         sync.Mutex
@@ -227,6 +228,10 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/console/recent", s.admin(s.consoleRecent))
 	m.HandleFunc("GET /v1/console/hidden", s.admin(s.consoleHidden))
 	m.HandleFunc("POST /v1/console/hidden", s.admin(s.consoleHide))
+	m.HandleFunc("GET /v1/console/providers", s.admin(s.listModelProviders))
+	m.HandleFunc("POST /v1/console/providers", s.admin(s.createModelProvider))
+	m.HandleFunc("PATCH /v1/console/providers/{id}", s.admin(s.updateModelProvider))
+	m.HandleFunc("DELETE /v1/console/providers/{id}", s.admin(s.deleteModelProvider))
 	m.HandleFunc("GET /v1/console/voice", s.admin(s.consoleVoice))
 	m.HandleFunc("PUT /v1/console/voice", s.admin(s.putConsoleVoice))
 	m.HandleFunc("DELETE /v1/console/tokens/{id}", s.masterAdmin(s.revokeConsoleToken))
@@ -1808,6 +1813,11 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		// starting a session.
 		in = api.SpawnRequest{JoinLink: strings.TrimSpace(in.JoinLink)}
 	}
+	if in.ProviderEncrypted != nil || in.ProviderRef != nil {
+		if !s.checkSpawnProvider(w, r, &in) {
+			return
+		}
+	}
 	if in.CLI == "exec" {
 		// A shell node: the machine joins it with a one-use exec enrollment
 		// made here, by the admin, carrying who may send it commands.
@@ -1873,6 +1883,11 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 			kind += " copy of session " + in.ForkFrom
 		}
 		s.record(r, "machine.spawn", res.Agent, kind+" in "+res.Workdir+" ("+r.PathValue("id")+")")
+		if in.ProviderEncrypted != nil && res.Agent != "" {
+			// The new agent's provider was written on its computer: it is
+			// a custom one, from the member's model provider.
+			s.markSpawnedProvider(r, domain.AgentName(res.Agent), in.ProviderRef)
+		}
 		writeJSON(w, http.StatusOK, res)
 	}
 }
