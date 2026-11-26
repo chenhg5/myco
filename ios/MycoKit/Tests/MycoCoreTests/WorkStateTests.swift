@@ -88,3 +88,20 @@ struct WorkStateTests {
         #expect(line.contains(L("已进行 1 小时 20 分", "1 h 20 min so far")))
     }
 }
+
+/// A plan closed above a chat stays closed when the chat is opened again,
+/// until a new plan comes.
+struct ClosedPlansTests {
+    @Test func aClosedPlanIsRememberedPerChat() throws {
+        let defaults = try #require(UserDefaults(suiteName: "closed-plans-\(UUID().uuidString)"))
+        let chat = ClosedPlans.chat(workspace: "w", agent: "coder", project: nil)
+        #expect(ClosedPlans.closed(in: chat, defaults: defaults) == nil)
+        ClosedPlans.close("t1.plan", in: chat, defaults: defaults)
+        #expect(ClosedPlans.closed(in: chat, defaults: defaults) == "t1.plan")
+        // Another chat, another project: their own.
+        #expect(ClosedPlans.closed(in: ClosedPlans.chat(workspace: "w", agent: "coder", project: "p"), defaults: defaults) == nil)
+        // A newer plan closed replaces it.
+        ClosedPlans.close("t2.plan", in: chat, defaults: defaults)
+        #expect(ClosedPlans.closed(in: chat, defaults: defaults) == "t2.plan")
+    }
+}

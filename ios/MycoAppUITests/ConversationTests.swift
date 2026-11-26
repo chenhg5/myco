@@ -849,6 +849,28 @@ final class ConversationTests: XCTestCase {
         snap("project-handoffs")
     }
     @MainActor
+    func testAClosedPlanStaysClosedWhenTheChatIsOpenedAgain() {
+        // The notes helper's plan is still going: pinned above the chat.
+        let app = launch(["-myco-route", "agent:studio-claude-c41f"])
+        let plan = app.buttons["work.plan"]
+        XCTAssertTrue(plan.waitForExistence(timeout: 20))
+        app.buttons["work.plan.close"].tap()
+        XCTAssertTrue(plan.waitForNonExistence(timeout: 5))
+        // Out (the back button) and back in: still closed.
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        let row = app.buttons["chat.agent:studio-claude-c41f"]
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        row.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["composer.input"].waitForExistence(timeout: 10))
+        XCTAssertFalse(plan.waitForExistence(timeout: 3), "the closed plan came back")
+        app.terminate()
+        // And after the app is opened again.
+        let again = launch(["-myco-route", "agent:studio-claude-c41f"])
+        XCTAssertTrue(again.descendants(matching: .any)["composer.input"].waitForExistence(timeout: 20))
+        XCTAssertFalse(again.buttons["work.plan"].waitForExistence(timeout: 3), "the closed plan came back after a restart")
+    }
+
+    @MainActor
     func testAnAnswerInStructuredPartsIsDrawnAsComponents() {
         // A myco-ui block, coloured code, a diagram's source and a picture
         // placed in the text, as the desktop draws them.
