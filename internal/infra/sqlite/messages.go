@@ -80,7 +80,7 @@ func (r *MessageRepo) TouchActive(ctx context.Context, id string, at time.Time) 
 }
 
 func (r *MessageRepo) AckedActivity(ctx context.Context) (map[domain.AgentName][]domain.Activity, error) {
-	rows, err := r.db.QueryContext(ctx, `SELECT to_agent, id, MAX(active_at, updated_at) FROM messages WHERE status='acked'`)
+	rows, err := r.db.QueryContext(ctx, ackedActivitySQL)
 	if err != nil {
 		return nil, internal(err)
 	}
@@ -193,6 +193,11 @@ func (r *MessageRepo) ListThread(ctx context.Context, threadID string) ([]*domai
 // small partial index instead of every message ever stored: their cost
 // follows the backlog, not the size of the table (plans_test.go pins this).
 const openStatus = `status IN ('queued','delivered','acked','held')`
+
+// ackedActivitySQL runs on every overview and agent listing. Without
+// openStatus it scanned every message ever sent (about 200 ms on a hub with
+// 36,000 messages, about one CPU core with a few apps open).
+const ackedActivitySQL = `SELECT to_agent, id, MAX(active_at, updated_at) FROM messages WHERE ` + openStatus + ` AND status='acked'`
 
 const afterReady = `(after='' OR NOT EXISTS (SELECT 1 FROM messages parent WHERE parent.id=messages.after AND parent.status NOT IN ('done','failed')))`
 const dueWhere = `(` + openStatus + ` AND ((status='queued' AND ` + afterReady + `) OR (status='delivered' AND lease_until<=?)))`
