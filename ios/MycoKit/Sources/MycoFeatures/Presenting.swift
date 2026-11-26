@@ -66,13 +66,17 @@ enum Words {
 
     /// What a member is doing, in plain words.
     static func member(_ status: AgentStatus) -> String {
+        let state: String
         switch MemberState.of(status) {
-        case .working(let text): return text ?? L("在干活", "Working")
-        case .possiblyStuck: return L("可能卡住", "Possibly stuck")
-        case .waiting: return L("等着接活", "About to start")
-        case .away: return L("不在线", "Away")
-        case .free: return L("空闲", "Free")
+        case .working(let text): state = text ?? L("在干活", "Working")
+        case .possiblyStuck: state = L("可能卡住", "Possibly stuck")
+        case .waiting: state = L("等着接活", "About to start")
+        case .away: state = L("不在线", "Away")
+        case .free: state = L("空闲", "Free")
         }
+        // What it waits for in the background, beside its state.
+        if let watching = status.watching, watching > 0 { return state + " · " + L("盯着 \(watching)", "watching \(watching)") }
+        return state
     }
 
     /// Which AI a member is: "Claude Code · claude-opus-5-5".

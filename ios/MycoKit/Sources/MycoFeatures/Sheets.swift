@@ -62,6 +62,13 @@ struct MemberCardSheet: View {
                         KeyValueRow(L("加入", "Joined"), RelativeTime.short(agent.createdAt))
                     }
 
+                    // Its account's usage limits (only its owner sees them).
+                    if let quota = agent.runtime?.quota, QuotaWords.hasNumbers(quota) || QuotaWords.status(quota) != nil {
+                        CardSection(title: L("额度", "Usage")) {
+                            QuotaSection(quota: quota)
+                        }
+                    }
+
                     let projects = session.projects(of: name)
                     if !projects.isEmpty {
                         CardSection(title: L("所在项目", "Projects")) {

@@ -23,16 +23,35 @@ public enum SpeechWords {
     ]
 
     /// How recognizers write some common words (Chinese ones mostly hear
-    /// them by sound). Only words in the vocabulary are corrected.
+    /// them by sound). Only forms nobody says for anything else: no real
+    /// words ("cloud", "codecs", "cat", "句号"), which would change what
+    /// people mean. Letters said apart ("P R") and casing are rules.
     static let aliases: [String: [String]] = [
-        "Claude": ["克劳德", "克劳迪", "克洛德", "克劳的", "可劳德", "克老德", "Claud", "Clod", "Clode", "Cloud"],
-        "Codex": ["扣德克斯", "口德克斯", "寇德克斯", "科德克斯", "抠得克斯", "code x", "Codecs", "Kodex"],
-        "myco": ["my co", "麦扣", "迈扣"],
+        "Claude": ["克劳德", "克劳迪", "克洛德", "可劳德", "克老德", "Claud", "Clode"],
+        "Codex": ["扣德克斯", "口德克斯", "寇德克斯", "科德克斯", "抠得克斯", "Kodex"],
+        "myco": ["麦扣", "迈扣"],
         "DeepSeek": ["迪普西克", "迪普seek"],
-        "GitHub": ["吉特哈布", "git hub"],
-        "PR": ["p r"],
-        "CI": ["c i"],
+        "GitHub": ["吉特哈布"],
     ]
+
+    /// Everyday words an alias must not be, nor a casing rule change (a
+    /// recognizer writes these when people mean them). The desktop's list.
+    static let commonWords: Set<String> = Set("""
+        句号 逗号 问号 妹妹 姐姐 哥哥 弟弟 妈妈 爸爸 宝宝 朋友 同事 老板 老师 我们 你们 他们 她们 它们 这个 那个 一个 什么 怎么 为什么 可以 没有 知道 觉得 现在 今天 明天 昨天
+        时候 东西 事情 问题 工作 公司 项目 代码 电脑 手机 包裹 包子 口袋 扣子 克拉 卡通 猫咪 小猫 小狗 冰箱 蛋糕 咖啡 米饭 面条 苹果 香蕉 西瓜 云端 云朵 天气 下雨 开会 吃饭 睡觉 回家
+        hub cursor windows python react docker opus sonnet haiku gemini markdown token bug tag branch release
+        half cat dog cloud clouds code codes codec codecs cool cold call cloth close clock club deep seek sick sip dip git get hub hug pub up my co go do me be we see sea you ok okay yes no
+        the and for are but not all any can had her was one our out day has him his how man new now old see two way who boy did its let put say she too use make like time just know take people year good some them other than then look only come over think also back after work first well even want because these give most
+        """.split(whereSeparator: \.isWhitespace).map(String.init))
+
+    /// Why a person's alias is not used: one character, or a word people
+    /// say for other things (it would change what they mean). nil: fine.
+    static func unsafeAlias(_ alias: String) -> String? {
+        let alias = alias.trimmingCharacters(in: .whitespaces)
+        if alias.count < 2 || (SpeechFixer.isLatin(alias) && alias.count < 3) { return "too short" }
+        if commonWords.contains(alias.lowercased()) { return "a common word" }
+        return nil
+    }
 
     /// Apple suggests keeping contextual strings to about a hundred.
     public static let maxWords = 100
@@ -52,7 +71,7 @@ public enum SpeechWords {
             if parts.count > 1 {
                 for alias in parts[1].split(whereSeparator: { ",，、;；".contains($0) }) {
                     let alias = alias.trimmingCharacters(in: .whitespaces)
-                    if !alias.isEmpty, alias != word { aliases[word, default: []].append(alias) }
+                    if !alias.isEmpty, alias != word, unsafeAlias(alias) == nil { aliases[word, default: []].append(alias) }
                 }
             }
         }
@@ -150,9 +169,23 @@ public struct SpeechFixer: @unchecked Sendable {
             // Its casing, and its parts said apart ("Deep Seek", "Git Hub").
             // In English a capitalised word may be a plain one ("cursor",
             // "windows"): only odd casings ("GitHub", "macOS", "PR") are fixed.
-            if word != word.lowercased(), zh || !Self.titleCase(word) { latinRule(word, word) }
+            // Nor an everyday word ("hub", "python") in any language.
+            if word != word.lowercased(), zh || !Self.titleCase(word), !SpeechWords.commonWords.contains(word.lowercased()) {
+                latinRule(word, word)
+            }
             let parts = Self.camelParts(word)
             if parts.count > 1 { latinRule(parts.joined(separator: " "), word) }
+            // In capitals, as some recognizers write all English ("PUSH",
+            // "IOS", "CLAUDE CODE"): the word as it is written.
+            let upper = word.uppercased()
+            if upper != word {
+                add("(^|[^\(Self.latinEdge)])" + Self.spaced(NSRegularExpression.escapedPattern(for: upper)) + "($|[^\(Self.latinEdge)])",
+                    "$1" + NSRegularExpression.escapedTemplate(for: word) + "$2", caseInsensitive: false)
+            }
+            // Letters said one by one: "P R", "a p i", "C.I." → the word.
+            if let spelled = Self.spelledLetters(word) {
+                add(spelled, "$1" + NSRegularExpression.escapedTemplate(for: word) + "$2")
+            }
         }
         for word in sorted where have.contains(word) {
             let aliases = (zh ? SpeechWords.aliases[word] ?? [] : []) + (extra[word] ?? [])
@@ -185,6 +218,13 @@ public struct SpeechFixer: @unchecked Sendable {
             }
         }
         return text
+    }
+
+    /// An all-capitals word of 2 to 5 letters said one letter at a time
+    /// ("P R", "a p i", "C.I."), standing alone, as a pattern.
+    static func spelledLetters(_ word: String) -> String? {
+        guard (2...5).contains(word.count), word == word.uppercased(), word.allSatisfy({ $0 >= "A" && $0 <= "Z" }) else { return nil }
+        return "(^|[^\(latinEdge)])" + word.map(String.init).joined(separator: #"[\s.]+"#) + #"\.?($|[^"# + latinEdge + "])"
     }
 
     /// The spaces in a phrase may be any run of spaces.
