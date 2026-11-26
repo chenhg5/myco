@@ -309,3 +309,56 @@ struct GoalSheet: View {
         }
     }
 }
+
+/// The plan pinned above the chat: how far along it is and the next thing
+/// left ("下一步：…"); a tap shows all of it; closed, it stays closed until
+/// a new plan comes.
+struct PlanBar: View {
+    let items: [PlanItem]
+    let close: () -> Void
+    @State private var open = false
+
+    var body: some View {
+        let done = items.filter { $0.state == .done }.count
+        let next = items.first { $0.state == .doing } ?? items.first { $0.state != .done }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "checklist").font(.subheadline).foregroundStyle(MycoColor.accent).padding(.top, 1)
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) { open.toggle() }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("下一步：", "Next: ") + (next?.text ?? "")).font(.subheadline.weight(.medium)).foregroundStyle(MycoColor.fg).lineLimit(open ? nil : 1)
+                        Text(L("计划 \(done)/\(items.count) 完成", "Plan: \(done) of \(items.count) done")).font(.caption.monospacedDigit()).foregroundStyle(MycoColor.muted)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("work.plan")
+                Button(action: close) {
+                    Image(systemName: "xmark").font(.caption.weight(.semibold)).foregroundStyle(MycoColor.faint).frame(width: 32, height: 28)
+                }
+                .accessibilityLabel(L("收起计划", "Close the plan"))
+                .accessibilityIdentifier("work.plan.close")
+            }
+            if open {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Image(systemName: item.state == .done ? "checkmark.square.fill" : "square")
+                                .font(.caption).foregroundStyle(item.state == .done ? MycoColor.muted : (item.state == .doing ? MycoColor.fg : MycoColor.faint))
+                            Text(item.text).font(.caption).foregroundStyle(item.state == .done ? MycoColor.muted : MycoColor.fg2)
+                                .strikethrough(item.state == .done)
+                        }
+                    }
+                }
+                .padding(.leading, 24)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, Space.page)
+        .background(MycoColor.card)
+        .overlay(alignment: .bottom) { Rectangle().fill(MycoColor.line).frame(height: 0.5) }
+    }
+}

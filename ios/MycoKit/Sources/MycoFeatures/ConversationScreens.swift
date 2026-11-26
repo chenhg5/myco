@@ -284,6 +284,8 @@ struct ConversationBody: View {
     /// The conversation stays at its end as it grows. Only the person
     /// scrolling away lets go of it; content getting taller does not.
     @State private var pinned = true
+    /// The pinned plan closed here (a new plan shows again).
+    @State private var closedPlan: String?
     /// A finger moved the conversation a moment ago.
     @State private var touched = false
     /// How tall the part of the conversation on screen is.
@@ -594,6 +596,10 @@ struct ConversationBody: View {
                     }, jump: { id in
                         if model.items.contains(where: { $0.id == id }) { jumpTo = id }
                     })
+                }
+                // The plan still going, the newest first.
+                if !model.readOnly, let plan = model.pinnedPlan, plan.id != closedPlan {
+                    PlanBar(items: plan.items) { closedPlan = plan.id }
                 }
                 // Its goal and what it waits for in the background.
                 if !model.readOnly {
