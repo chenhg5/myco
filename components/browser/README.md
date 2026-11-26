@@ -187,7 +187,9 @@ A wildcard excludes its bare parent domain. Ports do not change hostname matchin
 An omitted list means unrestricted domains; an explicit empty list is rejected.
 Explicit navigation is
 checked before dispatch. A top-level redirect or link crossing the scope is
-rolled back; a new disallowed tab is closed. The response and event use
+rolled back after its pending navigation is cancelled; a new disallowed tab is
+closed. Cancelling first prevents an uncommitted redirect from replacing the
+restored history entry. The response and event use
 `host_not_allowed` on the originating action, before it enters the draft.
 Input, scroll and hover return immediately after the event barrier when no
 navigation is pending. Operations likely to navigate observe an additional
