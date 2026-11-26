@@ -2672,6 +2672,14 @@ async function runMatrix(browser, size, scheme) {
         await page.setViewportSize({ width: 860, height: size.height });
         try {
           await settle(page, 300);
+          // (a chat opened beside the home by an earlier step: two panes
+          // turn into tabs at this width, and the home's is not the one
+          // shown; its tab brings it back)
+          const homeTab = page.getByRole("tab", { name: /协调者/ });
+          if (await homeTab.count() && !(await pill.isVisible())) {
+            await homeTab.first().click();
+            await settle(page, 300);
+          }
           await pill.click();
           await menu.waitFor({ timeout: 5_000 });
           fit = await inColumn();
