@@ -1,3 +1,4 @@
+import { fitMenu } from "@/app/fitMenu";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { appApi, isOldHub } from "@/appapi";
 import type { RunSettings, Runtime, RuntimeAccess, RuntimeModel } from "@/api";
@@ -418,7 +419,7 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
       {open && (
         <>
           <span className="run-pill-scrim" onClick={() => setOpen(false)} />
-          <div className="run-pill-menu" role="menu" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
+          <div ref={fitMenu} className="run-pill-menu" role="menu" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
             {editable ? (
               <>
                 <div className="run-pill-group">{L("模型", "Model")}</div>
@@ -544,7 +545,7 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
       {open && (
         <>
           <span className="run-pill-scrim" onClick={() => setOpen(false)} />
-          <div className="run-pill-menu" role="menu" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
+          <div ref={fitMenu} className="run-pill-menu" role="menu" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
             {editable ? (
               <>
                 <div className="run-pill-group">{L("它运行时能动什么", "What it may touch when it runs")}</div>

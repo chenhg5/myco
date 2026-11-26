@@ -2620,6 +2620,36 @@ async function runMatrix(browser, size, scheme) {
       if (!all.includes("每周") || !all.includes("剩 38%") || !all.includes("Studio Mac") || !all.includes("读取")) throw new Error(`点开应列出全部窗口、来源和读取时间，实际是「${all}」`);
       await settle(page, 200);
       await shot(page, size, scheme, "chat-quota-pill");
+      // It stays in the chat column (a members panel beside it, a narrow
+      // window): moved left as far as it must, never cut off at the right.
+      const inColumn = async () => menu.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const b = el.closest(".conv-detail").getBoundingClientRect();
+        return { ok: r.left >= b.left - 1 && r.right <= b.right + 1, r: [Math.round(r.left), Math.round(r.right)], b: [Math.round(b.left), Math.round(b.right)] };
+      });
+      let fit = await inColumn();
+      if (!fit.ok) throw new Error(`额度弹窗应留在对话栏里，弹窗 ${fit.r}，对话栏 ${fit.b}`);
+      if (!narrow) {
+        // (a narrower window, the members panel still beside the chat)
+        await page.keyboard.press("Escape");
+        await page.locator(".sp-home .quota-pill-scrim").click({ force: true }).catch(() => {});
+        await page.setViewportSize({ width: 860, height: size.height });
+        try {
+          await settle(page, 300);
+          await pill.click();
+          await menu.waitFor({ timeout: 5_000 });
+          fit = await inColumn();
+          if (!fit.ok) throw new Error(`窗口窄一些时，额度弹窗也应留在对话栏里，弹窗 ${fit.r}，对话栏 ${fit.b}`);
+          await shot(page, { ...size, width: 860 }, scheme, "chat-quota-pill-narrow");
+          await page.keyboard.press("Escape");
+          await page.locator(".sp-home .quota-pill-scrim").click({ force: true }).catch(() => {});
+        } finally {
+          await page.setViewportSize({ width: size.width, height: size.height });
+        }
+        await settle(page, 300);
+        await pill.click();
+        await menu.waitFor({ timeout: 5_000 });
+      }
       await page.keyboard.press("Escape");
       await page.locator(".sp-home .quota-pill-scrim").click({ force: true }).catch(() => {});
       if (await page.locator(".sp-home .conv-quota-out").count()) throw new Error("没用完时不该提示");

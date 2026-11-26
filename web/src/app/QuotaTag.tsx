@@ -3,6 +3,7 @@ import { Gauge, TriangleAlert } from "lucide-react";
 import type { AgentRow } from "@/app/types";
 import { machinesOfHub } from "@/app/nodes";
 import { quotaHasNumbers, quotaLeft, quotaPillLevel, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaSummary, quotaUnreadable, quotaWindowLabel, quotaWindowShort, quotaWindowText, quotaWorst } from "@/app/quota";
+import { fitMenu } from "@/app/fitMenu";
 import { L } from "@/lib/i18n";
 import { timeAgo } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -55,7 +56,7 @@ export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
       {open && (
         <>
           <span className="quota-pill-scrim" onClick={() => setOpen(false)} />
-          <div className="quota-pill-menu" role="dialog" aria-label={L("额度", "Quota")} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
+          <div ref={fitMenu} className="quota-pill-menu" role="dialog" aria-label={L("额度", "Quota")} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
             <div className="run-pill-group">{L("额度", "Quota")}</div>
             {quota.windows.map((w) => (
               <div key={`${w.name}/${w.model_scope || ""}`} className={cn("quota-pill-row", `is-${quotaPillLevel(w)}`)}>
