@@ -13,7 +13,7 @@ import (
 func TestRequestLogRedactsRecoveryCredential(t *testing.T) {
 	var log bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	h := logRequests(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }), logger, 0)
+	h := logRequests(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }), logger, 0, nil)
 	req := httptest.NewRequest("GET", "/r/myco_resume_secret", nil)
 	h.ServeHTTP(httptest.NewRecorder(), req)
 	if strings.Contains(log.String(), "myco_resume_secret") || !strings.Contains(log.String(), "/r/<redacted>") {
@@ -37,7 +37,7 @@ func TestRequestLogSlowAndFailed(t *testing.T) {
 		default:
 			w.Write([]byte("ok"))
 		}
-	}), logger, 20*time.Millisecond)
+	}), logger, 20*time.Millisecond, nil)
 	for _, p := range []string{"/fast", "/slow", "/poll?wait_seconds=30", "/fail"} {
 		req := httptest.NewRequest("GET", p, nil)
 		if p == "/slow" {
