@@ -3395,6 +3395,23 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "chat-supplement-in-run");
       await page.locator(".conv-detail .conv-msg", { hasText: "下载页核对完了" }).last().waitFor({ timeout: 25_000 });
       await noRound(page);
+      // Done, the process folds, and what you added is not folded into it:
+      // it stays out, the steps before it folded on their own line above.
+      await page.waitForFunction(() => {
+        const el = [...document.querySelectorAll(".conv-detail .trace-steer")].find((x) => (x.textContent || "").includes("顺便看看 Windows 的包"));
+        return !!el && !el.closest(".trace")?.classList.contains("is-live");
+      }, null, { timeout: 10_000 }).catch(() => undefined);
+      if (!(await added.isVisible())) throw new Error("过程折起后，你在运行中补充的话不该被收进过程里");
+      const folds = await added.evaluate((el) => {
+        const run = el.closest(".trace");
+        const y = el.getBoundingClientRect().top;
+        const heads = [...(run?.querySelectorAll(".trace-fold") || [])];
+        return { above: heads.filter((h) => h.getBoundingClientRect().top < y).map((h) => (h.textContent || "").trim()), shut: heads.every((h) => h.getAttribute("aria-expanded") === "false") };
+      });
+      if (!folds.above.length || !/过程 · \d+ 步/.test(folds.above[0])) throw new Error(`补充之前的步骤应单独折成一行在它上面，实际 ${JSON.stringify(folds.above)}`);
+      if (!folds.shut) throw new Error("做完后过程应折起");
+      await added.scrollIntoViewIfNeeded();
+      await shot(page, size, scheme, "chat-supplement-after-done");
     });
 
     // A line you add after something came in between (another member

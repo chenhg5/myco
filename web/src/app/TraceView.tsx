@@ -691,7 +691,25 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     if (lastSeg?.kind === "steps") lastSeg.rows.push(r);
     else segments.push({ kind: "steps", rows: [r] });
   }
-  const endsWithSay = segments[segments.length - 1]?.kind !== "steps";
+  // What you added while it worked is not part of its process: the steps
+  // before it fold on their own line, your message stays in the open, and
+  // the process after it goes on below (as a turn you interrupt reads in
+  // Claude Code). Folding never hides what you said.
+  const before: { segs: Segment[]; steer: Message }[] = [];
+  let after: Segment[] = [];
+  for (const seg of segments) {
+    if (seg.kind === "steer") { before.push({ segs: after, steer: seg.msg }); after = []; } else after.push(seg);
+  }
+  // When the first part began: its first step (else the task).
+  const partStart = (segs: Segment[]) => {
+    for (const x of segs) {
+      const t = x.kind === "steps" ? msOf(x.rows[0]?.at) : 0;
+      if (t) return t;
+    }
+    return new Date(from || task.created_at).getTime() || 0;
+  };
+  const stepsIn = (segs: Segment[]) => segs.reduce((n, x) => n + (x.kind === "steps" ? x.rows.filter((r) => r.kind !== "text").length : 0), 0);
+  const endsWithSay = after[after.length - 1]?.kind !== "steps";
 
   // Not started on this one yet: what is here goes on with the one before
   // (shown after your message, in time), and says so.
@@ -700,7 +718,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   // The whole process folds into one line: "过程 · 6 步 · 1 分钟". Open
   // while it works (the newest few things, the rest behind one line),
   // folded once the answer is in. A click either way holds for this run.
-  const foldable = !onlyReports && steps > 0;
+  const foldable = !onlyReports && (before.length ? after.some((x) => x.kind === "steps") : steps > 0);
   const open = !foldable || (chosen ?? running);
   const toggleOpen = () => {
     const next = !open;
@@ -708,7 +726,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     setChosen(next);
   };
   // Steps and thoughts, once each; what it is still writing is not a step.
-  const stepCount = rows.filter((r) => r.kind !== "text").length;
+  const stepCount = before.length ? stepsIn(after) : rows.filter((r) => r.kind !== "text").length;
   // The time: what it reported, or how long it has been at it.
   const began = new Date(turnSince).getTime() || 0;
   let ended: number;
@@ -720,18 +738,55 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   // one line above them. A question it waits on is never behind that line.
   const KEEP = 3;
   let keep: Set<number> | null = null;
-  if (foldable && open && running && !showAll && segments.length > KEEP) {
+  if (foldable && open && running && !showAll && after.length > KEEP) {
     keep = new Set<number>();
-    for (let i = Math.max(0, segments.length - KEEP); i < segments.length; i++) keep.add(i);
-    segments.forEach((s, i) => {
+    for (let i = Math.max(0, after.length - KEEP); i < after.length; i++) keep.add(i);
+    after.forEach((s, i) => {
       if (asking && s.kind === "ask" && task.asking === s.msg.id) keep!.add(i);
     });
   }
-  const hidden = keep ? segments.length - keep.size : 0;
+  const hidden = keep ? after.length - keep.size : 0;
   // Waiting on you: the card stays out even if the rest is folded.
   const waitAsk = asking
-    ? segments.filter((s): s is Extract<Segment, { kind: "ask" }> => s.kind === "ask" && task.asking === s.msg.id)
+    ? after.filter((s): s is Extract<Segment, { kind: "ask" }> => s.kind === "ask" && task.asking === s.msg.id)
     : [];
+
+  // One piece of the process; last: the newest of the whole run.
+  const renderSeg = (seg: Segment, last: boolean): React.ReactNode => (seg.kind === "say" ? (
+            <Said key={seg.key} text={seg.text} delta={!!seg.delta} live={!!seg.delta && movingHere}>
+              {/* What it says while you watch grows in; what was there, is. */}
+              {/* (something newer after it: all of it at once) */}
+              {seg.delta ? <Reveal body={seg.text} foldId={seg.key} streaming intervalMs={POLL_MS} onGrow={onGrow} cursor={movingHere} finish={!last || !movingHere} /> : !seg.streamed && sayGrows(seg.key) ? <Reveal body={seg.text} foldId={seg.key} finish={!last} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
+            </Said>
+          ) : seg.kind === "steer" ? (
+            <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />
+          ) : seg.kind === "ask" ? (
+            <AskCard key={seg.msg.id} hubId={hubId} ask={seg.msg} answer={answers?.get(seg.msg.id)}
+              open={asking && task.asking === seg.msg.id} canAnswer={!!canAnswer} onAnswer={onAnswer} />
+          ) : seg.kind === "reports" ? (
+            // What it reported (myco message progress): a small timeline of its
+            // own, quieter than the answer, each with when.
+            <ol key={seg.items[0].key} className="trace-reports" aria-label={L("进展", "Progress")}>
+              {seg.items.map((r, j) => (
+                <li key={r.key} className={cn("trace-report", movingHere && last && j === seg.items.length - 1 && "is-latest")}>
+                  <span className="trace-report-dot" aria-hidden />
+                  <div className="trace-report-text">
+                    <TranslatableBody id={r.key} body={r.text} files={filesFor(hubId, r.files)} />
+                    {/* What it showed along the way: a screenshot, a draft
+                        (less those its text already shows). */}
+                    {(() => {
+                      const rest = filesBelow(r.text, filesFor(hubId, r.files));
+                      return rest.length > 0 ? <div className="trace-report-files"><MessageAttachments hubId={hubId} items={rest} /></div> : null;
+                    })()}
+                    <PageCards body={r.text} />
+                  </div>
+                  {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <StepGroup key={seg.rows[0].key} onGrow={onGrow} rows={seg.rows} live={movingHere && last} since={turnSince} />
+          ));
 
   return (
     <div className={cn("trace is-flow", movingHere && !asking && "is-live")} ref={body}>
@@ -741,6 +796,14 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
           out, whether the steps below it are folded or not. */}
       {plan && <PlanCard items={plan.items} live={moving} />}
       {onPlan && <PlanReport id={`${task.id}\u0000${from || ""}`} taskId={task.id} plan={plan} onPlan={onPlan} />}
+      {before.map((part, k) => (
+        <EarlierSteps key={part.steer.id} steps={stepsIn(part.segs)}
+          took={tookLine(new Date(part.steer.created_at).getTime() - (k ? new Date(before[k - 1].steer.created_at).getTime() : partStart(part.segs)))}
+          waiting={asking ? part.segs.filter((x): x is Extract<Segment, { kind: "ask" }> => x.kind === "ask" && task.asking === x.msg.id).map((x) => renderSeg(x, false)) : []}>
+          {part.segs.map((seg) => renderSeg(seg, false))}
+          <SteerBubble hubId={hubId} msg={part.steer} />
+        </EarlierSteps>
+      ))}
       {foldable && (
         <button type="button" className="trace-head trace-fold" onClick={toggleOpen} aria-expanded={open}>
           {/* Folded, its own line shows it is still working; open, the steps do. */}
@@ -762,41 +825,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
               <span className="trace-title">{L(`更早的 ${hidden} 段`, `${hidden} earlier`)}</span>
             </button>
           )}
-          {segments.map((seg, i) => (!keep || keep.has(i)) && (seg.kind === "say" ? (
-            <Said key={seg.key} text={seg.text} delta={!!seg.delta} live={!!seg.delta && movingHere}>
-              {/* What it says while you watch grows in; what was there, is. */}
-              {/* (something newer after it: all of it at once) */}
-              {seg.delta ? <Reveal body={seg.text} foldId={seg.key} streaming intervalMs={POLL_MS} onGrow={onGrow} cursor={movingHere} finish={i < segments.length - 1 || !movingHere} /> : !seg.streamed && sayGrows(seg.key) ? <Reveal body={seg.text} foldId={seg.key} finish={i < segments.length - 1} onDone={() => grown.add(seg.key)} /> : <TranslatableBody id={seg.key} body={seg.text} />}
-            </Said>
-          ) : seg.kind === "steer" ? (
-            <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />
-          ) : seg.kind === "ask" ? (
-            <AskCard key={seg.msg.id} hubId={hubId} ask={seg.msg} answer={answers?.get(seg.msg.id)}
-              open={asking && task.asking === seg.msg.id} canAnswer={!!canAnswer} onAnswer={onAnswer} />
-          ) : seg.kind === "reports" ? (
-            // What it reported (myco message progress): a small timeline of its
-            // own, quieter than the answer, each with when.
-            <ol key={seg.items[0].key} className="trace-reports" aria-label={L("进展", "Progress")}>
-              {seg.items.map((r, j) => (
-                <li key={r.key} className={cn("trace-report", movingHere && i === segments.length - 1 && j === seg.items.length - 1 && "is-latest")}>
-                  <span className="trace-report-dot" aria-hidden />
-                  <div className="trace-report-text">
-                    <TranslatableBody id={r.key} body={r.text} files={filesFor(hubId, r.files)} />
-                    {/* What it showed along the way: a screenshot, a draft
-                        (less those its text already shows). */}
-                    {(() => {
-                      const rest = filesBelow(r.text, filesFor(hubId, r.files));
-                      return rest.length > 0 ? <div className="trace-report-files"><MessageAttachments hubId={hubId} items={rest} /></div> : null;
-                    })()}
-                    <PageCards body={r.text} />
-                  </div>
-                  {r.when && <time className="trace-report-time" dateTime={r.when}>{clock(r.when)}</time>}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <StepGroup key={seg.rows[0].key} onGrow={onGrow} rows={seg.rows} live={movingHere && i === segments.length - 1} since={turnSince} />
-          )))}
+          {after.map((seg, i) => (!keep || keep.has(i)) && renderSeg(seg, i === after.length - 1))}
           {movingHere && !asking && endsWithSay && (
             <div className="trace-head trace-wait">
               <Mushroom />
@@ -858,6 +887,28 @@ function clock(iso: string): string {
 
 /** A run of steps between two things it said: one line, open to see them.
  *  The newest, while it runs, says what it is doing now. */
+/** The steps before something you added while it worked: folded on their
+ *  own line (a question waiting on you stays out), then your message,
+ *  always in the open. */
+function EarlierSteps({ steps, took, waiting, children }: {
+  steps: number; took: string; waiting: React.ReactNode[]; children: [React.ReactNode, React.ReactNode];
+}) {
+  const [open, setOpen] = useState(false);
+  const [segs, steer] = children;
+  return (
+    <>
+      {steps > 0 && (
+        <button type="button" className="trace-head trace-fold" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+          <ChevronRight className="trace-chev" />
+          <span className="trace-title">{L(`过程 · ${steps} 步 · ${took}`, `Steps · ${steps} · ${took}`)}</span>
+        </button>
+      )}
+      {(open || steps === 0) ? segs : waiting}
+      {steer}
+    </>
+  );
+}
+
 /** Something you added to the task, where you sent it in the run. */
 function SteerBubble({ hubId, msg }: { hubId: string; msg: Message }) {
   return (
