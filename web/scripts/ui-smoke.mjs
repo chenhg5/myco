@@ -311,7 +311,7 @@ async function staysIdle(page, what, ms = 2000) {
 // so the parts keep their runs of steps in order.
 const SOURCE = await readFile(fileURLToPath(import.meta.url), "utf8");
 const STEP_LABELS = [...SOURCE.matchAll(/await step\("([^"]+)"/g)].map((m) => m[1]);
-const STARTS_ITSELF = new Set([...SOURCE.matchAll(/await step\("([^"]+)", async \(\) => \{\n\s*await (?:go|page\.goto)\(/g)].map((m) => m[1]));
+const STARTS_ITSELF = new Set([...SOURCE.matchAll(/await step\("([^"]+)", async \(\) => \{\n\s*await (?:go|page\.goto|openMember)\(/g)].map((m) => m[1]));
 const STEPS = STEP_LABELS.length;
 // How long each step took (scripts/ui-smoke-weights.json, seconds, from a
 // run's ui-smoke/timings.json; refresh with --write-weights): the parts are
