@@ -4,6 +4,24 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.22.16
+
+- Goals: set a bounded goal on a chat and the agent takes it up on idle turns instead of waiting for your next message.
+- Watching: a chat shows a bar at the top for a watch (a bounded command wait on a permitted local runner) and its ended lines, and the bar fits a narrow pane.
+- A new clean (清爽) appearance in Settings → Appearance, which also hides the workspace's face in the bottom-left corner.
+- Chat layout: a chat keeps your place when bars appear above it, and the newest unfinished plan stays pinned when nothing is running.
+- Browser control: replay a literal draft inside a live control session without recording again; close receipts are kept, unreadable screenshots are redacted, and profile lifecycle and scoped navigation feedback are fixed.
+- Live browser features in this release need browser component 0.6.0, and the App prompts you to update it.
+
+**中文**
+
+- 目标：在聊天里设定一个有边界的目标，agent 会在空闲轮次里继续推进，而不是等你的下一条消息。
+- 盯着：聊天气泡顶部会显示监视条——在被允许的本地执行器上等待一条有界命令——以及已结束的记录，窄窗口下也能正常显示。
+- 设置 → 外观新增「清爽」风格，左下角的工作区头像也会一并隐藏。
+- 聊天界面：上方出现条栏时不会跳走你的位置；没有任务在跑时，最新的未完成计划会固定显示。
+- 浏览器控制：在实时会话里可直接回放字面量草稿，不必重新录制；保留关闭回执，无法读取的截图会被隐去，并修复配置档生命周期与限定域导航的反馈。
+- 本次发布的实时浏览器功能需要浏览器组件 0.6.0，App 会提示更新。
+
 ## v0.22.15
 
 - After a separate grant (up to 30 minutes), an agent can operate the browser directly in a dedicated clean agent profile, optionally restricted to the domains you allow; the panel shows the agent is operating and you can stop it at any time.
