@@ -398,7 +398,7 @@ func TestParseCommand(t *testing.T) {
 func TestClaim(t *testing.T) {
 	ad, hub := &fakeAdapter{}, newFakeHub()
 	var saved Config
-	b, _ := New(Config{Name: "s", Platform: "slack", Claim: "abc123", Agent: "coder"}, ad, hub, "", nil)
+	b, _ := New(Config{Name: "s", Platform: "slack", Claim: "abc123", ClaimExpires: time.Now().Add(time.Hour), Agent: "coder"}, ad, hub, "", nil)
 	b.OnConfig = func(c Config) error { saved = c; return nil }
 	b.Handle(Inbound{ChatID: "D1", MessageID: "1", ThreadKey: "chat:D1", UserID: "U9", Text: "hi"})
 	eventually(t, "unclaimed", func() bool { return strings.Contains(ad.last("post").text, "no owner") })
@@ -411,4 +411,36 @@ func TestClaim(t *testing.T) {
 	}
 	b.Handle(Inbound{ChatID: "D1", MessageID: "4", ThreadKey: "chat:D1", UserID: "U9", Text: "go"})
 	eventually(t, "task", func() bool { return hub.nsent() == 1 })
+}
+
+func TestClaimLocksAfterFailsAndExpires(t *testing.T) {
+	ad, hub := &fakeAdapter{}, newFakeHub()
+	var saved Config
+	b, _ := New(Config{Name: "s", Platform: "slack", Claim: "abc123", ClaimExpires: time.Now().Add(time.Hour), Agent: "coder"}, ad, hub, "", nil)
+	b.OnConfig = func(c Config) error { saved = c; return nil }
+	for i := 1; i <= MaxClaimFails; i++ {
+		b.Handle(Inbound{ChatID: "D1", MessageID: fmt.Sprint("w", i), ThreadKey: "chat:D1", UserID: "U9", Text: "/claim wrong"})
+		eventually(t, "counted", func() bool { b.cfgMu.Lock(); defer b.cfgMu.Unlock(); return b.cfg.ClaimFails == i })
+	}
+	if saved.ClaimFails != MaxClaimFails {
+		t.Fatalf("fails saved: %d", saved.ClaimFails)
+	}
+	eventually(t, "gone", func() bool { return strings.Contains(ad.last("post").text, "no longer works") })
+	// The right code no longer works either.
+	b.Handle(Inbound{ChatID: "D1", MessageID: "right", ThreadKey: "chat:D1", UserID: "U9", Text: "/claim abc123"})
+	time.Sleep(50 * time.Millisecond)
+	if saved.Owner != "" || b.owner() != "" {
+		t.Fatal("claimed with a locked code")
+	}
+
+	// An expired code does not work.
+	c := Config{Name: "s", Claim: "abc123", ClaimExpires: time.Now().Add(-time.Minute)}
+	if c.ClaimUsable(time.Now()) {
+		t.Fatal("expired code usable")
+	}
+	// A new one does, for a day.
+	code := c.NewClaim(time.Now())
+	if len(code) != 10 || !c.ClaimUsable(time.Now()) || c.ClaimUsable(time.Now().Add(ClaimTTL+time.Minute)) || c.ClaimFails != 0 {
+		t.Fatalf("new claim %q %+v", code, c)
+	}
 }

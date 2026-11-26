@@ -57,6 +57,10 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
   const label = (b: IMBridge) => PLATFORM[b.platform]?.() || b.platform;
   // "Slack 机器人", "飞书机器人": a space only after a Latin name.
   const sp = (b: IMBridge) => (/[A-Za-z]$/.test(label(b)) ? " " : "");
+  const renew = async (b: IMBridge) => {
+    setBusy(true); setError(null);
+    try { await appApi.renewIMClaim(b.name); await load(); } catch (e) { setError(e); } finally { setBusy(false); }
+  };
   const remove = async (b: IMBridge) => {
     setBusy(true); setError(null);
     try { await appApi.removeIMBridge(b.name); setRemoving(null); await load(); } catch (e) { setError(e); } finally { setBusy(false); }
@@ -86,6 +90,12 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
           <span key={b.name} className="im-claim">
             {L(`${label(b)}${sp(b)}机器人还没有主人：私聊机器人发这一行，就成为它的主人：`, `The ${label(b)} bot has no owner yet: send it this line in a direct message to become its owner:`)}
             <span className="app-command"><code>/claim {b.claim}</code><CopyButton value={`/claim ${b.claim}`} /></span>
+          </span>
+        ))}
+        {bridges?.filter((b) => b.claim_expired).map((b) => (
+          <span key={b.name} className="im-claim">
+            {L(`${label(b)}${sp(b)}机器人还没有主人，认领码已经失效（过期或错太多次）。`, `The ${label(b)} bot has no owner yet, and its claim code no longer works (it expired, or was mistyped too often). `)}
+            <button type="button" className="app-kv-link" disabled={busy} onClick={() => void renew(b)}>{L("重新生成认领码", "New claim code")}</button>
           </span>
         ))}
         <ErrorText error={error} />

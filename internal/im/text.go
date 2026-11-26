@@ -31,6 +31,7 @@ var texts = map[string]map[string]string{
 		"forwarded":   "已转到主人的%s私聊。",
 		"unclaimed":   "这个机器人还没有主人。设置它的人请在私聊里发：/claim 码（码在 myco im connect 的输出里）。",
 		"bad_claim":   "码不对。请用 myco im connect 输出里的码：/claim 码",
+		"claim_gone":  "这个认领码已经失效（过期了，或者错了太多次）。请在 App 里这个 agent 的「聊天软件」那一行点「重新生成认领码」，或运行 myco im claim。",
 		"claimed":     "好，你现在是这个机器人的主人。直接说要做的事，或发 /help 看用法。",
 	},
 	"en": {
@@ -60,6 +61,7 @@ var texts = map[string]map[string]string{
 		"forwarded":   "Forwarded to the owner's %s direct messages.",
 		"unclaimed":   "This bot has no owner yet. Whoever set it up: send /claim <code> here in a direct message (the code is in the output of myco im connect).",
 		"bad_claim":   "That code is not right. Use the one from myco im connect: /claim <code>",
+		"claim_gone":  "This claim code no longer works (it expired, or was mistyped too often). Make a new one: in the App, the agent's Chat apps row › New claim code, or myco im claim.",
 		"claimed":     "Done: you own this bot now. Say what to do, or send /help.",
 	},
 }

@@ -127,6 +127,8 @@ export interface IMBridge {
   has_owner: boolean;
   /** no owner yet: "/claim <code>" sent to the bot makes the sender it */
   claim?: string;
+  /** no owner, and its claim code no longer works (expired or too many wrong tries) */
+  claim_expired?: boolean;
   node?: string;
   hub?: string;
   online: boolean;
@@ -1022,6 +1024,8 @@ export const appApi = {
   stopFeishuScan: (id: string) => request<{ stopped: boolean }>("DELETE", `app/im/feishu/${enc(id)}`),
   connectSlack: (hubId: string, agent: string, botToken: string, appToken: string) =>
     request<{ bridge: IMBridge }>("POST", "app/im/slack", { hub_id: hubId, agent, bot_token: botToken, app_token: appToken }),
+  /** A new claim code for a bot without an owner (the old one stops working). */
+  renewIMClaim: (name: string) => request<{ name: string; claim: string }>("POST", `app/im/${enc(name)}/claim`),
   removeIMBridge: (name: string) => request<{ removed: string }>("DELETE", `app/im/${enc(name)}`),
   /** The agent CLIs on this computer: installed, signed in (from v0.20.12). */
   localAgents: () => request<{ agents: LocalAgent[] }>("GET", "app/local/agents"),
