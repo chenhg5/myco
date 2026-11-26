@@ -471,6 +471,16 @@ public actor FakeHub: HubAPI {
         return MessagePage(messages: Array(all.prefix(Self.pageSize)), more: all.count > Self.pageSize)
     }
 
+    public func peers(of agent: String) async throws -> [String] {
+        try await check()
+        var out: [String] = []
+        for message in messages.sorted(by: { $0.createdAt > $1.createdAt }) where message.from == agent || message.to == agent {
+            let other = message.from == agent ? message.to : message.from
+            if !other.hasPrefix("@"), other != Self.me, !out.contains(other) { out.append(other) }
+        }
+        return out
+    }
+
     /// Something an agent says to me out of the blue (for tests of what is unread).
     public func deliver(from agent: String, body: String) {
         messages.append(Message(id: nextID(), from: agent, to: Self.me, type: "note", body: body, status: "done", createdAt: Date()))

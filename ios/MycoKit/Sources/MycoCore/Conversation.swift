@@ -490,6 +490,13 @@ public enum ConversationBuilder {
         return out.sorted { ($0.at, $0.id) < ($1.at, $1.id) }
     }
 
+    /// Cards from two sources, once each: the first's kept where both have
+    /// one, the second's added where they are new.
+    public static func merged(_ first: [Handoff], _ second: [Handoff]) -> [Handoff] {
+        let known = Set(first.map(\.id))
+        return (first + second.filter { !known.contains($0.id) }).sorted { ($0.at, $0.id) < ($1.at, $1.id) }
+    }
+
     /// The cards on a project's page, from its threads: the work the
     /// coordinator handed out, and what the members sent it. Only between
     /// agents: what a person writes is a message. The desktop app's

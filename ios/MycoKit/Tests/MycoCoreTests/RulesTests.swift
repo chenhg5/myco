@@ -31,6 +31,17 @@ struct RunStateTests {
             Issue.record("a session node quiet for 11 minutes is still working")
             return
         }
+        // So does a cloud session or an inbox node, whatever it reports
+        // (the desktop app's receivesInSession).
+        let cloud = AgentStatus(agent: Agent(id: "c", name: "cloud-lead", binding: Binding(harness: "claude-cloud")), state: "working")
+        let inbox = AgentStatus(agent: Agent(id: "i", name: "inbox", binding: Binding(harness: "inbox"), machineId: "mach_1"), state: "working")
+        for node in [cloud, inbox] {
+            guard case .working = RunState.of(task("acked", quietFor: elevenMinutes), recipient: node, now: now) else {
+                Issue.record("\(node.agent.name) quiet for 11 minutes is still working")
+                return
+            }
+        }
+        #expect(RunState.of(task("acked", quietFor: 31 * 60), recipient: cloud, now: now) == .maybeStuck(quietSince: now.addingTimeInterval(-31 * 60)))
         // Away: at once.
         guard case .maybeStuck = RunState.of(task("acked"), recipient: coder("offline"), now: now) else {
             Issue.record("an acked task on a node that is away may be stuck")
@@ -523,5 +534,20 @@ struct ConversationBuilderTests {
         let items = said(ConversationBuilder.items(me: "me", agent: "coder", messages: messages, status: { _ in nil }, now: now))
         #expect(items.map(\.kind) == [.mine(text: "x", steer: false, by: nil), .stopped])
         #expect(ConversationBuilder.openTask(me: "me", messages: messages) == nil)
+    }
+}
+
+/// A project's page shows the coordinator's work from the project's
+/// threads and from its exchanges with each agent it worked with, once.
+struct ProjectCardsTests {
+    @Test func cardsFromBothSourcesShowOnce() {
+        let now = Date()
+        let task = Message(id: "m1", from: "lead", to: "release", type: "task", body: "发 0.22.21", status: "acked", createdAt: now.addingTimeInterval(-60))
+        let unmarked = Message(id: "m2", from: "lead", to: "devx", type: "task", body: "看看为啥离线", status: "acked", createdAt: now.addingTimeInterval(-30))
+        let fromFeed = ConversationBuilder.handoffs(between: [task], and: "lead")
+        let exchanged = ConversationBuilder.handoffs(between: [task, unmarked], and: "lead")
+        let cards = ConversationBuilder.merged(fromFeed, exchanged)
+        #expect(cards.map(\.id) == ["m1", "m2"])
+        #expect(cards.allSatisfy(\.outgoing))
     }
 }

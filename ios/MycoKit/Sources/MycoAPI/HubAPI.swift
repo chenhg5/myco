@@ -130,6 +130,10 @@ public protocol HubAPI: Sendable {
     /// every thread, newest first, a page at a time. `before`: only those
     /// older than this (to page back); nil is the newest page.
     func exchanges(between a: String, and b: String, before: Date?) async throws -> MessagePage
+    /// `GET /v1/console/agents/{name}/peers`: the nodes an agent exchanged
+    /// messages with (not the console), most recent first; for a member,
+    /// those in their scope.
+    func peers(of agent: String) async throws -> [String]
     /// `GET /v1/console/messages/{id}/trace`
     func trace(of messageID: String, after seq: Int) async throws -> Trace
     /// `POST /v1/console/messages`

@@ -771,7 +771,21 @@ public final class ConversationModel {
         if project != nil {
             guard let found = scanned.first else { return [] }
             let mine = session.me
-            return ConversationBuilder.handoffs(ofHome: feed(found), coordinator: agent) { $0 == mine || isPerson($0) }
+            let home = feed(found)
+            let fromFeed = ConversationBuilder.handoffs(ofHome: home, coordinator: agent) { $0 == mine || isPerson($0) }
+            // And, as the desktop app does, its exchanges with every agent
+            // it worked with (in the project's threads, or anywhere): work
+            // handed out without the project's mark is part of it too.
+            var others = ProjectFeed.colleagues(of: agent, in: home, coordinator: agent)
+            for peer in (try? await hub.peers(of: agent)) ?? [] where !others.contains(peer) && !isPerson(peer) {
+                let kind = session.agent(peer).map(Naming.kind(of:)) ?? .agent
+                if kind == .agent || found.members.contains(where: { $0.name == peer }) { others.append(peer) }
+            }
+            let pages = await Self.gather(Array(others.filter { !isPerson($0) && $0 != mine }.prefix(Self.maxColleagues))) { other in
+                try? await hub.exchanges(between: other, and: agent, before: nil)
+            }
+            let exchanged = pages.values.flatMap(\.messages).filter { !isPerson($0.from) && !isPerson($0.to) }
+            return ConversationBuilder.merged(fromFeed, ConversationBuilder.handoffs(between: exchanged, and: agent))
         }
         var colleagues: [String] = []
         for project in scanned {

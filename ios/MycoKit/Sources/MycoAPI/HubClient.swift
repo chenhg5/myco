@@ -88,6 +88,13 @@ public struct HubClient: HubAPI {
         return MessagePage(messages: envelope.messages, more: envelope.more ?? false)
     }
 
+    public func peers(of agent: String) async throws -> [String] {
+        struct Peer: Decodable { var agent: String }
+        struct Envelope: Decodable { var peers: [Peer]? }
+        let envelope: Envelope = try await get("/v1/console/agents/\(Self.segment(agent))/peers", [:], timeout: Self.pollTimeout)
+        return (envelope.peers ?? []).map(\.agent)
+    }
+
     public func trace(of messageID: String, after seq: Int) async throws -> Trace {
         try await get("/v1/console/messages/\(messageID)/trace", ["after": String(seq)])
     }
