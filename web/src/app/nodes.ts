@@ -34,6 +34,7 @@ const CLI_META: Record<string, { label: string; icon: IconType }> = {
   cline: { label: "Cline", icon: IconBot },
   grok: { label: "Grok", icon: IconBot },
   antigravity: { label: "Antigravity", icon: IconBot },
+  atomcode: { label: "AtomCode", icon: IconBot },
 
   shell: { label: "Shell", icon: IconPrompt },
   exec: { label: "Exec", icon: IconTerminal },

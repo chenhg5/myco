@@ -86,6 +86,7 @@ var ACPPresets = map[string]acp.Spec{
 	"kilo":      {Binary: "kilo", Args: []string{"acp"}, Login: "run kilo on this machine and sign in"},
 	"cline":     {Binary: "cline", Args: []string{"--acp"}, Login: "run cline on this machine and sign in"},
 	"grok":      {Binary: "grok", Args: []string{"agent", "stdio"}, Login: "run grok on this machine and sign in"},
+	"atomcode":  {Binary: "atomcode", Args: []string{"acp"}, Login: "run atomcode on this machine and sign in"},
 	// Google Antigravity through the community google-antigravity-acp
 	// adapter, which drives the agy CLI. It does not pass permission
 	// requests on over ACP: it either lets agy approve everything (full

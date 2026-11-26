@@ -583,6 +583,10 @@ func open(path string, t *Timing) (*sql.DB, error) {
 		`CREATE INDEX IF NOT EXISTS idx_messages_open ON messages(to_agent, status, created_at) WHERE status IN ('queued','delivered','acked','held')`,
 		// The newest messages (the overview's recent list).
 		`CREATE INDEX IF NOT EXISTS idx_messages_updated ON messages(updated_at DESC, id)`,
+		// Per-agent recent lists take a bounded page from each direction
+		// before loading message bodies, ordered by update rather than creation.
+		`CREATE INDEX IF NOT EXISTS idx_messages_from_updated ON messages(from_agent, updated_at DESC, id)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_to_updated ON messages(to_agent, updated_at DESC, id)`,
 	} {
 		if _, err := db.Exec(ddl); err != nil {
 			db.Close()

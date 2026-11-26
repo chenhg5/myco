@@ -65,6 +65,7 @@ var agentCLIs = []agentCLI{
 	{cli: "cline", name: "Cline", binary: "cline", npm: "npm install -g cline", login: "cline"},
 	{cli: "grok", name: "Grok", binary: "grok", npm: "npm install -g @xai-official/grok", login: "grok"},
 	{cli: "antigravity", name: "Antigravity", binary: "google-antigravity-acp", npm: "npm install -g google-antigravity-acp", login: "agy"},
+	{cli: "atomcode", name: "AtomCode", binary: "atomcode", npm: "npm install -g @atomgit.com/atomcode", login: "atomcode"},
 	{cli: "goose", name: "goose", binary: "goose", install: "curl -fsSL https://github.com/block/goose/releases/download/stable/download_cli.sh | bash", login: "goose configure"},
 }
 
@@ -269,7 +270,7 @@ func (l *Local) signedIn(ctx context.Context, cli, path string) string {
 			return "ready"
 		}
 		return "unknown"
-	case "kimi", "copilot", "auggie", "kilo", "cline", "grok", "antigravity", "goose":
+	case "kimi", "copilot", "auggie", "kilo", "cline", "grok", "antigravity", "atomcode", "goose":
 		if l.moreCLISignedIn(ctx, cli) {
 			return "ready"
 		}

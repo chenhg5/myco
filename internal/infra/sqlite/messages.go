@@ -108,7 +108,9 @@ func (r *MessageRepo) ListRecent(ctx context.Context, agent domain.AgentName, li
 	if agent == "" {
 		return r.many(ctx, r.db, listRecentAllWhere, limit)
 	}
-	return r.many(ctx, r.db, `WHERE from_agent=? OR to_agent=? ORDER BY updated_at DESC, id LIMIT ?`, agent, agent, limit)
+	// Either side can supply the whole page. UNION removes a self-message's
+	// duplicate rowid; only the bounded union is sorted and its bodies read.
+	return r.many(ctx, r.db, recentAgentWhere, agent, limit, agent, limit, limit)
 }
 
 func (r *MessageRepo) CreateMany(ctx context.Context, msgs []*domain.Message) error {
@@ -211,6 +213,12 @@ const (
 	listOpenWhere = `WHERE to_agent=? AND ` + openStatus + `
 		ORDER BY CASE status WHEN 'queued' THEN 1 ELSE 0 END, updated_at DESC LIMIT ?`
 	listRecentAllWhere = `ORDER BY updated_at DESC, id LIMIT ?`
+	recentAgentWhere   = `WHERE rowid IN (
+   SELECT rowid FROM (SELECT rowid FROM messages WHERE from_agent=? ORDER BY updated_at DESC, id LIMIT ?)
+   UNION
+   SELECT rowid FROM (SELECT rowid FROM messages WHERE to_agent=? ORDER BY updated_at DESC, id LIMIT ?)
+ ) ORDER BY updated_at DESC, id LIMIT ?`
+
 	// after!='' lets SQLite use idx_messages_after (a partial index: it
 	// cannot tell that the argument is never empty).
 	afterRecipientsSQL = `SELECT DISTINCT to_agent FROM messages WHERE after=? AND after!='' AND status='queued'`
