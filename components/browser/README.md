@@ -31,7 +31,9 @@ recording target. The native fixture verifies both kinds and replays them.
 Native navigation assertions wait for the new document's readiness, then verify
 the complete recording after stop has flushed the collector and drained its
 evidence queue. A navigation commit alone does not mean screenshots and panel
-updates for preceding steps have finished.
+updates for preceding steps have finished. Background recording evidence reads the DOM
+and locators directly through CDP, preserving target crops and privacy checks
+without changing the foreground actor's Rod JS context or helper cache.
 
 Run `go test -race ./...` and `go vet ./...` in this directory. On a machine with
 an installed Chrome or Edge, enable the existing native fixture flag:

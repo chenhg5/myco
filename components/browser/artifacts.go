@@ -107,7 +107,7 @@ func (e *engine) snapshot(owner string, p *rod.Page, t *target) (string, error) 
 	p = p.Context(ctx)
 	// Save a bounded structural DOM only. Never serialize input values,
 	// text, attributes, HTML, URLs or a cross-origin frame's contents.
-	shape, err := p.Eval(snapshotSource)
+	shape, err := passiveSnapshotDOM(p)
 	if err != nil {
 		return "", err
 	}
@@ -126,9 +126,10 @@ func (e *engine) snapshot(owner string, p *rod.Page, t *target) (string, error) 
 	var data []byte
 	if t != nil && len(t.Locators) > 0 {
 		findCtx, stop := context.WithTimeout(ctx, 700*time.Millisecond)
-		el, findErr := findTarget(findCtx, p, *t)
+		object, findErr := passiveSnapshotTarget(p.Context(findCtx), *t)
 		if findErr == nil {
-			data, _ = passiveElementScreenshot(el.Page().Context(findCtx), el.Object.ObjectID, quality)
+			data, _ = passiveElementScreenshot(p.Context(findCtx), object, quality)
+			_ = (proto.RuntimeReleaseObject{ObjectID: object}).Call(p.Context(findCtx))
 		}
 		stop()
 	}
@@ -173,6 +174,45 @@ func (e *engine) snapshot(owner string, p *rod.Page, t *target) (string, error) 
 	}
 	e.mu.Unlock()
 	return id, nil
+}
+
+// Recording evidence runs concurrently with the foreground actor. Rod's Page
+// clones share a JS context pointer but not its helper cache: a navigation retry
+// in evidence can reset that pointer midway through the actor loading helper
+// dependencies. Use direct CDP throughout this passive path, without acquiring
+// or resetting any Rod JS context or helper objects.
+func passiveSnapshotDOM(page proto.Client) (*proto.RuntimeRemoteObject, error) {
+	result, err := (proto.RuntimeEvaluate{Expression: "(" + snapshotSource + ")()", ReturnByValue: true}).Call(page)
+	if err != nil {
+		return nil, err
+	}
+	if result.ExceptionDetails != nil || result.Result == nil {
+		return nil, errors.New("snapshot_unavailable")
+	}
+	return result.Result, nil
+}
+
+func passiveSnapshotTarget(page proto.Client, t target) (proto.RuntimeRemoteObjectID, error) {
+	if len(t.Frame) > 16 || len(t.Shadow) > 16 || len(t.Locators) > 12 {
+		return "", errors.New("invalid_argument")
+	}
+	raw, err := json.Marshal(t)
+	if err != nil {
+		return "", err
+	}
+	// The DOM privacy guard already rejects unreadable frames. Follow only
+	// same-origin frame documents and keep locator arguments as JSON data.
+	// Supplying the document lexically preserves the locator implementation's
+	// shadow-root, role, label and XPath behavior without entering Rod helpers.
+	expression := `(t=>{let doc=document;for(const selector of t.frame||[]){const frames=doc.querySelectorAll(selector);if(frames.length!==1)return null;doc=frames[0].contentDocument;if(!doc)return null;}return ((document,getComputedStyle,XPathResult)=>(` + locatorSource + `)(t,false))(doc,doc.defaultView.getComputedStyle.bind(doc.defaultView),doc.defaultView.XPathResult)})(` + string(raw) + `)`
+	result, err := (proto.RuntimeEvaluate{Expression: expression}).Call(page)
+	if err != nil {
+		return "", err
+	}
+	if result.ExceptionDetails != nil || result.Result == nil || result.Result.Subtype != proto.RuntimeRemoteObjectSubtypeNode || result.Result.ObjectID == "" {
+		return "", errors.New("target_not_found")
+	}
+	return result.Result.ObjectID, nil
 }
 func (s *session) registerDownload(guid string) {
 	if !idPattern.MatchString(guid) {
