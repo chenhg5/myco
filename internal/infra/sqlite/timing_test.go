@@ -18,6 +18,10 @@ import (
 func TestTimedStatementsAreNamedAndLogged(t *testing.T) {
 	var log bytes.Buffer
 	rec := perf.New()
+	// (each reading of the clock a millisecond later)
+	tick := time.Unix(1_800_000_000, 0)
+	clock = func() time.Time { tick = tick.Add(time.Millisecond); return tick }
+	defer func() { clock = time.Now }()
 	db, err := OpenTimed(":memory:", Timing{Log: slog.New(slog.NewTextHandler(&log, nil)), Slow: time.Nanosecond, Perf: rec})
 	if err != nil {
 		t.Fatal(err)
