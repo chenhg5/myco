@@ -280,6 +280,7 @@ func (e *env) inboxWaitAll(ids []config.Profile) error {
 		all[i] = ownerOf(p)
 		if e.in.Getenv != nil {
 			reportSessionRuntime(e.in.Ctx, clients[i], e.in.Getenv)
+			reportSessionQuota(e.in.Ctx, clients[i], e.in.Getenv, time.Now())
 		}
 	}
 	targets := make([]sessionUsageTarget, 0, len(ids))

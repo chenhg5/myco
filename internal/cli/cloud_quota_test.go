@@ -1,0 +1,182 @@
+package cli
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/harness/claude"
+)
+
+// What a cloud session's event list gives: rate_limit_events, oldest first.
+const rateLimitEvents = `{"ccr":{"data":[
+ {"created_at":"2026-11-26T05:08:46.300421Z","rate_limit_event":{"uuid":"a","internal_anthropic_catchall":{"rate_limit_info":{
+   "isUsingOverage":false,"overageStatus":"rejected","rateLimitType":"five_hour","resetsAt":1795687200,"status":"allowed",
+   "unifiedWindows":{"five_hour":{"resetsAt":1795687200,"status":"allowed","utilization":0},"seven_day":{"resetsAt":1796090400,"status":"allowed","utilization":0.36}}},
+   "session_id":"s"}}},
+ {"created_at":"2026-11-26T08:37:29.921996Z","rate_limit_event":{"uuid":"b","internal_anthropic_catchall":{"rate_limit_info":{
+   "isUsingOverage":false,"overageStatus":"rejected","rateLimitType":"five_hour","resetsAt":1795687200,"status":"allowed",
+   "unifiedWindows":{"five_hour":{"resetsAt":1795687200,"status":"allowed","utilization":0.15},"seven_day":{"resetsAt":1796090400,"status":"allowed","utilization":0.4}}},
+   "session_id":"s"}}}]}}`
+
+func TestNewestRateLimitInfo(t *testing.T) {
+	info, at, ok := newestRateLimitInfo([]byte(rateLimitEvents))
+	if !ok || !at.Equal(time.Date(2026, 11, 26, 8, 37, 29, 921996000, time.UTC)) {
+		t.Fatalf("newest: %v %v", ok, at)
+	}
+	var r struct {
+		UnifiedWindows map[string]struct{ Utilization float64 } `json:"unifiedWindows"`
+	}
+	_ = json.Unmarshal(info, &r)
+	if r.UnifiedWindows["five_hour"].Utilization != 0.15 {
+		t.Fatalf("info: %s", info)
+	}
+	// Its rate_limit_info alone, or wrapped.
+	for _, in := range []string{
+		`{"rateLimitType":"five_hour","unifiedWindows":{"five_hour":{"utilization":0.2}}}`,
+		`{"rate_limit_info":{"rateLimitType":"five_hour","unifiedWindows":{"five_hour":{"utilization":0.2}}}}`,
+	} {
+		if _, _, ok := newestRateLimitInfo([]byte(in)); !ok {
+			t.Fatalf("%s", in)
+		}
+	}
+	for _, in := range []string{`{}`, `[1,2]`, `nope`} {
+		if _, _, ok := newestRateLimitInfo([]byte(in)); ok {
+			t.Fatalf("%s found one", in)
+		}
+	}
+}
+
+func TestSessionQuotaIsNumbersAndTimesOnly(t *testing.T) {
+	now := time.Date(2026, 11, 26, 9, 0, 0, 0, time.UTC)
+	info, at, _ := newestRateLimitInfo([]byte(rateLimitEvents))
+	q := sessionQuota(claude.RateLimitQuota(info, at), now)
+	if q == nil || q.Source != "claude" || q.SourceKind != quotaSourceKind || q.ProfileRef != "" || len(q.Windows) != 2 {
+		t.Fatalf("quota: %+v", q)
+	}
+	five, seven := q.Windows[0], q.Windows[1]
+	if five.Name != "five_hour" || five.Used != 0.15 || five.DurationSec != 18000 || five.ResetsAt == nil ||
+		seven.Name != "seven_day" || seven.Used != 0.4 || seven.DurationSec != 604800 {
+		t.Fatalf("windows: %+v", q.Windows)
+	}
+	// Nothing of the account goes with it.
+	raw, _ := json.Marshal(q)
+	for _, word := range []string{"overage", "session_id", "isUsing", "uuid"} {
+		if strings.Contains(string(raw), word) {
+			t.Fatalf("%q in %s", word, raw)
+		}
+	}
+	// A runner's quota is not replaced, nor a newer report.
+	if mayReportSessionQuota(&api.Quota{ProfileRef: "acct_x"}, q) || mayReportSessionQuota(&api.Quota{At: now.Add(time.Hour)}, q) || !mayReportSessionQuota(nil, q) {
+		t.Fatal("may report")
+	}
+}
+
+func TestAgentRuntimeQuotaAndInboxWaitReportTheSessionsLimits(t *testing.T) {
+	hub := newHub(t)
+	dir := t.TempDir()
+	h := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(dir, "agent.yaml")}}
+	if code, _, e := h.run("agent", "register", "--name", "cloudy"); code != 0 {
+		t.Fatalf("register: %s", e)
+	}
+	quota := func() map[string]any {
+		code, out, e := h.run("agent", "get", "--format", "json")
+		if code != 0 {
+			t.Fatalf("get: %s", e)
+		}
+		var a struct {
+			Runtime struct {
+				Quota map[string]any `json:"quota"`
+			} `json:"runtime"`
+		}
+		_ = json.Unmarshal([]byte(out), &a)
+		return a.Runtime.Quota
+	}
+	events := filepath.Join(dir, "events.json")
+	if err := os.WriteFile(events, []byte(rateLimitEvents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A dry run says what it would report, and reports nothing.
+	if code, out, e := h.run("agent", "runtime", "quota", "--file", events, "--dry-run", "--format", "json"); code != ExitDryRun || !strings.Contains(out, "five_hour") {
+		t.Fatalf("dry run: %d %s %s", code, out, e)
+	}
+	if q := quota(); q != nil {
+		t.Fatalf("a dry run reported: %v", q)
+	}
+	// Reported: both windows, as people see them.
+	if code, _, e := h.run("agent", "runtime", "quota", "--file", events); code != 0 {
+		t.Fatalf("quota: %s", e)
+	}
+	q := quota()
+	windows, _ := q["windows"].([]any)
+	if q["source"] != "claude" || q["source_kind"] != quotaSourceKind || len(windows) != 2 {
+		t.Fatalf("reported: %v", q)
+	}
+	if w := windows[0].(map[string]any); w["name"] != "five_hour" || w["used"] != 0.15 {
+		t.Fatalf("five hours: %v", w)
+	}
+	// Nothing usable: a usage error, nothing changed.
+	bad := filepath.Join(dir, "bad.json")
+	_ = os.WriteFile(bad, []byte(`{"hello":1}`), 0o600)
+	if code, _, _ := h.run("agent", "runtime", "quota", "--file", bad); code == 0 {
+		t.Fatalf("bad file: %d", code)
+	}
+
+	// The session's transcript says a limit was reached: myco inbox wait
+	// reports it by itself (used up, until it resets).
+	claudeDir := filepath.Join(dir, "claude")
+	proj := filepath.Join(claudeDir, "projects", "-work")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resets := time.Now().Add(3 * time.Hour).Unix()
+	line := func(at time.Time, resets int64) string {
+		return `{"type":"assistant","timestamp":"` + at.UTC().Format(time.RFC3339Nano) + `","isApiErrorMessage":true,"apiErrorParams":{"rate_limit_info":{"status":"rejected","resetsAt":` +
+			itoa(resets) + `,"rateLimitType":"seven_day","overageStatus":"rejected","isUsingOverage":false}}}` + "\n"
+	}
+	transcript := filepath.Join(proj, "sess-9.jsonl")
+	_ = os.WriteFile(transcript, []byte(`{"type":"user","message":{"content":"hi"}}`+"\n"+line(time.Now(), resets)), 0o600)
+	h.env["CLAUDE_CODE_SESSION_ID"] = "sess-9"
+	h.env["CLAUDE_CONFIG_DIR"] = claudeDir
+	h.run("inbox", "wait", "--timeout", "1ms")
+	q = quota()
+	windows, _ = q["windows"].([]any)
+	if len(windows) != 1 {
+		t.Fatalf("used up: %v", q)
+	}
+	if w := windows[0].(map[string]any); w["name"] != "seven_day" || w["used"] != 1.0 || w["status"] != "rejected" {
+		t.Fatalf("used up: %v", w)
+	}
+	// An older event does not replace it.
+	if code, out, e := h.run("agent", "runtime", "quota", "--file", events, "--format", "json"); code != 0 || !strings.Contains(out, `"reported": false`) {
+		t.Fatalf("older: %d %s %s", code, out, e)
+	}
+	// A newer one does. Then a limit that has reset says nothing about
+	// now: nothing reported.
+	fresh := filepath.Join(dir, "fresh.json")
+	_ = os.WriteFile(fresh, []byte(strings.Replace(rateLimitEvents, "2026-11-26T08:37:29.921996Z", time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano), 1)), 0o600)
+	if code, _, e := h.run("agent", "runtime", "quota", "--file", fresh); code != 0 {
+		t.Fatalf("quota: %s", e)
+	}
+	if windows, _ := quota()["windows"].([]any); len(windows) != 2 {
+		t.Fatalf("a newer report was kept out: %v", windows)
+	}
+	_ = os.WriteFile(transcript, []byte(line(time.Now(), time.Now().Add(-time.Hour).Unix())), 0o600)
+	h.run("inbox", "wait", "--timeout", "1ms")
+	if windows, _ := quota()["windows"].([]any); len(windows) != 2 {
+		t.Fatalf("a past limit replaced the report: %v", windows)
+	}
+	// An agent its runner started does not report from here.
+	_ = os.WriteFile(transcript, []byte(line(time.Now().Add(time.Minute), resets)), 0o600)
+	h.env["MYCO_MESSAGE_ID"] = "msg_x"
+	h.run("inbox", "wait", "--timeout", "1ms")
+	if windows, _ := quota()["windows"].([]any); len(windows) != 2 {
+		t.Fatalf("a runner's agent reported: %v", windows)
+	}
+}
+
+func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
