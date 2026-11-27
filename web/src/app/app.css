@@ -3491,6 +3491,21 @@ textarea.app-input {
 .conv-timeline > .conv-msg.is-me:first-child {
   margin-top: 0;
 }
+/* What a workflow sent in your name (WorkflowNote.tsx): the workspace's, so
+   in the middle, on no one's side, framed rather than in your colour. */
+.conv-msg.is-me.is-system {
+  align-self: center;
+  align-items: center;
+  max-width: min(640px, 100%);
+  width: 100%;
+}
+.conv-msg.is-me.is-system .conv-bubble {
+  --md-fade: var(--bg);
+  align-self: stretch;
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: 12px;
+}
 /* Names matter only when you watch two nodes talk to each other. */
 .conv-msg-name {
   display: none;
@@ -3879,17 +3894,18 @@ button.conv-quote:hover {
 .conv-decision-fail {
   color: var(--red);
 }
+/* The hub's own line in a chat (a task that was not done, and why): quiet,
+   grey, across the column, not a red alarm. */
 .conv-event {
   align-self: stretch;
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--red-soft);
-  color: var(--red);
+  padding: 2px 2px;
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 .conv-event svg {
   width: 14px;

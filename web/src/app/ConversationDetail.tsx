@@ -2307,10 +2307,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         );
       }
       if (m.type === "event") {
+        // (the hub's own line, "task failed: why": said in words, quietly)
+        const failed = /^task failed:\s*/i.exec(m.body);
         return (
-          <div className="conv-event" key={m.id}>
+          <div className="conv-event" key={m.id} data-msg={m.id}>
             <AlertTriangle />
-            <span>{m.body}</span>
+            <span>{failed ? L(`这条任务没完成：${m.body.slice(failed[0].length)}`, `This task was not done: ${m.body.slice(failed[0].length)}`) : m.body}</span>
             <span className="conv-event-time">{clockTime(m.created_at)}</span>
           </div>
         );
@@ -2346,10 +2348,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       const wfNote = m.workflow && m.type === "note" && !m.unreadable ? parseWorkflowNote(m.body) : null;
       // A step it gave an agent: what to do, the rest folded.
       const wfStep = m.workflow && m.type === "task" && !m.unreadable ? parseWorkflowStep(m.body) : null;
+      // Sent by a workflow in your name: the workspace's, shown as such.
+      const bySystem = !!(wfNote || wfStep) && isMe(m.from, row?.hub);
       return (
         <Fragment key={m.id}>
-        <div className={cn("conv-msg", mine ? "is-me" : "is-agent", (fromOther || toOther || (alsoSet.size > 0 && showName && isMe(m.from, row?.hub))) && "is-other")} data-msg={m.id} data-turn={turnIds.has(m.id) ? m.id : undefined}>
-          {fromOther ? <div className="conv-msg-name">{nameOf(m.from)}</div>
+        <div className={cn("conv-msg", mine ? "is-me" : "is-agent", bySystem && "is-system", (fromOther || toOther || (alsoSet.size > 0 && showName && isMe(m.from, row?.hub))) && "is-other")} data-msg={m.id} data-turn={turnIds.has(m.id) ? m.id : undefined}>
+          {/* (what a workflow sent in your name is the workspace's, not yours:
+              no "你" over it; its card says which workflow) */}
+          {bySystem ? null
+            : fromOther ? <div className="conv-msg-name">{nameOf(m.from)}</div>
             : alsoSet.size > 0 && isMe(m.from, row?.hub) ? (showName ? <div className="conv-msg-name">{L("你", "You")}</div> : null)
             : toOther ? <div className="conv-msg-name">{L(`回复 ${nameOf(m.to)}`, `To ${nameOf(m.to)}`)}</div>
             : showName && <div className="conv-msg-name">{nameOf(m.from)}</div>}

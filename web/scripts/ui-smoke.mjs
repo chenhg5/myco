@@ -6100,6 +6100,21 @@ async function runMatrix(browser, size, scheme) {
       if ((await card.locator(".wfn-steps li").count()) !== 8) throw new Error("展开后应列出 8 步");
       await settle(page, 150);
       await shot(page, size, scheme, "chat-workflow-note-open");
+      // What a workflow sent in your name is the workspace's: no "你" over
+      // it, in the middle, framed.
+      const sys = await page.locator(`.conv-detail [data-msg="${note.id}"]`).evaluate((el) => ({
+        system: el.classList.contains("is-system"),
+        named: [...el.querySelectorAll(":scope > .conv-msg-name")].map((x) => x.textContent).join(""),
+      }));
+      if (!sys.system || sys.named.includes("你")) throw new Error(`工作流发出的消息应算系统发的，不该写「你」（${JSON.stringify(sys)}）`);
+      // A task an agent gave up on ("task failed: why", the hub's own line):
+      // said in words, quietly, not a red alarm.
+      const ev = await sendFromElsewhere("hub_studio", "review-cloud", "task failed: Fixed release-first node failed; inspect workflow diagnostics", { type: "event", of: note.id });
+      const evRow = page.locator(`.conv-detail .conv-event[data-msg="${ev.id}"]`);
+      await evRow.waitFor({ timeout: 15_000 });
+      const evLook = await evRow.evaluate((el) => ({ text: el.textContent || "", bg: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color }));
+      if (!evLook.text.startsWith("这条任务没完成：Fixed release-first")) throw new Error(`没完成的任务应用话说，实际「${evLook.text}」`);
+      if (!/rgba?\(0, 0, 0, 0\)|transparent/.test(evLook.bg)) throw new Error(`没完成的提示不该有红底，实际 ${evLook.bg}`);
       // A step it gave an agent: what to do shows; its instructions, input
       // and the result's shape are folded.
       const stepBody = `[工作流「myco-release」· 第 6 步 finish · 第 2 次]\n\n运行发版收尾脚本一次，结果由脚本自己交回。\n\n---\n这是工作流里的一步：只做这一步，不要自己安排下一步，工作流会接着走。\n这一步的输入（JSON）：\n\`\`\`json\n{\n  "node_ok": true\n}\n\`\`\`\n做完照常 myco message reply 回复，第一行写一句话总结。`;

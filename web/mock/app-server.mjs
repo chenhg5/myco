@@ -3661,6 +3661,15 @@ const server = http.createServer(async (req, res) => {
           : `th_c_${state.counter += 1}`;
       const atts = (Array.isArray(body.attachments) ? body.attachments : []).map((id) => uploads.get(id)).filter(Boolean);
       if (Array.isArray(body.attachments) && atts.length !== body.attachments.length) return fail(res, 404, "not_found", "附件不存在");
+      // (the hub's own line from that agent, as when it fails a task:
+      // "task failed: why"; in the thread of the message it names)
+      if (body.type === "event") {
+        const of = typeof body.of === "string" ? Object.values(hub.threads || {}).flat().find((m) => m.id === body.of) : null;
+        const ev = makeMessage({ thread_id: of ? of.thread_id : threadId, from: to, to: CONSOLE, type: "event", status: "failed", body: text, created_at: iso(0), updated_at: iso(0) });
+        (hub.threads ||= {})[ev.thread_id] ||= [];
+        hub.threads[ev.thread_id].push(ev);
+        return send(res, 201, ev);
+      }
       // (a note in your name, as a workflow sends one: nothing to answer)
       if (body.type === "note") {
         // (in the thread of the message it names, when it names one)
