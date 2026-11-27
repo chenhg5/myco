@@ -7,6 +7,7 @@ type processResource struct {
 	CPUPercent                       *float64 `json:"cpu_pct,omitempty"`
 	RSSBytes                         int64    `json:"rss_bytes"`
 	Threads, FDs                     int
+	IOAvailable                      bool `json:"io_available"`
 	LogicalRead, DiskRead, DiskWrite uint64
 }
 type resourceSample struct {
