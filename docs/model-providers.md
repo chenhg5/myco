@@ -16,15 +16,17 @@ Providers belong to you, not to the workspace. Each member adds their own, and n
 4. Fill **Name** and **Key** with the key the vendor gave you. **Addresses and small model** unfolds **Anthropic address (for Claude Code)**, **OpenAI address (for Codex)** and **Small model (optional)**. Change an address only if the vendor gave you a different one. The small model is for Claude Code's background work; blank keeps the vendor's usual one.
 5. **Test** reads the vendor's models with the key and shows, for example, "3 models: …". **Save** keeps the provider.
 
-The section says what happens to the key:
+You can also add one without leaving the add-agent form: see **A new agent** below.
 
-> Keys are encrypted on this computer before they are kept in the workspace: only your own devices open them, the workspace cannot. When you add an agent, the key is written only to that computer (its env file, mode 600).
+The section says what happens to the key. Who keeps it depends on whether the workspace has end-to-end encryption on, which is your choice; providers work either way (see **Who holds the key**):
 
-If the workspace has not turned on end-to-end encryption, the section instead says **Turn on end-to-end encryption first** — "Keys are kept in the workspace encrypted for your own devices, so this workspace needs end-to-end encryption first." Choose **Turn it on**; or, as before, enter it on the agent's computer, in its **Provider** row.
+> With encryption on: Keys are encrypted on this computer before they are kept in the workspace: only your own devices open them, the workspace cannot. When you add an agent, the key is written only to that computer (its env file, mode 600).
+
+> With encryption off: Keys are kept on the hub, where its administrator could see them; for a shared team, turn on end-to-end encryption. **Turn on encryption** goes to Settings › Workspaces.
 
 ## Use it for an agent
 
-**A new agent.** In the add-agent form, choose **Which AI**, then **Which model provider**. The first choice, "“computer”'s own setting", leaves that computer's own configuration alone. Only providers with an address for the chosen CLI are listed. After you pick one, **Its default model** offers the models last read from that vendor; leave it for the default. The form notes: "The key is opened here and sealed again for “computer” alone, which writes it to the new agent's own settings."
+**A new agent.** In the add-agent form, choose **Which AI**; right under it, **Where its model comes from**. The first choice, "“computer”'s own sign-in or settings", leaves that computer's own configuration alone. Your providers with an address for the chosen CLI come next. **+ Use your own API key** adds one right there: choose the vendor (or **A custom address**), enter the key, **Test**, then **Save and use**; it is kept in Settings › Model providers and picked. With a provider picked, **Model** lists the models read from that vendor (**Its default model** unless you want a particular one), and one line says who keeps the key.
 
 **An agent that already exists on another computer.** Open the agent and its **Provider** row. Choose the provider labelled **My model provider**, then choose **Model** (**Its default** unless you want a particular one). **Follow its computer** puts it back on that computer's own setting. This changes only that agent. For an agent on this computer, the **Provider** row edits this computer's own provider setting instead.
 
@@ -38,10 +40,20 @@ A provider whose agents still have the old key shows **Push new key (N)**; an ag
 
 ## Who holds the key
 
+**With end-to-end encryption on:**
+
 - The key is sealed on your computer before it reaches the workspace. Only your own devices can open it; the hub cannot read it and never logs it. The workspace also keeps the name and addresses, so it can show them.
 - To an agent, the key goes only to the computer that runs it: it is opened on your computer, sealed again for that computer, and written to the agent's env file (`~/.myco/env/<agent>.env`, mode 600). That file is the copy the agent uses.
 - A device added later cannot open the key by itself. Open the App once on another of your devices that can; it seals the key again for the new one. Until then the provider says **This device cannot open the key yet**. If no device that could open it is left, enter the key again with **Edit**.
-- Treat backups as secrets. The workspace's copy of the key is sealed, but a computer that runs an agent has the key it uses in its env file, so a backup of that computer contains it.
+**With end-to-end encryption off** (fine for a workspace of your own on your own hub; for a team, turn it on):
+
+- The hub keeps the key, encrypted with the workspace's own key: a file `provider-secret.key` next to the workspace's database, mode 600. The hub's administrator could read it. The provider says **Kept by the hub**.
+- The hub sends the key only to the runner of the agent you picked it for (or the computer starting that agent), over HTTPS; it never appears in the agent's settings, in messages or in logs. Each time it is handed out is recorded, without the key.
+- If that key file is lost (a hub moved without it), the provider says **key lost**: **Edit** it and enter the key again, or restore the hub from a backup.
+
+**Turning encryption on or off later.** On: the App, next time it lists your providers, encrypts their keys for your devices, and the hub drops its copy. Off: a provider says the workspace has encryption off now and offers **Hand to the hub**, which asks you first. Agents already set up keep what is on their computers either way.
+
+- Treat backups as secrets. A hub's backup holds the workspace's key file with its database; and a computer that runs an agent has the key it uses in its env file, so a backup of that computer contains it.
 - Your providers are yours alone: other members cannot see or use them.
 
 ## FAQ
