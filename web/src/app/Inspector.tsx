@@ -11,6 +11,7 @@ import { heldTaskLabel,
   canManage, cleanLabel, groupsOf, isMe, machineOfRow, nodeIcon, personLabel, tagsOf,
   sessionBusy, stateLabel, stuckCounts, possiblyStuck, nodeName } from "@/app/nodes";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
+import { useModelProviders, vendorName } from "@/app/ModelProviders";
 import { CopyButton, useCopy } from "@/app/copy";
 import { NodePicker } from "@/app/NodePicker";
 import { summarize } from "@/app/summary";
@@ -333,6 +334,8 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState("");
+  // The model it runs with a provider of the member's (i115).
+  const [wsModel, setWsModel] = useState("");
 
   useEffect(() => { setSaved(""); }, [row.hub.id, ag.name]);
 
@@ -352,12 +355,19 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   // Remote: "custom" is a custom address kept private on that computer (the
   // App shows it as the custom choice, without its address).
   const remoteCustom = remote && ag.run_settings?.provider === "custom";
-  const chosen = remote ? (remoteCustom ? "env_file" : ag.run_settings?.provider || "") : local?.provider || "";
+  // The member's model providers (i115): only over the hub, sealed.
+  const mine = useModelProviders(remote && sealed ? row.hub.id : undefined);
+  const ref = ag.run_settings?.provider_ref;
+  const refProvider = ref ? mine.list?.providers.find((p) => p.id === ref.id) : undefined;
+  const refDeleted = !!ref && !!mine.list && !refProvider;
+  const refBehind = !!ref && !!refProvider && (ref.key_version || 0) < refProvider.key_version;
+  const chosen = remote ? (remoteCustom && refProvider ? "ws:" + refProvider.id : remoteCustom ? "env_file" : ag.run_settings?.provider || "") : local?.provider || "";
   const custom = remote ? undefined : local?.provider === "env_file" ? local.manual : undefined;
   const hasKey = !!custom?.has_key || remoteCustom;
   const start = async () => {
     setError(null);
     setChoice(chosen);
+    setWsModel(ag.run_settings?.model || rt?.model || "");
     setManual({ base_url: custom?.base_url || "", api_key: "", model: custom?.model || "", wire_api: custom?.wire_api || "responses" });
     setOpen(true);
     if (remote) {
@@ -404,7 +414,23 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
     : L("已保存，从它收到的下一条消息开始生效。", "Saved. It applies from the agent's next message.");
   // A custom address needs its key: over the hub only sealed.
   const customOff = remote && !sealed;
+  const useMine = async (id: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await appApi.useModelProvider(row.hub.id, ag.name, id, wsModel.trim());
+      await onRefresh();
+      setSaved(applies);
+      setOpen(false);
+      window.setTimeout(() => void onRefresh(), 1500);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
   const submit = () => {
+    if (choice.startsWith("ws:")) return void useMine(choice.slice(3));
     if (choice !== "env_file") return void save({ provider: choice }, applies);
     const m: ManualProvider = { base_url: manual.base_url.trim(), api_key: manual.api_key.trim(), model: manual.model.trim() || undefined };
     if (codex) m.wire_api = manual.wire_api;
@@ -415,12 +441,14 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const reported = providerLabel(rt);
   // What the row says: the custom address (host · model), else what the
   // runner reported, else that it uses its CLI's own setting.
-  const name = custom
+  const name = refProvider && remoteCustom
+    ? [refProvider.name, ag.run_settings?.model || rt?.model].filter(Boolean).join(" · ")
+    : custom
     ? [urlHost(custom.base_url), custom.model].filter(Boolean).join(" · ")
     : reported || (rt ? L("CLI 自己的设置", "The CLI's own setting") : "—");
   const following = chosen === "" && rt?.provider_source !== "pinned" && rt?.provider_source !== "env_file" ? reported : "";
   return (
-    <div className={cn("app-kv", (saved || olderRunner || pending) && "has-help")}>
+    <div className={cn("app-kv", (saved || olderRunner || pending || (remote && (refDeleted || refBehind))) && "has-help")}>
       <span className="app-kv-label">{L("服务商", "Provider")}</span>
       <span className="app-kv-value">
         {editable || remote ? (
@@ -432,6 +460,15 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
       {saved && !pending && <span className="app-kv-help app-offline-ok">{saved}</span>}
       {!saved && olderRunner && <span className="app-kv-help">{L("升级它那台电脑上的 myco 后，就能在这里改。", "Upgrade myco on its computer to change it here.")}</span>}
       {pending && <span className="app-kv-help">{L("自定义地址已发出，等它那台电脑收下（它接下一件任务前生效）。", "The custom address is sent; its computer takes it before its next task.")}</span>}
+      {remote && refDeleted && !pending && (
+        <span className="app-kv-help" data-testid="provider-deleted">{L("它用的模型供应商已删除：它那台电脑上的那份照常能用；改选一个，或者改回跟随它那台电脑。", "Its model provider was deleted: what is on its computer still works. Pick another, or have it follow its computer again.")}</span>
+      )}
+      {remote && refBehind && refProvider && !pending && (
+        <span className="app-kv-help" data-testid="provider-behind">
+          {L(`「${refProvider.name}」的 key 已更新，它还在用旧的 · `, `“${refProvider.name}” has a new key; it still has the old one · `)}
+          <button type="button" className="app-kv-link" disabled={busy} onClick={() => void useMine(refProvider.id)}>{L("推送", "Push")}</button>
+        </span>
+      )}
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
         description={remote
@@ -460,6 +497,15 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
               </span>
             </label>
           ))}
+          {remote && sealed && mine.list?.providers.filter((p) => p.key_readable && (codex ? p.openai_base : p.anthropic_base)).map((p) => (
+            <label key={p.id} className={cn("app-provider-opt", choice === "ws:" + p.id && "picked")} data-testid={`provider-mine-${p.id}`}>
+              <input type="radio" name="provider" checked={choice === "ws:" + p.id} onChange={() => setChoice("ws:" + p.id)} />
+              <span>
+                <b>{p.name}</b>
+                <small>{[vendorName(p.vendor), urlHost(codex ? p.openai_base : p.anthropic_base), L("我的模型供应商", "My model provider")].filter(Boolean).join(" · ")}</small>
+              </span>
+            </label>
+          ))}
           <label className={cn("app-provider-opt", choice === "env_file" && "picked", customOff && "is-off")} data-testid="provider-custom-opt">
             <input type="radio" name="provider" checked={choice === "env_file"} onChange={() => setChoice("env_file")} disabled={customOff} />
             <span>
@@ -476,6 +522,28 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
             </span>
           </label>
         </div>
+        {choice.startsWith("ws:") && (() => {
+          const p = mine.list?.providers.find((x) => "ws:" + x.id === choice);
+          const models = p?.models || [];
+          return (
+            <div className="app-provider-manual" data-testid="provider-mine-model">
+              <label className="app-field">
+                <span className="app-field-label">{L("模型", "Model")}</span>
+                {models.length ? (
+                  <select className="app-select-field" value={wsModel} onChange={(e) => setWsModel(e.target.value)} disabled={busy}>
+                    <option value="">{L("它默认的", "Its default")}</option>
+                    {wsModel && !models.some((m) => m.id === wsModel) && <option value={wsModel}>{wsModel}</option>}
+                    {models.map((m) => <option key={m.id} value={m.id}>{m.name ? `${m.name} (${m.id})` : m.id}</option>)}
+                  </select>
+                ) : (
+                  <input className="app-input" value={wsModel} onChange={(e) => setWsModel(e.target.value)} disabled={busy} spellCheck={false}
+                    placeholder={L("不填就用它默认的；在 设置 › 模型供应商 里点「测试」可以读出列表", "Blank: its default. Test it in Settings › Model providers to list the models")} />
+                )}
+              </label>
+              <p className="app-modal-note">{L("key 在这台电脑上解开后再加密，只有那个 agent 能解开；hub 只经手密文。", "The key is opened here and sealed again for that agent alone; the hub only carries it sealed.")}</p>
+            </div>
+          );
+        })()}
         {choice === "env_file" && !customOff && (
           <div className="app-provider-manual" data-testid="provider-custom">
             <label className="app-field">

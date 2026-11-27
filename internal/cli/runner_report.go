@@ -65,10 +65,13 @@ type runtimeReporter struct {
 	// provModels is the list of the provider the agent uses with an API
 	// key (startModels), target where that provider is; refresh* follow
 	// the App's requests to list again.
-	provModels  *provider.ModelList
-	target      providerTarget
-	hasTarget   bool
-	refresh     chan struct{}
+	provModels *provider.ModelList
+	target     providerTarget
+	hasTarget  bool
+	refresh    chan struct{}
+	// modelsDone is closed when the models loop has stopped (tests wait
+	// for it before their temporary directories go).
+	modelsDone  chan struct{}
 	refreshSeen bool
 	refreshLast string
 }

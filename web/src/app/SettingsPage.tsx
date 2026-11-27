@@ -5,7 +5,7 @@ import { TailscaleSetup } from "@/app/TailscaleSetup";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowUpRight, AudioLines, BookOpen, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, ShieldCheck, Terminal, Users,
+  AlertTriangle, ArrowUpRight, AudioLines, BookOpen, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, ShieldCheck, Terminal, Users, KeyRound,
 } from "lucide-react";
 import {
   appApi, ApiError, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -20,6 +20,7 @@ import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
 import { updateFailure } from "@/app/UpdateNotice";
 import { accessLabel, localWorkspaceOf, localWorkspaces, type LocalWorkspace } from "@/app/localHubs";
 import { AuditSection, MembersSection, MyDevices } from "@/app/MembersSection";
+import { ModelProvidersSection } from "@/app/ModelProviders";
 import { osWant } from "@/app/pages";
 import { LocalAgentsSection } from "@/app/LocalAgents";
 import { setSimpleMode, useSimpleMode } from "@/app/simpleMode";
@@ -37,7 +38,7 @@ import { HubUpgrade, useLatestRelease } from "@/app/MycoUpgrade";
 import { ProjectStorageSettings } from "@/app/ProjectStorageSettings";
 import { BackupRow } from "@/app/Backups";
 
-type Section = "hubs" | "agents" | "members" | "audit" | "appearance" | "translate" | "voice" | "network" | "apps" | "shortcuts" | "about";
+type Section = "hubs" | "agents" | "members" | "providers" | "audit" | "appearance" | "translate" | "voice" | "network" | "apps" | "shortcuts" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -190,6 +191,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "hubs", get label() { return L("工作区", "Workspaces"); }, icon: Server },
   { key: "agents", get label() { return L("本机 agent", "Agents"); }, icon: Bot },
   { key: "members", get label() { return L("成员", "People"); }, icon: Users },
+  { key: "providers", get label() { return L("模型供应商", "Model providers"); }, icon: KeyRound },
   { key: "audit", get label() { return L("审计", "Audit"); }, icon: ScrollText },
   { key: "appearance", get label() { return L("外观", "Appearance"); }, icon: Palette },
   { key: "translate", get label() { return L("翻译", "Translation"); }, icon: Languages },
@@ -204,7 +206,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
  *  workspace (shared with the others in it), and About. */
 const GROUPS: { title: () => string; keys: Section[] }[] = [
   { title: () => L("这台电脑", "This computer"), keys: ["appearance", "voice", "translate", "network", "apps", "agents"] },
-  { title: () => L("工作区", "Workspace"), keys: ["hubs", "members", "audit"] },
+  { title: () => L("工作区", "Workspace"), keys: ["hubs", "members", "providers", "audit"] },
   { title: () => "", keys: ["shortcuts", "about"] },
 ];
 
@@ -213,6 +215,7 @@ const SECTION_ABOUT: Record<Section, () => string> = {
   hubs: () => L("工作区是你的 agent 碰头的地方，跑在某一台电脑或服务器上。所有页面只显示左下角选中的那个。", "A workspace is where your agents meet; it runs on a computer or a server. Every page shows the one picked at the bottom left."),
   agents: () => L("这台电脑上装了哪些 AI 命令行，能不能用，怎么装、怎么登录。", "The AI command lines on this computer: whether they work, and how to install or sign in."),
   members: () => L("谁在这个工作区里、能做什么；邀请新的人。", "Who is in this workspace and what they may do; invite someone."),
+  providers: () => L("你用 API key 接的模型供应商：存在工作区里，key 只有你自己的设备能解开；在哪台电脑上新增 agent 都能直接选。", "The model vendors you use with an API key: kept in the workspace, keys opened only by your own devices; pick one when you add an agent on any computer."),
   audit: () => L("工作区里谁在什么时候做了什么。", "Who did what in this workspace, and when."),
   appearance: () => L("主题、文字大小、语言，以及对话怎么显示。", "Theme, text size, language, and how chats look."),
   translate: () => L("把 agent 说的话翻译成你的语言。", "Translate what agents say into your language."),
@@ -243,6 +246,7 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
   { section: "agents", key: "local-agents", title: () => L("这台电脑上的 agent", "Agents on this computer"), words: "本机 agent claude code codex gemini 安装 登录 cli install sign in" },
   { section: "hubs", title: () => L("工作区", "Workspaces"), words: "工作区 服务器 连接 加入 新建 停止 公网 cloudflare tailscale workspace hub server" },
   { section: "members", title: () => L("成员", "People"), words: "成员 邀请 角色 管理员 权限 people invite role admin member" },
+  { section: "providers", title: () => L("模型供应商", "Model providers"), words: "模型供应商 服务商 供应商 密钥 key minimax deepseek kimi opencode 智谱 通义 豆包 openrouter model provider api key" },
   { section: "audit", title: () => L("审计", "Audit"), words: "审计 日志 记录 操作 audit log" },
   { section: "shortcuts", title: () => L("快捷键", "Keyboard shortcuts"), words: "快捷键 键盘 按键 热键 shortcuts keyboard hotkeys keys" },
   { section: "about", title: () => L("关于", "About"), words: "关于 版本 更新 升级 about version update upgrade" },
@@ -863,6 +867,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         {section === "hubs" && simple && <MyDevices hubsOv={hubsOv} />}
         {section === "members" && <MembersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
         {section === "audit" && <AuditSection hubsOv={hubsOv} />}
+        {section === "providers" && <ModelProvidersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
       </div>
 
       <Modal

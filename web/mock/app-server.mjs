@@ -1730,6 +1730,7 @@ for (const h of state.hubs) {
     runSettingsAtStart.set(`${h.id}/${a.name}`, JSON.parse(JSON.stringify({ run_settings: a.run_settings, runtime: a.runtime })));
   }
 }
+let lastSpawn = null;
 let lastRunSettings = null;
 
 const local = {
@@ -2431,7 +2432,7 @@ const server = http.createServer(async (req, res) => {
   // effort; put the demo ones back between widths and themes. GET returns
   // the last body the App sent there.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "run-settings" && parts.length === 3) {
-    if (method === "GET") return send(res, 200, { last: lastRunSettings });
+    if (method === "GET") return send(res, 200, { last: lastRunSettings, spawn: lastSpawn });
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
     for (const h of state.hubs) {
       for (const a of h.agents || []) {
@@ -4004,6 +4005,62 @@ const server = http.createServer(async (req, res) => {
       if (parts.length === 5 && parts[4] === "reveal" && method === "POST") return send(res, 200, { dir });
     }
 
+    // /app/hubs/{id}/providers — the member's model providers (i115). A real
+    // App seals keys here; the mock keeps only their last four characters.
+    if (parts[3] === "providers") {
+      hub.providers = hub.providers || [];
+      const now = new Date().toISOString();
+      const VENDOR_HOSTS = { minimax: "api.minimax.io", deepseek: "api.deepseek.com", kimi: "api.moonshot.cn", opencode_go: "opencode.ai" };
+      const models = (vendor) => vendor === "minimax"
+        ? [{ id: "MiniMax-M2", name: "MiniMax M2" }, { id: "MiniMax-M2-lite" }]
+        : vendor === "deepseek" ? [{ id: "deepseek-v4", name: "DeepSeek V4" }, { id: "deepseek-v4-flash" }] : [{ id: "model-1" }];
+      const hint = (k) => (k && k.length >= 12 ? k.slice(-4) : "");
+      if (parts.length === 4 && method === "GET") return send(res, 200, { e2e: !!hub.e2e, providers: hub.providers });
+      if (parts.length === 4 && method === "POST") {
+        const body = await readBody(req);
+        if (!hub.e2e) return fail(res, 409, "e2e_required", "model providers keep their keys end-to-end encrypted: this workspace has encryption off");
+        if (!body?.api_key) return fail(res, 400, "invalid_argument", "enter the API key");
+        const host = VENDOR_HOSTS[body.vendor];
+        const p = { id: "prv_" + Math.random().toString(36).slice(2, 12), name: body.name || body.vendor, vendor: body.vendor,
+          anthropic_base: body.anthropic_base || (host ? `https://${host}/anthropic` : ""), openai_base: body.openai_base || (host ? `https://${host}/v1` : ""),
+          small_model: body.small_model || "", key_version: 1, key_readable: true, key_hint: hint(body.api_key), created_at: now, updated_at: now };
+        hub.providers.push(p);
+        return send(res, 201, p);
+      }
+      if (parts.length === 5 && parts[4] === "test" && method === "POST") {
+        const body = await readBody(req);
+        if (!body?.api_key) return fail(res, 400, "invalid_argument", "an address and a key are needed to test");
+        if (body.api_key.includes("wrong")) return fail(res, 502, "provider_unreachable", `models from ${new URL(body.anthropic_base || "https://api.minimax.io").host}: HTTP 401`);
+        return send(res, 200, { models: models(body.vendor) });
+      }
+      const p = hub.providers.find((x) => x.id === parts[4]);
+      if (!p) return fail(res, 404, "not_found", "model provider not found");
+      if (parts.length === 5 && method === "PATCH") {
+        const body = await readBody(req);
+        for (const k of ["name", "vendor", "anthropic_base", "openai_base", "small_model"]) if (typeof body[k] === "string") p[k] = body[k];
+        if (body.api_key) { p.key_version += 1; p.key_hint = hint(body.api_key); }
+        p.updated_at = now;
+        return send(res, 200, p);
+      }
+      if (parts.length === 5 && method === "DELETE") {
+        hub.providers = hub.providers.filter((x) => x !== p);
+        return send(res, 200, { ok: true });
+      }
+      if (parts.length === 6 && parts[5] === "test" && method === "POST") {
+        p.models = models(p.vendor);
+        p.models_at = now;
+        return send(res, 200, { models: p.models });
+      }
+      if (parts.length === 6 && parts[5] === "push" && method === "POST") {
+        const pushed = [];
+        for (const a of hub.agents) {
+          const ref = a.run_settings?.provider_ref;
+          if (ref?.id === p.id && (ref.key_version || 0) < p.key_version) { ref.key_version = p.key_version; pushed.push(a.name); }
+        }
+        return send(res, 200, { pushed, failed: [] });
+      }
+    }
+
     // /app/hubs/{id}/settings — end-to-end encryption (MOCK_E2E=1 starts it on).
     if (parts.length === 4 && parts[3] === "settings") {
       if (method === "PUT") { const body = await readBody(req); hub.e2e = !!body.e2e; }
@@ -4824,6 +4881,16 @@ const server = http.createServer(async (req, res) => {
         binding: { harness: body.cli, environment: osLabel, workdir: dir },
       });
       hub.agents.push(agent);
+      if (body.provider) {
+        // Sealed for that computer by the App (i115): the agent starts on it.
+        const p = (hub.providers || []).find((x) => x.id === body.provider);
+        if (p) {
+          agent.run_settings = { provider: "custom", provider_ref: { id: p.id, key_version: p.key_version } };
+          agent.runtime.provider = p.name; agent.runtime.provider_host = new URL(p.anthropic_base || p.openai_base).host; agent.runtime.provider_source = "env_file";
+          agent.runtime.features = ["remote_provider"];
+          lastSpawn = { hub: hub.id, body: { ...body } };
+        }
+      }
 
       return send(res, 200, {
         agent: agent.name,
@@ -5024,6 +5091,16 @@ const server = http.createServer(async (req, res) => {
         if (!rt.features?.includes("remote_provider")) return fail(res, 409, "unsupported", "upgrade myco on its computer");
         if (!hub.e2e) return fail(res, 409, "e2e_required", "the key would pass through the hub: turn on end-to-end encryption, or enter it on that computer");
         const body = await readBody(req);
+        if (body?.workspace) {
+          // One of the member's model providers (i115), with the model it runs.
+          const p = (hub.providers || []).find((x) => x.id === body.workspace);
+          if (!p) return fail(res, 404, "not_found", "model provider not found");
+          agent.run_settings = { ...(agent.run_settings || {}), provider: "custom", provider_ref: { id: p.id, key_version: p.key_version }, ...(body.model ? { model: body.model } : {}) };
+          rt.provider = p.name; rt.provider_host = new URL(p.anthropic_base || p.openai_base).host; rt.provider_source = "env_file";
+          if (body.model) { rt.model = body.model; rt.model_source = "app"; }
+          lastRunSettings = { hub: hub.id, agent: agent.name, body: { workspace: p.id, model: body.model || "" } };
+          return send(res, 200, agent);
+        }
         let u;
         try { u = new URL(body?.manual?.base_url || ""); } catch { return fail(res, 400, "invalid_argument", "base_url must be an http(s) address"); }
         if (!body.manual.api_key) return fail(res, 400, "invalid_argument", "a key is required");
