@@ -5982,6 +5982,27 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-provider-manual .seg { display: inline-flex; }
 /* Clearing the custom address: quiet on the left, red only on hover. */
 .app-provider-clear { margin-right: auto; background: transparent; color: var(--muted); }
+/* Adding or editing a model provider (ProviderEditor): the vendor as a
+   select with MiniMax's region beside it and the address under both; the
+   key, the name; addresses and the small model folded in one row. */
+.pv-vendor-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.pv-vendor-row:has(> :nth-child(2)) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.app-modal .pv-vendor-row > .app-field { margin-top: 0; }
+.pv-vendor-hint { display: block; margin-top: 6px; }
+.pv-vendor-hint .mono { color: var(--fg-2); }
+.pv-bases { margin-top: 14px; border-radius: 10px; box-shadow: 0 0 0 0.5px var(--line); }
+.pv-bases-head {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
+  padding: 9px 12px; border: 0; border-radius: 10px; background: none;
+  color: var(--fg-2); font: inherit; font-size: 12.5px; text-align: left; cursor: default;
+}
+.pv-bases-head:hover:not(:disabled) { background: var(--nav-hover); }
+.pv-bases-head:disabled { color: var(--fg-2); opacity: 1; }
+.pv-bases-chev { flex: none; width: 14px; height: 14px; color: var(--muted); transform: rotate(-90deg); transition: transform .15s; }
+.pv-bases-head[aria-expanded="true"] .pv-bases-chev { transform: none; }
+.pv-bases-sum { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+.pv-bases-body { padding: 0 12px 12px; }
+.pv-bases-body > .app-field:first-child { margin-top: 2px; }
 /* 模型从哪来 in the new-agent dialog (ModelSource): one line per choice, its
    detail beside the name, the picked one on a soft ground; adding a key is
    an inset panel under the list, vendor and key on one row, one note and

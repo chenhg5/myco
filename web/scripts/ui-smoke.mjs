@@ -5647,11 +5647,24 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator("[data-testid=providers-add]"));
       const dlg = page.locator(".app-modal", { has: page.locator("[data-testid=provider-vendors]") });
       await dlg.waitFor({ timeout: 5_000 });
-      if (!(await dlg.locator("[data-testid=provider-vendors]").innerText()).includes("OpenCode Go")) throw new Error("应列出内置的供应商");
+      // The vendor is a select: its catalogue, then a custom address.
+      const vendor = dlg.locator("[data-testid=provider-vendor]");
+      if (!(await vendor.locator("option", { hasText: "OpenCode Go" }).count())) throw new Error("应列出内置的供应商");
+      if (!(await vendor.locator("option[value=custom]").count())) throw new Error("供应商下拉里应有「自定义地址」");
+      await vendor.selectOption("custom");
+      const anth = dlg.locator("[data-testid=provider-anthropic]");
+      await anth.waitFor({ timeout: 5_000 });
+      if (await anth.inputValue()) throw new Error("自定义地址应从空的开始，不该带上一家的地址");
+      await dlg.locator("[data-testid=provider-api-key]").fill("sk-custom-1234");
+      if (!(await dlg.locator("[data-testid=provider-save-workspace]").isDisabled())) throw new Error("自定义没填地址时不该能保存");
+      await settle(page, 150);
+      await shot(page, size, scheme, "settings-provider-custom");
+      await dlg.locator("[data-testid=provider-api-key]").fill("");
+      await vendor.selectOption("minimax");
       const region = dlg.locator("[data-testid=provider-minimax-region]");
       if (await region.inputValue() !== "international") throw new Error("Existing MiniMax default must stay international");
       await region.selectOption("china");
-      if (!(await dlg.locator("[data-testid=provider-vendors] .picked").innerText()).includes("api.minimaxi.com")) throw new Error("The selected vendor must show the selected region's host");
+      if (!(await dlg.locator("[data-testid=provider-host]").innerText()).includes("api.minimaxi.com")) throw new Error("The selected vendor must show the selected region's host");
       await dlg.locator("[data-testid=provider-api-key]").fill("mm-test-key-wrong-1234");
       await clickVisible(page, dlg.locator("[data-testid=provider-test]"));
       await dlg.locator(".app-error-text", { hasText: "HTTP 401" }).first().waitFor({ timeout: 5_000 });
