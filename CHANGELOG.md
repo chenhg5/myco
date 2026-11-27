@@ -4,6 +4,24 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.3
+
+- CLI: a runner's first handshake with a Hub is now time-limited, so a Hub that does not answer no longer stalls startup indefinitely; once startup succeeds, runtime reporting and inbox polling keep running as before.
+- Hub: a member's model providers are kept in the workspace, so any computer they add an agent on can use them; each key is sealed for their own devices — the hub verifies it but cannot open it — and members see and change only their own providers.
+- Hub: a provider's vendor, addresses and small model are now sealed together with its key, the App shows when the hub's copy differs, changing them needs the key sealed again, and only a member's own devices can manage providers — not the hub's admin token.
+- App: Settings > Model providers lists your providers with Test, Edit, Delete and Push new key, and adding one picks a vendor and takes a key that only the app's backend seals; an agent's Provider dialog offers them with a model select and flags one deleted or with a newer key, and adding an agent offers a provider and its models.
+- App: agents' mushroom faces now differ in outline too — six cap shapes and at most one thing to wear (sprout, leaf, bow, headphones, scarf, star or flower) — while colour, spots and expression still come from the id as before, the dome draws exactly as it did, and a face that would repeat an earlier colour and shape takes the next free one.
+- App: an agent's name written in a message (cloud-7, @pm-codex) now reads as its name for people, in its accent colour with the written form on hover, and a click or Enter opens its chat; names that could be ordinary words, or that sit in code, links, paths or addresses, stay plain.
+
+**中文**
+
+- 命令行：runner 启动时与 Hub 的首次握手现在有超时上限，不响应的 Hub 不会再让启动无限期卡住；启动成功后，运行状态上报和收件箱轮询照常持续。
+- Hub：成员的模型供应商保存在工作区里，之后在任何电脑上添加 agent 都能使用；每个 Key 只对成员自己的设备封装，Hub 只能校验、无法打开，且成员只能看到和修改自己的供应商。
+- Hub：供应商的厂商、地址和小模型现在与 Key 一起封装，Hub 上的副本不一致时 App 会提示，修改这些设置需要用 Key 重新封装；并且只有成员自己的设备能管理供应商，Hub 管理员令牌不行。
+- 桌面应用：设置 > 模型供应商 列出你的供应商，可测试、编辑、删除，agent 还在用旧 Key 时可推送新 Key；添加时选厂商并填入 Key，只有应用后端能看到并完成封装。为 agent 选择供应商时会列出这些供应商和模型下拉，并提示已删除或已有更新 Key 的供应商；添加 agent 时也能直接选供应商及其模型。
+- 桌面应用：agent 的蘑菇头像在轮廓上也区分开了——六种菌盖形状，最多再戴一件装饰（芽、叶、蝴蝶结、耳机、围巾、星星或花）；颜色、斑点和表情仍按原来的方式由 id 决定，圆顶头像画出来和以前完全一样，与已有头像撞了颜色和形状时会先取下一个空闲的形状、再换颜色。
+- 桌面应用：消息里写到的 agent 名字（cloud-7、@pm-codex）现在按它对人的名字显示，用强调色，悬停时显示原文，点击或回车即可打开该 agent 的对话；可能只是普通单词的名字，以及代码、链接、路径或地址里的名字，保持普通文本。
+
 ## v0.23.2
 
 - Runner: when the hub predates the model-source fields, the runtime report now drops just those fields and keeps the models, instead of being refused.
