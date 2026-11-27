@@ -79,6 +79,9 @@ type Message struct {
 	ThreadID       string
 	ReplyTo        string
 	After          string // task that must finish before this message is deliverable
+	ParentID       string // message being handled when this task was delegated
+	ReassignNote   string // context supplied when an unclaimed task changes recipient
+	EverDelivered  bool   // survives lease retries, holds and runner recovery
 	Type           MessageType
 	Body           string
 	Status         Status
@@ -181,6 +184,7 @@ func (m *Message) Claim(now time.Time, lease time.Duration, maxAttempts int) boo
 		return false
 	}
 	m.Status = StatusDelivered
+	m.EverDelivered = true
 	m.Attempts++
 	m.LeaseUntil = now.Add(lease)
 	m.UpdatedAt = now

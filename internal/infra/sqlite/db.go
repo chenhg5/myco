@@ -574,6 +574,10 @@ func open(path string, t *Timing) (*sql.DB, error) {
 			return nil, fmt.Errorf("migrate: %w", err)
 		}
 	}
+	if err := migrateMessageCoordination(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
 	for _, ddl := range []string{
 		`CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_task_stats ON messages(created_at, id, from_agent, to_agent, project, status, first_acked_at) WHERE type='task'`,
@@ -652,7 +656,7 @@ var agentColumnsV2 = [][2]string{
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).
-func addColumns(db *sql.DB, table string, cols [][2]string) error {
+func addColumns(db schemaConnection, table string, cols [][2]string) error {
 	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
 	if err != nil {
 		return err

@@ -11,6 +11,7 @@ const MaxBroadcastRecipients = 200
 
 // BroadcastInput sends one message to every agent matching Selector.
 type BroadcastInput struct {
+	ParentID       string
 	Selector       string
 	Type           string
 	Body           string
@@ -84,6 +85,13 @@ func (s *MessageService) Broadcast(ctx context.Context, sender *domain.Agent, in
 			return &BroadcastOutput{ID: prev.BroadcastID, Messages: msgs, Duplicate: true}, err
 		}
 	}
+	parent := ""
+	if typ == domain.TypeTask && in.ParentID != "" {
+		parent, err = s.parentForSend(ctx, sender, in.ParentID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	atts, err := resolveAttachments(ctx, s.files, s.clock, sender.Name, in.Attachments)
 	if err != nil {
 		return nil, err
@@ -98,6 +106,7 @@ func (s *MessageService) Broadcast(ctx context.Context, sender *domain.Agent, in
 		if err != nil {
 			return nil, err
 		}
+		m.ParentID = parent
 		m.BroadcastID = out.ID
 		m.Attachments = atts
 		m.FromOwner = s.ownerName(ctx, sender)

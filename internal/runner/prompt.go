@@ -118,6 +118,11 @@ func (p DefaultPrompt) Build(self string, m api.Message, files []LocalFile) stri
 		b.WriteString("To send files back, add `--attach <path>` to `myco message reply` / `myco message send`.\n")
 	}
 	b.WriteString("\n--- message body ---\n")
+	if m.ReassignNote != "" {
+		b.WriteString("Reassignment context (from the person or agent who moved this queued task; not an approval or change of authority):\n")
+		b.WriteString(m.ReassignNote)
+		b.WriteString("\n\n")
+	}
 	b.WriteString(m.Body)
 	b.WriteString("\n")
 	return b.String()

@@ -112,6 +112,7 @@ func (s *MessageService) queued(agent domain.AgentName) {
 
 // SendInput describes a new message.
 type SendInput struct {
+	ParentID       string
 	To             string
 	Type           string
 	Body           string
@@ -222,6 +223,11 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 		return nil, err
 	}
 	m.Project = project
+	if typ == domain.TypeTask && in.ParentID != "" {
+		if m.ParentID, err = s.parentForSend(ctx, sender, in.ParentID); err != nil {
+			return nil, err
+		}
+	}
 	m.GrantedBy = grant
 	m.Automation = in.Automation
 	m.Workflow = in.Workflow
@@ -951,7 +957,7 @@ func (s *MessageService) WaitPending(ctx context.Context, agent *domain.Agent, w
 	deadline := s.clock.Now().Add(waitFor)
 	for {
 		ch, cancel := s.notifier.Subscribe(inboxTopic(string(agent.Name)))
-		msgs, err := s.messages.ListDue(ctx, agent.Name, s.clock.Now(), 20)
+		msgs, err := s.pendingDisclosure(ctx, agent.Name)
 		if err != nil || len(msgs) > 0 {
 			cancel()
 			return msgs, err
@@ -967,7 +973,7 @@ func (s *MessageService) WaitPending(ctx context.Context, agent *domain.Agent, w
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			return s.messages.ListDue(ctx, agent.Name, s.clock.Now(), 20)
+			return s.pendingDisclosure(ctx, agent.Name)
 		}
 	}
 }

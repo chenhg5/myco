@@ -19,7 +19,7 @@ func NewMessageRepo(db *sql.DB) *MessageRepo { return &MessageRepo{db: db} }
 
 var _ domain.MessageRepository = (*MessageRepo)(nil)
 
-const msgCols = `id, from_agent, to_agent, thread_id, reply_to, after, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at, broadcast_id, attachments, from_owner, project, ask, asking, answers, suggest, automation, workflow, result, granted_by, hold_until, hold_wake, hold_recovered`
+const msgCols = `id, from_agent, to_agent, thread_id, reply_to, after, type, body, status, attempts, lease_until, error, idempotency_key, created_at, updated_at, broadcast_id, attachments, from_owner, project, ask, asking, answers, suggest, automation, workflow, result, granted_by, hold_until, hold_wake, hold_recovered, parent_id, reassign_note, ever_delivered`
 
 type execer interface {
 	ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error)
@@ -31,9 +31,9 @@ func insertMessage(ctx context.Context, x execer, m *domain.Message) error {
 		idem = m.IdempotencyKey
 	}
 	att, _ := json.Marshal(nonNil(m.Attachments))
-	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`,first_acked_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
+	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`,first_acked_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
 		m.ID, m.From, m.To, m.ThreadID, m.ReplyTo, m.After, m.Type, m.Body, m.Status, m.Attempts,
-		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt), m.BroadcastID, string(att), m.FromOwner, m.Project, m.Ask, m.Asking, m.Answers, m.Suggest, m.Automation, m.Workflow, m.Result, m.GrantedBy, m.HoldUntil, m.HoldWake, m.HoldRecovered)
+		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt), m.BroadcastID, string(att), m.FromOwner, m.Project, m.Ask, m.Asking, m.Answers, m.Suggest, m.Automation, m.Workflow, m.Result, m.GrantedBy, m.HoldUntil, m.HoldWake, m.HoldRecovered, m.ParentID, m.ReassignNote, m.EverDelivered)
 	if isUniqueViolation(err) {
 		return domain.Errf(domain.CodeConflict, "duplicate message (id or idempotency key)")
 	}
@@ -41,8 +41,8 @@ func insertMessage(ctx context.Context, x execer, m *domain.Message) error {
 }
 
 func updateMessage(ctx context.Context, x execer, m *domain.Message) error {
-	_, err := x.ExecContext(ctx, `UPDATE messages SET first_acked_at=CASE WHEN first_acked_at=0 AND status!='acked' AND ?='acked' THEN ? ELSE first_acked_at END, status=?, attempts=?, lease_until=?, error=?, updated_at=?, asking=?, suggest=?, hold_until=?, hold_wake=?, hold_recovered=? WHERE id=?`,
-		m.Status, ms(m.UpdatedAt), m.Status, m.Attempts, ms(m.LeaseUntil), m.Error, ms(m.UpdatedAt), m.Asking, m.Suggest, m.HoldUntil, m.HoldWake, m.HoldRecovered, m.ID)
+	_, err := x.ExecContext(ctx, `UPDATE messages SET first_acked_at=CASE WHEN first_acked_at=0 AND status!='acked' AND ?='acked' THEN ? ELSE first_acked_at END, status=?, attempts=?, lease_until=?, error=?, updated_at=?, asking=?, suggest=?, hold_until=?, hold_wake=?, hold_recovered=?, ever_delivered=ever_delivered OR ? WHERE id=?`,
+		m.Status, ms(m.UpdatedAt), m.Status, m.Attempts, ms(m.LeaseUntil), m.Error, ms(m.UpdatedAt), m.Asking, m.Suggest, m.HoldUntil, m.HoldWake, m.HoldRecovered, m.EverDelivered || m.Status == domain.StatusDelivered || m.Status == domain.StatusAcked || m.Status == domain.StatusHeld, m.ID)
 	return internal(err)
 }
 
@@ -350,7 +350,7 @@ func scanMessage(s scanner) (*domain.Message, error) {
 		att                     string
 	)
 	err := s.Scan(&m.ID, &m.From, &m.To, &m.ThreadID, &m.ReplyTo, &m.After, &m.Type, &m.Body, &m.Status,
-		&m.Attempts, &lease, &m.Error, &idem, &created, &updated, &m.BroadcastID, &att, &m.FromOwner, &m.Project, &m.Ask, &m.Asking, &m.Answers, &m.Suggest, &m.Automation, &m.Workflow, &m.Result, &m.GrantedBy, &m.HoldUntil, &m.HoldWake, &m.HoldRecovered, &active)
+		&m.Attempts, &lease, &m.Error, &idem, &created, &updated, &m.BroadcastID, &att, &m.FromOwner, &m.Project, &m.Ask, &m.Asking, &m.Answers, &m.Suggest, &m.Automation, &m.Workflow, &m.Result, &m.GrantedBy, &m.HoldUntil, &m.HoldWake, &m.HoldRecovered, &m.ParentID, &m.ReassignNote, &m.EverDelivered, &active)
 	if err != nil {
 		return nil, err
 	}

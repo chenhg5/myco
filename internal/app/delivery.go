@@ -219,6 +219,12 @@ func (d *Dispatcher) WakeNow(ctx context.Context, agent *domain.Agent) error {
 	if err != nil || len(pending) == 0 {
 		return err
 	}
+	// A push includes message bodies before the recipient pulls. Reserve that
+	// disclosure atomically against reassignment, even for non-consuming wakers.
+	pending, err = preparePendingDisclosure(ctx, d.messages, agent.Name, pending, now)
+	if err != nil || len(pending) == 0 {
+		return err
+	}
 	log := d.log.With("agent", agent.Name, "mode", w.Mode(), "pending", len(pending))
 	wctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -230,7 +236,7 @@ func (d *Dispatcher) WakeNow(ctx context.Context, agent *domain.Agent) error {
 	if w.Consumes() {
 		for _, m := range pending {
 			_, err := d.messages.Mutate(ctx, m.ID, func(m *domain.Message) ([]*domain.Message, error) {
-				if !m.IsDue(now) {
+				if m.To != agent.Name || !m.IsDue(now) {
 					return nil, nil
 				}
 				m.Claim(now, 0, 0)
