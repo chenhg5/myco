@@ -5960,6 +5960,30 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-provider-manual .seg { display: inline-flex; }
 /* Clearing the custom address: quiet on the left, red only on hover. */
 .app-provider-clear { margin-right: auto; background: transparent; color: var(--muted); }
+/* 模型从哪来 in the new-agent dialog (ModelSource): one line per choice, its
+   detail beside the name, the picked one on a soft ground; adding a key is
+   an inset panel under the list, vendor and key on one row, one note and
+   the buttons at its foot. */
+.model-source .app-provider-list { gap: 2px; margin-bottom: 8px; max-height: 220px; }
+.model-source .app-provider-opt { align-items: center; padding: 7px 10px; border-radius: 8px; box-shadow: none; }
+.model-source .app-provider-opt input { margin-top: 0; flex: none; }
+.model-source .app-provider-opt > span { flex-direction: row; align-items: baseline; gap: 8px; min-width: 0; }
+.model-source .app-provider-opt b { flex: none; }
+.model-source .app-provider-opt small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.model-source .app-provider-opt.picked { background: var(--pill); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+.model-source .app-provider-manual { gap: 10px; margin: 0 0 8px; padding: 12px; border-radius: 10px; background: var(--pill); }
+.model-source .app-provider-manual :is(.app-input, .app-select-field) { background-color: var(--bg); }
+.ms-row { display: grid; grid-template-columns: minmax(0, 170px) minmax(0, 1fr); gap: 10px; }
+.model-source .ms-row > .app-field { margin: 0 !important; }
+/* (a custom address takes the whole row) */
+.ms-row > .app-field:not(.ms-vendor):not(.ms-key) { grid-column: 1 / -1; order: 3; }
+.ms-foot { display: flex; align-items: center; gap: 6px; }
+.model-source .ms-note { flex: 1; min-width: 0; margin: 0; padding: 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); opacity: 1; }
+@media (max-width: 560px) {
+  .ms-row { grid-template-columns: minmax(0, 1fr); }
+  .ms-foot { flex-wrap: wrap; }
+  .ms-note { flex-basis: 100%; }
+}
 .app-provider-clear:hover:not(:disabled) { background: var(--pill); color: var(--red); }
 .app-modal-note { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
 

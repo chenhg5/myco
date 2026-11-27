@@ -405,7 +405,7 @@ export function ModelSource({ hubId, cli, machineName, value, onChange, model, o
   const program = cli === "codex" ? "Codex" : "Claude Code";
   const models = chosen?.models || [];
   return (
-    <div className="app-field" data-testid="model-source">
+    <div className="app-field model-source" data-testid="model-source">
       <span className="app-field-label">{L("模型从哪来", "Where its model comes from")}</span>
       <div className="app-provider-list" role="radiogroup" aria-label={L("模型从哪来", "Where its model comes from")}>
         <label className={cn("app-provider-opt", !value && !adding && "picked")}>
@@ -452,7 +452,7 @@ export function ModelSource({ hubId, cli, machineName, value, onChange, model, o
           )}
         </label>
       )}
-      {(chosen || adding) && <span className="app-field-hint" data-testid="model-source-custody">{custodyLine(e2e)}</span>}
+      {chosen && !adding && <span className="app-field-hint" data-testid="model-source-custody">{custodyLine(e2e)}</span>}
     </div>
   );
 }
@@ -511,7 +511,8 @@ function QuickProvider({ hubId, cli, e2e, busy, onSaved }: {
   };
   return (
     <div className="app-provider-manual" data-testid="model-source-new">
-      <label className="app-field">
+      <div className="ms-row">
+      <label className="app-field ms-vendor">
         <span className="app-field-label">{L("哪一家", "Which vendor")}</span>
         <select className="app-select-field" value={vendor} onChange={(e) => { setVendor(e.target.value); setTested(null); }} disabled={working || busy} data-testid="model-source-vendor">
           {VENDORS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
@@ -526,22 +527,26 @@ function QuickProvider({ hubId, cli, e2e, busy, onSaved }: {
           {base.trim() && badBase && <span className="app-field-hint is-bad">{L("地址要以 http:// 或 https:// 开头，不带用户名、? 或 #", "Addresses start with http:// or https://, with no user name, ? or #")}</span>}
         </label>
       )}
-      <label className="app-field">
+      <label className="app-field ms-key">
         <span className="app-field-label">{L("API key", "API key")}</span>
         <input className="app-input" type="password" autoComplete="new-password" value={key} onChange={(e) => { setKey(e.target.value); setTested(null); }}
           disabled={working || busy} placeholder={L("填上这家给你的 key", "The key this vendor gave you")} data-testid="model-source-key" />
       </label>
+      </div>
       {tested && <p className="app-small-note app-offline-ok" data-testid="model-source-tested">{L(`读到 ${tested.length} 个模型：${tested.slice(0, 4).map((m) => m.id).join("、")}${tested.length > 4 ? " 等" : ""}`, `${tested.length} models: ${tested.slice(0, 4).map((m) => m.id).join(", ")}${tested.length > 4 ? " and more" : ""}`)}</p>}
       <ErrorText error={error} />
-      <div className="app-setting-actions">
+      {/* One line about where it goes and who can read it; the buttons beside it. */}
+      <div className="ms-foot">
+        <span className="ms-note" data-testid="model-source-custody">
+          {!e2e && L("存进「我的模型供应商」，以后哪台电脑都能直接选。", "Saved to My model providers, for any computer later. ")}{custodyLine(e2e)}
+        </span>
         <button type="button" className="app-btn app-btn-small" onClick={() => void test()} disabled={!ready} data-testid="model-source-test">
           {working && !tested ? L("正在测试", "Testing") : L("测试", "Test")}
         </button>
-        <button type="button" className="app-btn app-btn-small" onClick={() => void save()} disabled={!ready} data-testid="model-source-save">
+        <button type="button" className="app-btn app-btn-small app-btn-primary" onClick={() => void save()} disabled={!ready} data-testid="model-source-save">
           {L("保存并选用", "Save and use")}
         </button>
       </div>
-      {!e2e && <span className="app-field-hint">{L("存进「我的模型供应商」，以后在任何一台电脑上新增 agent 都能直接选。", "Saved to My model providers: pick it whenever you add an agent on any computer.")}</span>}
     </div>
   );
 }

@@ -2136,6 +2136,24 @@ async function runMatrix(browser, size, scheme) {
         return out;
       });
       if (fits.sideways > 1 || fits.right > 0) throw new Error(`长命令不该把弹框撑宽：横向多出 ${fits.sideways}px，提示超出 ${fits.right}px`);
+      // The lower half, tidy: its role before the folder (it names the
+      // folder made for an empty field), the allowed folders on one line,
+      // the folders used before as a short row.
+      const lower = await dialog.evaluate((el) => {
+        for (const x of [el, ...el.querySelectorAll("*")]) if (x.scrollHeight > x.clientHeight + 4 && getComputedStyle(x).overflowY !== "visible") x.scrollTop = x.scrollHeight;
+        const labels = [...el.querySelectorAll(".app-field-label")].map((x) => x.textContent || "");
+        const line = el.querySelector("[data-testid=allowed-dirs] .add-dirs-line");
+        return {
+          roleFirst: labels.findIndex((t) => t.startsWith("它的分工")) < labels.findIndex((t) => t.startsWith("在哪个文件夹干活")),
+          oneLine: !!line && line.getBoundingClientRect().height < 24,
+          recent: !!el.querySelector(".add-recent .add-recent-label"),
+        };
+      });
+      if (!lower.roleFirst) throw new Error("分工应在文件夹前面（不填文件夹时用它起名）");
+      if (!lower.oneLine) throw new Error("允许的文件夹应只占一行");
+      if (!lower.recent) throw new Error("用过的文件夹应写明「用过的」");
+      await settle(page, 200);
+      await shot(page, size, scheme, "add-agent-remote-new-folder");
       await vpsFolder.fill("~/elsewhere");
       await dialog.locator("[data-testid=allowed-dirs].is-bad").waitFor({ timeout: 5_000 });
       // This App reaches it: it can allow that folder there at once.

@@ -869,6 +869,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   // Where its model comes from (i115, i119): the computer's own, or one of
   // the member's model providers, which goes to that computer with it.
   const [providerId, setProviderId] = useState("");
+  const [allFolders, setAllFolders] = useState(false);
   useEffect(() => { if (open) setError(null); }, [open, machine.id]);
   // A model or effort picked for one CLI means nothing to another.
   useEffect(() => { setModel(""); setEffort(""); setProviderId(""); }, [cli]);
@@ -967,6 +968,11 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
         </div>
       )}
       <ModelSource hubId={hubId} cli={cli} machineName={machine.name} value={providerId} onChange={setProviderId} model={model} onModel={setModel} busy={!!busy} />
+      {/* (its role first: it also names the folder made when none is given) */}
+      <label className="app-field">
+        <span className="app-field-label">{L("它的分工（可以不填）", "Its role (optional)")}</span>
+        <input className="app-input" value={role} onChange={(e) => setRole(e.target.value)} placeholder={L("比如 后端工程师", "e.g. Backend engineer")} disabled={!!busy} />
+      </label>
       <label className="app-field">
         <span className="app-field-label">{autoDir ? L("在哪个文件夹干活（可以不填）", "Which folder it works in (optional)") : L("在哪个文件夹干活", "Which folder it works in")}</span>
         <input className="app-input mono" value={dir} onChange={(e) => setDir(e.target.value)} disabled={!!busy} required={!autoDir}
@@ -981,18 +987,19 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
           <span className={cn("app-field-hint", outside && "is-bad")} data-testid="allowed-dirs">{outside
             ? <>{L(`这个文件夹不在「${machine.name}」允许的范围里。允许的：${info.dirs.join("、")}`, `That folder is outside what “${machine.name}” allows. Allowed: ${info.dirs.join(", ")}`)}
               {hub && <AllowFolder hubId={hubId} hub={hub} machine={machine} dir={dir.trim()} onAllowed={setAllowed} />}</>
-            : L(`「${machine.name}」只允许在这些文件夹里开工：${info.dirs.join("、")}`, `“${machine.name}” only allows these folders: ${info.dirs.join(", ")}`)}</span>
+            : <span className="add-dirs-line" title={info.dirs.join("\n")}>{L(`只允许在这里开工：${info.dirs.join("、")}`, `Only in: ${info.dirs.join(", ")}`)}</span>}</span>
         )}
       </label>
+      {/* Folders used before: four, the rest a click away. */}
       {folders.length > 0 && (
-        <div className="app-convpick-folders">
-          {folders.map((d) => <button key={d} type="button" className={cn("app-convpick-folder mono", d === dir.trim() && "active")} onClick={() => setDir(d)} disabled={!!busy} title={d}>{shortDir(d)}</button>)}
+        <div className="app-convpick-folders add-recent">
+          <span className="add-recent-label">{L("用过的", "Used before")}</span>
+          {(allFolders ? folders : folders.slice(0, 4)).map((d) => <button key={d} type="button" className={cn("app-convpick-folder mono", d === dir.trim() && "active")} onClick={() => setDir(d)} disabled={!!busy} title={d}>{shortDir(d)}</button>)}
+          {!allFolders && folders.length > 4 && (
+            <button type="button" className="app-convpick-folder add-recent-more" onClick={() => setAllFolders(true)} disabled={!!busy}>{L(`还有 ${folders.length - 4} 个`, `${folders.length - 4} more`)}</button>
+          )}
         </div>
       )}
-      <label className="app-field">
-        <span className="app-field-label">{L("它的分工（可以不填）", "Its role (optional)")}</span>
-        <input className="app-input" value={role} onChange={(e) => setRole(e.target.value)} placeholder={L("比如 后端工程师", "e.g. Backend engineer")} disabled={!!busy} />
-      </label>
       <details className="app-advanced">
         <summary>{L("更多选项：模型、思考强度、权限", "More: model, effort, access")}<ChevronDown /></summary>
         <div className="app-advanced-body">
