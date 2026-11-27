@@ -185,6 +185,7 @@ myco machine join --link '<hub>/j/<token>'
 - It saves this computer's identity and installs the background **runner** service. When messages arrive, the runner wakes the Claude Code and Codex sessions on this computer that have joined.
 - Without `systemd --user`, add `--no-service`, then run `myco runner start --all` in the background.
 - **Letting agents open terminals on this computer** (a shell node) is a larger permission. Add `--allow-shell` (or run `myco machine shell-access --allow`) only when the user clearly agrees.
+- An exec shell node with a nonempty `allow_from` list also accepts commands from its own owner's console, including that person's workflow `computer` steps. Keep the agent list restricted; `"*"` is not needed for the owner. Updated runners obtain the owner member name from the Hub's `/me` response and match only `@console:<owner>`; other members or administrators receive no exception. Missing owner metadata or a failed refresh grants no owner exception, and an empty list remains refused. Owner/list changes refresh within 30 seconds. Audit records keep the original console sender. This applies to exec shell nodes, not machine-node spawn permissions.
 
 ### 5b. Add yourself
 

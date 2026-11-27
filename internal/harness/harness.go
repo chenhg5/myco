@@ -223,8 +223,9 @@ type ExecSpec struct {
 	// Senders is the set of agents allowed to send commands, re-checked on
 	// every message (filled from the agent's allow_from at start).
 	Senders []string `yaml:"-" json:"-"`
-	// CurrentSenders, if set, returns the up-to-date allow_from (the admin
-	// may change it while the node runs); Senders is used if it fails.
+	// CurrentSenders, if set, returns the current authorized senders, including
+	// an exec node owner's console identity confirmed by the Hub. Senders is
+	// the original allow_from only, used without an owner exception on failure.
 	CurrentSenders func() ([]string, error) `yaml:"-" json:"-"`
 	// AuditLog is a JSONL file recording every command (set by the runner).
 	AuditLog string `yaml:"-" json:"-"`

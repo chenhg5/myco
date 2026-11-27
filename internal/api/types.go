@@ -80,6 +80,8 @@ type Agent struct {
 	// machine (a machine's node for starting sessions: not shown as a node).
 	Kind string `json:"kind,omitempty"`
 	// Owner is the member who added it (their name); OwnerID their id.
+	// /me resolves this on the Hub. Exec runners use it to authorize only
+	// that member's exact console identity, never a locally supplied owner.
 	Owner   string `json:"owner,omitempty"`
 	OwnerID string `json:"owner_id,omitempty"`
 	// MachineID is the machine it runs on (also "env:<host>" for machines

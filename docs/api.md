@@ -149,7 +149,7 @@ shows this snapshot when available and still works against older Hubs.
 | `GET /v1/overview?recent=` | admin/agent | Dashboard snapshot: per-agent `state` (working/pending/idle/offline), `queued` (queued + delivered, pulled but not acked), `in_progress` (acked tasks that show life), `stale` and `stale_tasks` (acked tasks that do not: the agent is offline, or none was touched for 5 minutes under a runner or 30 minutes in a session; still open, from v0.20.28), `held` (separate), `receiving` (`session`/`runner`) and `session_in_use`; `working` means at least one acked task that shows life, `pending` means queued/delivered/held without it; a task shows life when its recipient reads it, reports progress, asks or uploads its trace (kept with the task, so a restart keeps it); message contents only for the viewer's own messages (all for admin) |
 | `GET /v1/agents?capability=&online=true&selector=` | admin/agent | `{agents:[...]}`; each agent carries `skills` (`[{name, summary?, examples?}]`, from v0.18.21) and `capabilities` (their names; agents from before skills have bare skills named after their capabilities). `capability` matches a skill name. Private nodes (see `visibility`) are listed only to those who may see them, and `GET /v1/agents/{name}` answers 404 for the others |
 | `GET /v1/agents/{name}` | admin/agent | One agent (`name` may be an alias); agents carry `display_name`, `avatar` (when one was chosen) and `aliases`. Those who may manage it also get `resume` (`{created_at, last_used_at?, last_used_env?}`, from v0.19.5) once it has a resume line |
-| `GET /v1/me` | agent | The calling agent |
+| `GET /v1/me` | agent | The calling agent, including Hub-resolved `owner` (member name) and `owner_id` when known. Exec runners may derive that owner's exact console identity from `owner`; it is not a client-supplied authorization field |
 | `PUT /v1/me/binding` | agent | `{harness?, session_id?, environment?, workdir?}` — update your session binding (empty fields unchanged) |
 | `GET /v1/inbox/wait?wait_seconds=` | agent | Long-poll until messages are pending (not leased) → `{pending, timed_out}` |
 | `POST /v1/ingress/{kind}` | signature | External callbacks turned into replies (`github`: `X-Hub-Signature-256`) |
@@ -857,6 +857,17 @@ a JSON body:
 `exit_code` 124 = killed at the node's timeout, 126 = refused (sender not in `allow_from`,
 command not in the node's allowlist) with the reason in `error`. Notes, replies and events are
 never executed. `myco exec --to <node> --cmd "..."` wraps this and exits with `exit_code`.
+
+Exec runners also accept the node owner's exact `@console:<owner>` identity,
+derived from the authenticated `GET /v1/me` response, while retaining a nonempty
+`allow_from` list. This includes a workflow computer step sent as that person.
+Other members' consoles, including administrators, receive no exception. The
+runner caches this owner and sender list together for up to 30 seconds; ownership
+changes take effect on refresh. If refresh fails, only the original startup
+`allow_from` is used, without an owner-console exception. Missing `owner` on older
+Hubs and empty sender lists do not grant owner-console access. This identity is
+never persisted in `allow_from`; command restrictions and the audit `from` remain
+unchanged. Upgrade the node's runner to enable this behavior.
 
 An exec node's answers (the result reply, or the failure event) are stored already `done`: they
 matter only to whoever waits for them (`GET /v1/messages/{id}/reply` still returns them), so a

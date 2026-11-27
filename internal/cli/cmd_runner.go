@@ -228,7 +228,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 			spec = *rc.Exec
 		}
 		spec.Senders = me.AllowFrom
-		spec.CurrentSenders = cachedAllowFrom(e.in.Ctx, c, 30*time.Second)
+		spec.CurrentSenders = cachedExecSenders(e.in.Ctx, c, 30*time.Second)
 		spec.AuditLog = filepath.Join(config.Dir(e.defaultPath), "logs", me.Name+".exec.jsonl")
 		execSpec = &spec
 	}
@@ -641,8 +641,19 @@ func markReplaced(path, token string, err error) {
 }
 
 // cachedAllowFrom returns the agent's current allow_from, asking the hub at
-// most once per ttl, so an admin's change reaches a running exec node.
+// most once per ttl, so an admin's change reaches a running machine node.
 func cachedAllowFrom(ctx context.Context, c *client.Client, ttl time.Duration) func() ([]string, error) {
+	return cachedSenders(ctx, c, ttl, false)
+}
+
+// cachedExecSenders derives the owner's console identity only from the Hub's
+// authenticated /me response. Keep it out of the static fallback: if refresh
+// fails, execnode must not retain an expired owner exception.
+func cachedExecSenders(ctx context.Context, c *client.Client, ttl time.Duration) func() ([]string, error) {
+	return cachedSenders(ctx, c, ttl, true)
+}
+
+func cachedSenders(ctx context.Context, c *client.Client, ttl time.Duration, execOwner bool) func() ([]string, error) {
 	var (
 		mu   sync.Mutex
 		last []string
@@ -658,9 +669,11 @@ func cachedAllowFrom(ctx context.Context, c *client.Client, ttl time.Duration) f
 		if err != nil {
 			return nil, err
 		}
-		last, at = me.AllowFrom, time.Now()
-		if last == nil {
-			last = []string{}
+		last, at = append([]string{}, me.AllowFrom...), time.Now()
+		// An empty allow_from still requires the existing exec-risk setup;
+		// knowing the owner must not turn an unconfigured node into an executor.
+		if execOwner && len(last) > 0 && me.Owner != "" {
+			last = append(last, "@console:"+me.Owner)
 		}
 		return last, nil
 	}
