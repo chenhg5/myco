@@ -1,7 +1,9 @@
 package hubserver
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/myco-ai/myco/internal/api"
 	"github.com/myco-ai/myco/internal/app"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
 	"github.com/myco-ai/myco/internal/perf"
 	"github.com/myco-ai/myco/internal/testutil"
 )
@@ -55,6 +58,9 @@ func TestAdminPerf(t *testing.T) {
 	if err := json.Unmarshal(body, &r); err != nil {
 		t.Fatal(err)
 	}
+	if r.Database == nil || r.Database.MaxOpenConnections != 1 || r.Database.StartedAt.IsZero() || r.Database.At.Before(r.Database.StartedAt) {
+		t.Fatalf("missing workspace database snapshot: %+v", r.Database)
+	}
 	routes := map[string]bool{}
 	for _, s := range r.Requests {
 		routes[s.Name] = true
@@ -89,5 +95,78 @@ func TestAdminPerf(t *testing.T) {
 	}
 	if code, _ := get("/v1/admin/perf?limit=9999", "perf-admin-token"); code != 400 {
 		t.Fatalf("limit=9999: %d", code)
+	}
+}
+
+// Saturate a real single-connection pool. The owner-only metric endpoint
+// must remain readable while another operation waits for that connection.
+func TestAdminPerfReportsPoolWaitWithoutAcquiringConnection(t *testing.T) {
+	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
+	h, err := Build(Options{DBPath: ":memory:", AdminToken: "pool-admin", Policy: app.DefaultMessagePolicy(), OfficialDir: testutil.OfficialDir(t), FilesDir: t.TempDir(), Log: quiet, Perf: perf.NewTimings()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	started := time.Now().UTC()
+	h.Server.SetDatabaseStats(func() api.DatabasePoolStats {
+		st := db.Stats()
+		return api.DatabasePoolStats{At: time.Now().UTC(), StartedAt: started, MaxOpenConnections: st.MaxOpenConnections, OpenConnections: st.OpenConnections, InUse: st.InUse, Idle: st.Idle, WaitCount: st.WaitCount, WaitDurationMS: float64(st.WaitDuration) / float64(time.Millisecond)}
+	})
+	conn, err := db.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, e := db.ExecContext(ctx, "SELECT 1"); done <- e }()
+	deadline := time.Now().Add(2 * time.Second)
+	for db.Stats().WaitCount == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("operation did not enter the connection wait queue")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	get := func(token string) (int, api.PerfReport) {
+		t.Helper()
+		r := httptest.NewRequest("GET", "/v1/admin/perf?minutes=1", nil)
+		r.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		h.Handler.ServeHTTP(w, r)
+		var out api.PerfReport
+		if w.Code == 200 {
+			if e := json.Unmarshal(w.Body.Bytes(), &out); e != nil {
+				t.Fatal(e)
+			}
+		}
+		return w.Code, out
+	}
+	if code, _ := get("not-admin"); code != 401 {
+		t.Fatalf("pool visible without admin token: %d", code)
+	}
+	code, out := get("pool-admin")
+	d := out.Database
+	if code != 200 || d == nil || d.MaxOpenConnections != 1 || d.InUse != 1 || d.Idle != 0 || d.WaitCount != 1 {
+		t.Fatalf("pool snapshot while saturated: code=%d database=%+v", code, d)
+	}
+	cancel()
+	if e := <-done; !errors.Is(e, context.Canceled) {
+		t.Fatalf("wait error: %v", e)
+	}
+	_, out = get("pool-admin")
+	if out.Database.WaitCount != 1 || out.Database.WaitDurationMS <= 0 {
+		t.Fatalf("canceled wait not counted: %+v", out.Database)
+	}
+	// Optional metric providers are scoped to a Server, never a global.
+	h.Server.SetDatabaseStats(nil)
+	_, out = get("pool-admin")
+	if out.Database != nil {
+		t.Fatal("database field must be optional")
 	}
 }

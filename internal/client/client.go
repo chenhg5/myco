@@ -1355,7 +1355,8 @@ func (c *Client) RemoveWorkspace(ctx context.Context, name string) error {
 }
 
 // Perf is GET /v1/admin/perf: how long the hub's requests and statements
-// took over the last minutes (1-60), at most limit of each, slowest first.
+// took over the last minutes (1-60), at most limit of each, slowest first,
+// plus the current workspace's pool snapshot when the Hub provides it.
 func (c *Client) Perf(ctx context.Context, minutes, limit int) (*api.PerfReport, error) {
 	q := url.Values{}
 	if minutes > 0 {
