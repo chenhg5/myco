@@ -1810,3 +1810,28 @@ when one of them leaves (only changing the key at the vendor does that), whose
 usage and quota it is would be unclear, and one person adding agents on their
 computers needs only their own. Sharing (for a project, say) would be a change
 of its own.
+
+## Local App preferences
+
+These routes belong to the local desktop App backend, not the workspace Hub.
+They operate on the App's existing local profile and require no new Hub protocol.
+Browser-only consoles / older backends may return 404 or 405; clients retain their
+browser storage path in that case. See [Local App preferences](local-preferences.md)
+for the migration and storage audit.
+
+| Route | Request and response |
+| --- | --- |
+| `GET /app/preferences` | `{version: 1, values: {key: string \| null}}`; `Cache-Control: no-store` |
+| `PATCH /app/preferences` | `{values: {key: string \| null}}`; updates only the supplied allowlisted keys and returns the complete document |
+| `POST /app/preferences/import` | Same shape; imports only absent keys. Existing values and null deletion tombstones win |
+| `PATCH /app/preferences/hubs/{id}` | `{name: string, look: {color?: 0..7, pic?: string}}`; atomically merges one workspace's alias/appearance without replacing other workspaces |
+| `POST /app/preferences/images` | Raw PNG/JPEG/GIF/WebP bytes, at most 8 MiB; returns `{url: "/app/preferences/images/<sha256>.<ext>"}` |
+| `GET /app/preferences/images/{name}` | Private immutable image bytes; only content-addressed names are accepted |
+
+Metadata requests/files are bounded to 24 MiB. Workspace pictures supplied as
+legacy `data:image/...;base64,...` are extracted into local image files before
+metadata is committed; external or invalid picture references are rejected.
+Preference errors are `{error: "local_preferences", message, retryable}`. Invalid
+requests return 400, oversized metadata/images 413, a competing writer 503 and
+profile I/O failures 500. Failed saves preserve previously committed metadata.
+No local filesystem paths, image payloads or preference values are logged.

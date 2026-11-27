@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useRef } from "react";
 
 /*
@@ -57,7 +58,7 @@ const SENT_KEY = "myco-sent";
  *  them from (the group box), kept in this App. */
 export function keptSent(key: string): string[] {
   try {
-    const v: unknown = JSON.parse(localStorage.getItem(`${SENT_KEY}\u0000${key}`) || "[]");
+    const v: unknown = JSON.parse(localPreferences.getItem(`${SENT_KEY}\u0000${key}`) || "[]");
     return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
   } catch {
     return [];
@@ -66,5 +67,5 @@ export function keptSent(key: string): string[] {
 
 export function keepSent(key: string, text: string) {
   const list = sentTexts([...keptSent(key), text]);
-  try { localStorage.setItem(`${SENT_KEY}\u0000${key}`, JSON.stringify(list)); } catch { /* not kept */ }
+  try { localPreferences.setItem(`${SENT_KEY}\u0000${key}`, JSON.stringify(list)); } catch { /* not kept */ }
 }

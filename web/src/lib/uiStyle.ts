@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useState } from "react";
 
 /*
@@ -12,7 +13,7 @@ const KEY = "myco-ui-style";
 const EVENT = "myco-ui-style";
 
 export function storedUiStyle(): UiStyle {
-  try { return localStorage.getItem(KEY) === "clean" ? "clean" : "standard"; } catch { return "standard"; }
+  try { return localPreferences.getItem(KEY) === "clean" ? "clean" : "standard"; } catch { return "standard"; }
 }
 
 /** Puts the stored style on the page (once, at start). */
@@ -34,7 +35,7 @@ export function useUiStyle() {
   }, []);
   useEffect(() => { applyUiStyle(style); }, [style]);
   const change = (next: UiStyle) => {
-    try { localStorage.setItem(KEY, next); } catch { /* not kept */ }
+    try { localPreferences.setItem(KEY, next); } catch { /* not kept */ }
     applyUiStyle(next);
     setStyle(next);
     window.dispatchEvent(new Event(EVENT));

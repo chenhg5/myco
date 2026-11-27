@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useSyncExternalStore } from "react";
 import { appApi } from "@/appapi";
 
@@ -19,10 +20,10 @@ const EMPTY = new Set<string>();
 
 const localKey = (hubId: string) => `myco-hidden-${hubId}`;
 function readLocal(hubId: string): string[] {
-  try { return JSON.parse(localStorage.getItem(localKey(hubId)) || "[]") as string[]; } catch { return []; }
+  try { return JSON.parse(localPreferences.getItem(localKey(hubId)) || "[]") as string[]; } catch { return []; }
 }
 function writeLocal(hubId: string, ids: Set<string>) {
-  try { localStorage.setItem(localKey(hubId), JSON.stringify([...ids].slice(-5000))); } catch { /* not kept */ }
+  try { localPreferences.setItem(localKey(hubId), JSON.stringify([...ids].slice(-5000))); } catch { /* not kept */ }
 }
 
 /** What you took out of view on this workspace. */

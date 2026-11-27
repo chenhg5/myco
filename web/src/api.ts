@@ -687,3 +687,6 @@ export interface BrowserReplayResult {
 }
 
 export type { PerfReport, PerfStat, DatabasePoolStats } from "@/lib/perf";
+
+/** Durable, device-local App profile choices. Null is a deletion tombstone. */
+export interface LocalPreferences { version: number; values: Record<string, string | null> }

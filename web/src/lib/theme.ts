@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
+import { localPreferences, PREFERENCES_CHANGED } from "@/lib/localPreferences";
+import { useCallback, useEffect, useState } from "react";
 
 /** Two-state hook used by the classic `myco ui` window. */
 export function useTheme() {
-  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+  const [dark, setDark] = useState(() => storedMode() === "dark" || (storedMode() === "system" && prefersDark()));
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
-    try { localStorage.setItem("myco-theme", dark ? "dark" : "light"); } catch { /* storage unavailable */ }
   }, [dark]);
-  return [dark, setDark] as const;
+  const change = useCallback((next: boolean | ((value: boolean) => boolean)) => { const value = typeof next === "function" ? next(dark) : next; setDark(value); try { localPreferences.setItem("myco-theme", value ? "dark" : "light"); } catch { /* older browser storage may be full */ } }, [dark]);
+  return [dark, change] as const;
 }
 
 /** Appearance of the App window: system-following by default. */
@@ -18,7 +19,7 @@ const prefersDark = () => window.matchMedia("(prefers-color-scheme: dark)").matc
 
 function storedMode(): ThemeMode {
   try {
-    const v = localStorage.getItem(KEY);
+    const v = localPreferences.getItem(KEY);
     if (v === "light" || v === "dark" || v === "system") return v;
   } catch { /* storage unavailable */ }
   return "system";
@@ -35,13 +36,14 @@ export function useThemeMode() {
       document.documentElement.classList.toggle("dark", mode === "dark" || (mode === "system" && prefersDark()));
     };
     apply();
-    try { localStorage.setItem(KEY, mode); } catch { /* storage unavailable */ }
     if (mode !== "system") return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, [mode]);
-  return [mode, setMode] as const;
+  useEffect(() => { const on = () => setMode(storedMode()); window.addEventListener(PREFERENCES_CHANGED, on); return () => window.removeEventListener(PREFERENCES_CHANGED, on); }, []);
+  const change = useCallback((next: ThemeMode | ((value: ThemeMode) => ThemeMode)) => { const value = typeof next === "function" ? next(mode) : next; setMode(value); try { localPreferences.setItem(KEY, value); } catch { /* older browser storage may be full */ } }, [mode]);
+  return [mode, change] as const;
 }
 
 /** Text size of the App window (the whole page is scaled). */
@@ -52,7 +54,7 @@ export const TEXT_SCALE: Record<TextSize, number> = { small: 1, standard: 1.08, 
 
 function storedSize(): TextSize {
   try {
-    const v = localStorage.getItem(SIZE_KEY);
+    const v = localPreferences.getItem(SIZE_KEY);
     if (v === "small" || v === "standard" || v === "large") return v;
   } catch { /* storage unavailable */ }
   return "standard";
@@ -62,8 +64,9 @@ export function useTextSize() {
   const [size, setSize] = useState<TextSize>(storedSize);
   useEffect(() => {
     document.documentElement.style.setProperty("zoom", String(TEXT_SCALE[size]));
-    try { localStorage.setItem(SIZE_KEY, size); } catch { /* storage unavailable */ }
     return () => { document.documentElement.style.removeProperty("zoom"); };
   }, [size]);
-  return [size, setSize] as const;
+  useEffect(() => { const on = () => setSize(storedSize()); window.addEventListener(PREFERENCES_CHANGED, on); return () => window.removeEventListener(PREFERENCES_CHANGED, on); }, []);
+  const change = useCallback((next: TextSize | ((value: TextSize) => TextSize)) => { const value = typeof next === "function" ? next(size) : next; setSize(value); try { localPreferences.setItem(SIZE_KEY, value); } catch { /* older browser storage may be full */ } }, [size]);
+  return [size, change] as const;
 }

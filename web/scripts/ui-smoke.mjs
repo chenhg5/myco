@@ -266,6 +266,9 @@ function watchPage(page, size, scheme) {
     if (msg.type() !== "error") return;
     const loc = msg.location();
     const where = loc.url ? `${loc.url}:${loc.lineNumber || 0}:${loc.columnNumber || 0}` : "";
+    // Older App backends and the standalone web console intentionally have
+    // no local preference service; the client keeps their browser storage path.
+    if (msg.text().includes("404") && /\/app\/preferences:\d/.test(where)) return;
     // On purpose: Claude on this computer cannot sign in until a way is
     // picked (添加 agent: the sign-in card, then it starts).
     if (msg.text().includes("502") && where.includes("/machines/m_studio/spawn")) return;
@@ -8370,6 +8373,68 @@ async function runMatrix(browser, size, scheme) {
     // see) only touches this App, so it is done at once even when the
     // workspaces answer slowly; the one removed leaves every page and
     // nothing asks it again.
+    await step("设置 · 本机名字头像跨升级保留", async () => {
+      // Each scenario owns a fake local profile. Browser storage is deliberately
+      // cleared between launches; the profile survives, just as the Go file does.
+      const durable = { "myco-lang": "zh", "myco-theme": scheme };
+      let failSave = true, savedHub = "";
+      const imageURL = "/app/preferences/images/" + "a".repeat(64) + ".png";
+      const preview = await browser.newContext({ viewport: size, colorScheme: scheme, deviceScaleFactor: Number(process.env.UI_SMOKE_SCALE) || 1 });
+      const check = await preview.newPage();
+      const errors = [];
+      check.on("pageerror", error => errors.push(error.stack || String(error)));
+      await preview.addInitScript(() => {
+        // A full WebView cache must never discard an avatar that the App saved.
+        const set = Storage.prototype.setItem;
+        Storage.prototype.setItem = function(key,value) {
+          if (key === "myco-app-hub-looks") throw new DOMException("full", "QuotaExceededError");
+          return set.call(this,key,value);
+        };
+      });
+      await preview.route(/\/app\/preferences(?:\/.*)?$/, async route => {
+        const request = route.request(); const url = new URL(request.url());
+        if (url.pathname.startsWith("/app/preferences/images/")) {
+          await route.fulfill({status:200,contentType:"image/png",body:Buffer.from(TINY_PNG,"base64")}); return;
+        }
+        if (request.method() === "PATCH" && url.pathname.includes("/hubs/")) {
+          if (failSave) { await route.fulfill({status:503,contentType:"application/json",body:'{"error":"local_preferences"}'}); return; }
+          const {name,look} = request.postDataJSON(); savedHub = decodeURIComponent(url.pathname.split("/").at(-1));
+          if (!look.pic?.startsWith("data:image/")) throw new Error("the selected picture must reach the local backend");
+          durable["myco-app-hub-names"] = JSON.stringify({[savedHub]:name});
+          durable["myco-app-hub-looks"] = JSON.stringify({[savedHub]:{...look,pic:imageURL}});
+        } else if (request.method() === "PATCH") Object.assign(durable,request.postDataJSON().values);
+        await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({version:1,values:durable})});
+      });
+      try {
+        await check.goto(`${r.base}/?lang=zh`); await check.locator(".app-shell").waitFor();
+        await go(check,"设置",narrow);
+        await clickVisible(check,check.locator(".app-settings-tab",{hasText:"工作区"}).first());
+        await clickVisible(check,check.getByRole("button",{name:"改名字和头像",exact:true}).first());
+        const dialog = check.locator(".app-modal",{hasText:"工作区的名字和头像"});
+        await dialog.locator("input.app-input").fill("Demo workspace");
+        await dialog.locator('input[type="file"]').setInputFiles({name:"demo.png",mimeType:"image/png",buffer:Buffer.from(TINY_PNG,"base64")});
+        await dialog.locator(".av-top img").waitFor();
+        await clickVisible(check,dialog.getByRole("button",{name:"保存",exact:true}));
+        await dialog.getByText("未能保存名字和头像",{exact:false}).waitFor();
+        if (durable["myco-app-hub-looks"]) throw new Error("a failed save must not change the profile");
+        failSave = false;
+        await clickVisible(check,dialog.getByRole("button",{name:"保存",exact:true}));
+        await dialog.waitFor({state:"hidden"});
+        if (!savedHub) throw new Error("the workspace edit did not reach the backend");
+        await check.evaluate(()=>localStorage.clear());
+        await check.reload(); await check.locator(".app-shell").waitFor();
+        await go(check,"设置",narrow);
+        await clickVisible(check,check.locator(".app-settings-tab",{hasText:"工作区"}).first());
+        const card = check.locator(".app-setting-card").filter({has:check.getByRole("heading",{name:"Demo workspace",exact:true})});
+        await card.locator(`img[src="${imageURL}"]`).waitFor();
+        await clickVisible(check,card.getByRole("button",{name:"改名字和头像",exact:true}));
+        await dialog.locator(`img[src="${imageURL}"]`).waitFor();
+        if (await dialog.locator("input.app-input").inputValue() !== "Demo workspace") throw new Error("the saved alias was lost on relaunch");
+        await shot(check,size,scheme,"local-workspace-preferences");
+        if (errors.length) throw new Error(errors.join("\n"));
+      } finally { await preview.close(); }
+    });
+
     await step("设置 · 项目文件额度", async () => {
       await go(page,"设置",narrow);
       await clickVisible(page,page.locator(".app-settings-tab",{hasText:"工作区"}));

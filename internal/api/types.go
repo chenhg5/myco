@@ -2653,3 +2653,25 @@ type NoticeQuiet struct {
 	To   int    `json:"to"`
 	Zone string `json:"zone,omitempty"`
 }
+
+// LocalPreferences contains only this App profile's durable preferences.
+// Null values are deletion tombstones, retained for idempotent legacy import.
+type LocalPreferences struct {
+	Version int                `json:"version"`
+	Values  map[string]*string `json:"values"`
+}
+
+// LocalPreferencesPatch changes only the specified keys. The import endpoint
+// adds missing keys and never overwrites saved values or deletion tombstones.
+type LocalPreferencesPatch struct {
+	Values map[string]*string `json:"values"`
+}
+
+// LocalWorkspaceAppearance changes one workspace without replacing other aliases.
+type LocalWorkspaceAppearance struct {
+	Name string `json:"name"`
+	Look struct {
+		Color *int   `json:"color,omitempty"`
+		Pic   string `json:"pic,omitempty"`
+	} `json:"look"`
+}

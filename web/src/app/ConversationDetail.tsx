@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Focus as FocusIcon, AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Target, Trash2, WifiOff, X } from "lucide-react";
@@ -250,7 +251,7 @@ const STARTERS_PROJECT: [string, string][] = [
   ["找出成员之间重复或冲突的工作", "Find work members are duplicating or clashing on"],
 ];
 const STARTERS_OFF = "myco-starters-off";
-const startersOff = () => { try { return localStorage.getItem(STARTERS_OFF) === "1"; } catch { return false; } };
+const startersOff = () => { try { return localPreferences.getItem(STARTERS_OFF) === "1"; } catch { return false; } };
 
 /** An empty chat: the agent's face, large, a question to start with, and
  *  a few things to ask (a click puts one in the box, to send or change). */
@@ -278,7 +279,7 @@ function EmptyChat({ agent, name, project, onStarter }: { agent?: Agent; name: s
           <div className="conv-starters-foot">
             <button type="button" onClick={() => setPage((n) => n + 3)}>{L("换一批", "Others")}</button>
             <span aria-hidden>·</span>
-            <button type="button" onClick={() => { try { localStorage.setItem(STARTERS_OFF, "1"); } catch { /* not kept */ } setOff(true); }}>{L("不再显示", "Don't show again")}</button>
+            <button type="button" onClick={() => { try { localPreferences.setItem(STARTERS_OFF, "1"); } catch { /* not kept */ } setOff(true); }}>{L("不再显示", "Don't show again")}</button>
           </div>
         </div>
       )}
@@ -1589,11 +1590,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // carries it, not this clock's).
   const clearKey = `myco-term-clear:${target.hubId}/${target.agent}`;
   const [clearedAfter, setClearedAfter] = useState<string | null>(() => {
-    try { return localStorage.getItem(clearKey); } catch { return null; }
+    try { return localPreferences.getItem(clearKey); } catch { return null; }
   });
   const setCleared = (id: string | null) => {
     setClearedAfter(id);
-    try { if (id) localStorage.setItem(clearKey, id); else localStorage.removeItem(clearKey); } catch { /* storage unavailable */ }
+    try { if (id) localPreferences.setItem(clearKey, id); else localPreferences.removeItem(clearKey); } catch { /* storage unavailable */ }
   };
   const clearScreen = () => {
     // The latest by time, which is not always the last in the list.

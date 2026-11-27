@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { recall, remember } from "@/lib/memo";
 import { Copy, Info, ListFilter, Pin, PinOff, Plus, Search, X } from "lucide-react";
@@ -35,7 +36,7 @@ interface ListFilters { scope: Scope; state: StateFilter; label: string; side: S
 const FILTERS_KEY = "myco-recent-filters";
 function loadFilters(): ListFilters {
   try {
-    const f = JSON.parse(localStorage.getItem(FILTERS_KEY) || "{}");
+    const f = JSON.parse(localPreferences.getItem(FILTERS_KEY) || "{}");
     return { scope: f.scope === "mine" ? "mine" : "all", state: ["open", "failed", "done"].includes(f.state) ? f.state : "all", label: typeof f.label === "string" ? f.label : "all",
       side: f.side === "others" ? "others" : "me" };
   } catch {
@@ -49,14 +50,14 @@ function loadFilters(): ListFilters {
 const PINS_KEY = "myco-conv-pins";
 function loadPins(): ConversationRow[] {
   try {
-    const v = JSON.parse(localStorage.getItem(PINS_KEY) || "[]");
+    const v = JSON.parse(localPreferences.getItem(PINS_KEY) || "[]");
     return Array.isArray(v) ? v.filter((r) => r && typeof r.hubId === "string" && r.item && typeof r.item.kind === "string") : [];
   } catch {
     return [];
   }
 }
 function savePins(pins: ConversationRow[]) {
-  try { localStorage.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* not saved */ }
+  try { localPreferences.setItem(PINS_KEY, JSON.stringify(pins)); } catch { /* not saved */ }
 }
 
 /** What the page had when the person opened a row: shown again on return. */
@@ -160,7 +161,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
   const inViewIds = hubs.filter((h) => hub === "all" || h.id === hub).map((h) => h.id).join(",");
 
   useEffect(() => {
-    try { localStorage.setItem(FILTERS_KEY, JSON.stringify(filters)); } catch { /* not saved */ }
+    try { localPreferences.setItem(FILTERS_KEY, JSON.stringify(filters)); } catch { /* not saved */ }
   }, [filters]);
   useEffect(() => {
     const t = window.setTimeout(() => setQuery(q.trim()), 300);

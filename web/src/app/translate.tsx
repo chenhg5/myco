@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { appApi } from "@/appapi";
 import { MessageContent, type InlineFiles } from "@/app/Markdown";
@@ -19,14 +20,14 @@ export const appTo = (): To => (lang() === "zh" ? "zh" : "en");
 // ---- settings and per-message choices (kept on this computer) ----
 
 const AUTO_KEY = "myco-translate-auto";
-let auto = (() => { try { return localStorage.getItem(AUTO_KEY) === "1"; } catch { return false; } })();
+let auto = (() => { try { return localPreferences.getItem(AUTO_KEY) === "1"; } catch { return false; } })();
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 const subscribe = (cb: () => void) => { listeners.add(cb); return () => { listeners.delete(cb); }; };
 
 export function setAutoTranslate(on: boolean) {
   auto = on;
-  try { localStorage.setItem(AUTO_KEY, on ? "1" : "0"); } catch { /* not kept */ }
+  try { localPreferences.setItem(AUTO_KEY, on ? "1" : "0"); } catch { /* not kept */ }
   emit();
 }
 export const useAutoTranslate = () => useSyncExternalStore(subscribe, () => auto, () => auto);

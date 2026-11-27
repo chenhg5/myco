@@ -159,6 +159,7 @@ func randomHex(n int) string {
 
 // Backend serves the /app/ API.
 type Backend struct {
+	preferenceMu  sync.Mutex
 	backupLoop    sync.Once // the hourly copy of backups to this computer
 	remoteDesktop remoteDesktop
 	browser       browserState
@@ -266,6 +267,7 @@ func (b *Backend) clientForToken(h Hub, tok string) (*client.Client, error) {
 // Handler returns the /app/ API.
 func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
+	b.preferenceRoutes(m)
 	b.cacheRoutes(m)
 	b.uiLangRoutes(m)
 	b.noticeRoutes(m)

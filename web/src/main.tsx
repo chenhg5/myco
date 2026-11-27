@@ -1,11 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
+import { initializePreferences } from "@/lib/localPreferences";
 import "./index.css";
 import { applyUiStyle } from "@/lib/uiStyle";
 
-// 界面风格 (standard / clean), as chosen on this computer, before the first paint.
-applyUiStyle();
 
 // Scrollbars: a Mac shows its own thin ones only while scrolling; elsewhere
 // (Windows) the system's are always there, wide and with arrows, so they
@@ -28,22 +26,28 @@ if (!/Mac|iPhone|iPad/.test(navigator.platform || "")) {
 const wailsReady = () => (window as unknown as { _wails?: { invoke?: (m: string) => void } })._wails?.invoke?.("wails:runtime:ready");
 window.addEventListener("wails:runtime-config-ready", wailsReady);
 wailsReady();
-const root = ReactDOM.createRoot(document.getElementById("root")!);
-// The Mac app's notch island is its own little window with its own page;
-// loaded apart, so its styles (a transparent page) stay out of the app's.
-if (new URLSearchParams(window.location.search).has("island")) {
-  void import("./island/Island").then(({ Island }) => root.render(<Island />));
-} else if (new URLSearchParams(window.location.search).has("pagewin")) {
-  // A page (an app) in a window of its own (the desktop App).
-  const [hubId, id] = (new URLSearchParams(window.location.search).get("pagewin") || "").split("/");
-  void import("./app/PageWindow").then(({ PageWindow }) => root.render(<PageWindow hubId={hubId || ""} id={id || ""} />));
-} else if (new URLSearchParams(window.location.search).has("quick")) {
-  // The ⌘⇧Space panel (Mac app): its own small window too.
-  void import("./quick/Quick").then(({ Quick }) => root.render(<Quick />));
-} else {
-  root.render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>,
-  );
+async function start() {
+  await initializePreferences();
+  applyUiStyle();
+  const root = ReactDOM.createRoot(document.getElementById("root")!);
+  // The Mac app's notch island is its own little window with its own page;
+  // loaded apart, so its styles (a transparent page) stay out of the app's.
+  if (new URLSearchParams(window.location.search).has("island")) {
+    void import("./island/Island").then(({ Island }) => root.render(<Island />));
+  } else if (new URLSearchParams(window.location.search).has("pagewin")) {
+    // A page (an app) in a window of its own (the desktop App).
+    const [hubId, id] = (new URLSearchParams(window.location.search).get("pagewin") || "").split("/");
+    void import("./app/PageWindow").then(({ PageWindow }) => root.render(<PageWindow hubId={hubId || ""} id={id || ""} />));
+  } else if (new URLSearchParams(window.location.search).has("quick")) {
+    // The ⌘⇧Space panel (Mac app): its own small window too.
+    void import("./quick/Quick").then(({ Quick }) => root.render(<Quick />));
+  } else {
+    const { default: App } = await import("./App");
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    );
+  }
 }
+void start();

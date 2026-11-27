@@ -257,6 +257,8 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Build the dashboard
         run: make web
+      - name: Local preference migration and recovery
+        run: npm --prefix web run test:preferences
       - name: Runner restart display states
         run: node web/scripts/runner-state.test.mjs
       - name: Committed internal/web/dist matches the source

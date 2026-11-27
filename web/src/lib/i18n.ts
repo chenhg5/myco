@@ -1,7 +1,8 @@
+import { localPreferences } from "@/lib/localPreferences";
 /**
  * The App's two languages. Strings stay next to their use as
  * L("中文", "English"); the language follows the system unless chosen in
- * Settings → Appearance (stored per browser/app in localStorage).
+ * Settings → Appearance (saved in this App profile, or in browser storage on the web).
  */
 export type Lang = "zh" | "en";
 export type LangChoice = "system" | Lang;
@@ -10,7 +11,7 @@ const KEY = "myco-lang";
 
 export function storedLangChoice(): LangChoice {
   try {
-    const v = localStorage.getItem(KEY);
+    const v = localPreferences.getItem(KEY);
     if (v === "zh" || v === "en" || v === "system") return v;
   } catch { /* storage unavailable */ }
   return "system";
@@ -34,7 +35,7 @@ export function lang(): Lang {
 
 /** Sets the language choice; the caller re-renders (AppMode keys on lang()). */
 export function setLangChoice(choice: LangChoice): Lang {
-  try { localStorage.setItem(KEY, choice); } catch { /* storage unavailable */ }
+  try { localPreferences.setItem(KEY, choice); } catch { /* storage unavailable */ }
   current = resolve(choice);
   document.documentElement.lang = current === "zh" ? "zh-CN" : "en";
   return current;
