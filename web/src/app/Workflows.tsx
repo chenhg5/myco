@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavSub } from "@/app/nav";
-import { Bot, Check, ChevronDown, FlaskConical, MessageSquare, Minus, Monitor, MoreHorizontal, Pause, Pencil, Play, Plus, Rocket, RotateCcw, Sparkles, Split, Square, Trash2, UserCheck, Workflow as WorkflowIcon, X } from "lucide-react";
-import type { RunStep, WfEdgeDef, WfSchema, WfStepDef, Workflow, WorkflowDecision, WorkflowDef, WorkflowRun } from "@/api";
+import { Bot, Check, ChevronDown, FlaskConical, MessageSquare, Minus, Monitor, MoreHorizontal, Pause, Pencil, Play, Plus, Rocket, RotateCcw, Search, Sparkles, Split, Square, Trash2, UserCheck, Workflow as WorkflowIcon, X } from "lucide-react";
+import type { RunStep, WfEdgeDef, WfSchema, WfStepDef, Workflow, WorkflowDecision, WorkflowDef, WorkflowRun, Project } from "@/api";
 import { ApiError, appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { agentKind, nodeName } from "@/app/nodes";
@@ -23,8 +23,8 @@ import { cn, timeAgo } from "@/lib/utils";
  * 工作流), to a computer as a command, or to you as a decision. The hub
  * decides what comes next, so it goes on while your computers are off.
  *
- * The page: decisions waiting for you first; then the workflows (how each
- * is going; ▷ starts one, the switch turns it off); then ways to make one:
+ * The page: a cumulative overview, decisions waiting for you, then the workflows (how each
+ * is going; ▷ starts one, its menu turns it off); then ways to make one:
  * a few common ones where you only pick who does what, or ask an agent to
  * write it. One opened: its steps drawn, then its runs. A run opened: the
  * same drawing with how each step went, then every step with who did it,
@@ -40,6 +40,18 @@ const runWords = (s: WorkflowRun["status"]) =>
         : s === "failed" ? L("失败了", "Failed") : L("取消了", "Cancelled");
 const runTone = (s: WorkflowRun["status"]) =>
   s === "running" ? "is-ok" : s === "waiting" ? "is-wait" : s === "failed" ? "is-bad" : "";
+
+type CatalogFilter = "all" | "active" | "waiting" | "failed" | "new" | "off";
+function catalogMatches(w: Workflow, filter: CatalogFilter) {
+  switch (filter) {
+    case "active": return w.active > 0;
+    case "waiting": return w.run_counts ? w.run_counts.waiting > 0 : w.last_run?.status === "waiting";
+    case "failed": return w.last_run?.status === "failed";
+    case "new": return w.run_counts ? w.run_counts.total === 0 : !w.last_run && !w.active;
+    case "off": return !w.enabled;
+    default: return true;
+  }
+}
 
 function duration(from: string, to: string | undefined, now: number): string {
   const s = Math.max(0, Math.round(((to ? new Date(to).getTime() : now) - new Date(from).getTime()) / 1000));
@@ -157,8 +169,8 @@ function byRole(def: WorkflowDef): WorkflowDef {
 
 /* ---------- the page ---------- */
 
-export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage }: {
-  hubId: string; rows: AgentRow[]; now: number;
+export function WorkflowsPage({ hubId, rows, now, projects = [], open, onOpened, onOpenMessage }: {
+  hubId: string; rows: AgentRow[]; now: number; projects?: Project[];
   /** a workflow (and run) to open, e.g. from an automation's runs */
   open?: { workflow: string; run?: string; at: number };
   /** it was opened (so a later visit starts at the list) */
@@ -180,22 +192,62 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
   const [removing, setRemoving] = useState<Workflow | null>(null);
   const [editing, setEditing] = useState<Workflow | null>(null);
   const [stamp, setStamp] = useState(0);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<CatalogFilter>("all");
+  const [project, setProject] = useState("");
+  const [sort, setSort] = useState("recent");
+  const live = useRef(false);
+  const inflight = useRef<AbortController | null>(null);
+  const request = useRef(0);
+  const decisionRequest = useRef(0);
   const menu = useContextMenu();
-  const load = useCallback(() => {
-    appApi.workflows(hubId).then((r) => {
+  const load = useCallback((force = false) => {
+    if (inflight.current && !force) return;
+    inflight.current?.abort();
+    const ctl = new AbortController(); inflight.current = ctl;
+    const seq = ++request.current;
+    const workflows = appApi.workflows(hubId, ctl.signal).then((r) => {
+      if (!live.current || seq !== request.current) return;
+      setError(null);
       seen.set(hubId, r.workflows || []); setList(r.workflows || []); setUnsupported(false);
     }, (e) => {
+      if (!live.current || seq !== request.current) return;
       if (e instanceof ApiError && e.status === 404) setUnsupported(true);
       else setError(e);
       setList((l) => l ?? []);
     });
-    appApi.workflowDecisions(hubId).then((r) => {
+    const ds = ++decisionRequest.current;
+    const decisions = appApi.workflowDecisions(hubId, ctl.signal).then((r) => {
+      if (!live.current || ds !== decisionRequest.current) return;
       setDecisions(r.decisions || []);
       window.dispatchEvent(new CustomEvent("myco-workflow-decisions", { detail: { hubId, count: (r.decisions || []).length } }));
     }, () => undefined);
+    void Promise.allSettled([workflows, decisions]).then(() => { if (inflight.current === ctl) inflight.current = null; });
   }, [hubId]);
-  useEffect(() => { setList(seen.get(hubId) ?? null); load(); const t = setInterval(load, 5_000); return () => clearInterval(t); }, [hubId, load]);
-  const refresh = () => { load(); setStamp((n) => n + 1); };
+  useEffect(() => {
+    live.current = true; setList(seen.get(hubId) ?? null); setDecisions([]); setError(null); setUnsupported(false);
+    load(); const t = setInterval(load, 5_000);
+    return () => { live.current = false; request.current++; decisionRequest.current++; inflight.current?.abort(); inflight.current = null; clearInterval(t); };
+  }, [hubId, load]);
+  const refresh = () => { load(true); setStamp((n) => n + 1); };
+  const projectName = (id: string) => projects.find((p) => p.name === id)?.title || id;
+  const scoped = (list || []).filter((w) => (!project || (project === "!none" ? !w.project : w.project === project)) &&
+    [w.title, w.name, w.description, w.project && projectName(w.project)].filter(Boolean).join(" ").toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const filtered = scoped.filter((w) => catalogMatches(w, filter)).sort((a, b) => {
+    if (sort === "name") return (a.title || a.name).localeCompare(b.title || b.name);
+    if (sort === "active" && a.active !== b.active) return b.active - a.active;
+    return (b.last_run?.created_at || b.updated_at).localeCompare(a.last_run?.created_at || a.updated_at) || a.id.localeCompare(b.id);
+  });
+  const allCounts = list?.every((w) => w.run_counts != null);
+  const total = (key: "total" | "succeeded" | "failed" | "cancelled") => allCounts ? (list || []).reduce((n, w) => n + w.run_counts![key], 0).toLocaleString() : "—";
+  const active = (list || []).reduce((n, w) => n + w.active, 0);
+  const chips: { key: CatalogFilter; title: string }[] = [
+    { key: "all", title: L("全部", "All") }, { key: "active", title: L("进行中", "In progress") },
+    { key: "waiting", title: L("等决定", "Awaiting decision") }, { key: "failed", title: L("最近失败", "Last run failed") },
+    { key: "new", title: L("未运行", "Never run") }, { key: "off", title: L("已停用", "Off") },
+  ];
+  const resetFilters = () => { setQuery(""); setFilter("all"); setProject(""); };
+
   // ← → at the top (nav.ts): what is open here is part of where you are.
   useNavSub("workflows", { open: openId, run: runId, edit: editing?.id ?? null }, { open: null, run: null, edit: null }, (v) => {
     setOpenId(v.open); setRunId(v.run);
@@ -301,6 +353,15 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
         </>
       ) : (
         <>
+          {list.length > 0 && <section className="wf-catalog-summary" aria-label={L("全部工作流的运行概况", "Runs across all workflows")} data-testid="workflow-overview">
+            <div className="au-stats wf-catalog-stats">
+              <div className="au-stat"><span>{L("累计运行", "Total runs")}</span><b>{total("total")}</b></div>
+              <div className="au-stat"><span>{L("进行中 · 含等决定", "In progress · including decisions")}</span><b>{active.toLocaleString()}</b></div>
+              <div className="au-stat"><span>{L("成功", "Succeeded")}</span><b>{total("succeeded")}</b></div>
+              <div className="au-stat"><span>{L("失败", "Failed")}</span><b>{total("failed")}</b></div>
+            </div>
+            <p className="wf-catalog-note">{L("全部工作流 · 所有版本", "All workflows · all versions")}{allCounts ? L(` · 另有 ${total("cancelled")} 次取消`, ` · ${total("cancelled")} cancelled`) : L(" · 升级工作区后可查看累计统计", " · Upgrade the workspace for cumulative counts")}</p>
+          </section>}
           {decisions.length > 0 && (
             <>
               <SectionHead title={L("等你决定", "Waiting for you")} count={decisions.length} />
@@ -323,8 +384,23 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
           ) : (
             <>
               <SectionHead title={L("我的工作流", "Your workflows")} count={list.length} />
+              <div className="wf-catalog-tools" data-testid="workflow-filters">
+                <label className="wf-catalog-search"><Search aria-hidden="true" /><input type="search" className="app-input" value={query} onChange={(e) => setQuery(e.target.value)} aria-label={L("搜索工作流", "Search workflows")} placeholder={L("搜索名称、说明或项目", "Search name, description or project")} /></label>
+                <select className="app-input" value={project} onChange={(e) => setProject(e.target.value)} aria-label={L("工作流项目", "Workflow project")}>
+                  <option value="">{L("全部项目", "All projects")}</option><option value="!none">{L("无项目", "No project")}</option>
+                  {[...new Set(list.map((w) => w.project).filter((p): p is string => !!p))].sort().map((id) => <option key={id} value={id}>{projectName(id)}</option>)}
+                </select>
+                <select className="app-input" value={sort} onChange={(e) => setSort(e.target.value)} aria-label={L("工作流排序", "Sort workflows")}>
+                  <option value="recent">{L("最近运行优先", "Recent first")}</option><option value="active">{L("进行中优先", "In progress first")}</option><option value="name">{L("按名称", "Name")}</option>
+                </select>
+              </div>
+              <div className="wf-chips" role="group" aria-label={L("工作流状态", "Workflow status")}>
+                {chips.map((c) => <button key={c.key} type="button" className={cn("wf-chip", filter === c.key && "is-on")} aria-pressed={filter === c.key} onClick={() => setFilter(c.key)}>{c.title}<span className="aud-filter-n">{scoped.filter((w) => catalogMatches(w, c.key)).length}</span></button>)}
+              </div>
+              <p className="wf-catalog-note" role="status">{L(`显示 ${filtered.length} / ${list.length} 个工作流`, `Showing ${filtered.length} of ${list.length} workflows`)}</p>
+              {filtered.length === 0 && <div className="app-empty" data-testid="workflows-no-results"><h2>{L("没有符合条件的工作流", "No matching workflows")}</h2><p>{L("换个关键词或清除筛选再看看。", "Try another search or clear the filters.")}</p><button className="app-btn" type="button" onClick={resetFilters}>{L("清除筛选", "Clear filters")}</button></div>}
               <div className="pc-list" data-testid="workflows">
-                {list.map((w) => {
+                {filtered.map((w) => {
                   // (right-click, or ⋯: the same menu)
                   const items: MenuItem[] = [
                     { label: L("打开", "Open"), icon: WorkflowIcon, onSelect: () => setOpenId(w.id) },
@@ -342,20 +418,27 @@ export function WorkflowsPage({ hubId, rows, now, open, onOpened, onOpenMessage 
                         <span className="au-row-what">
                           <span>{L(`${w.steps} 步`, `${w.steps} steps`)}</span>
                           {w.description && <span>{w.description}</span>}
-                          {w.project && <span>{L(`项目 ${w.project}`, `Project ${w.project}`)}</span>}
+                          {w.project && <span>{projectName(w.project)}</span>}
                         </span>
                         <span className="au-row-status wf-row-last">
                           {!w.enabled && <span>{L("已停用", "Off")}</span>}
-                          {w.enabled && w.active > 1 && <span className="wf-run-state is-ok">{L(`${w.active} 个在跑`, `${w.active} running`)}</span>}
+                          {w.active > 0 && <span className="wf-run-state is-ok" data-testid="workflow-active">{L(`${w.active} 次进行中`, `${w.active} in progress`)}</span>}
+                          {!!w.run_counts?.waiting && <span className="wf-run-state is-wait">{L(`${w.run_counts.waiting} 次等决定`, `${w.run_counts.waiting} awaiting decision`)}</span>}
                           {w.last_run ? (
                             <>
-                              <RunMark status={w.last_run.status} />
+                              <span>{L("最近：", "Last:")}</span><RunMark status={w.last_run.status} />
                               <span className={cn("wf-run-state", runTone(w.last_run.status))}>{runWords(w.last_run.status)}</span>
                               {runSubject(w.last_run) && <span className="wf-row-subject">{runSubject(w.last_run)}</span>}
                               <span>{timeAgo(w.last_run.created_at, now)}</span>
                             </>
-                          ) : w.enabled && <span>{L("还没跑过", "Not run yet")}</span>}
+                          ) : <span>{w.run_counts?.total ? L("最近记录暂不可用", "Latest run unavailable") : L("还没跑过", "Not run yet")}</span>}
                         </span>
+                        <span className="wf-row-counts" data-testid="workflow-counts">{w.run_counts ? <>
+                          <span>{L(`运行 ${w.run_counts.total.toLocaleString()} 次`, `${w.run_counts.total.toLocaleString()} runs`)}</span>
+                          <span>{L(`成功 ${w.run_counts.succeeded.toLocaleString()}`, `${w.run_counts.succeeded.toLocaleString()} succeeded`)}</span>
+                          <span className={w.run_counts.failed ? "is-bad" : undefined}>{L(`失败 ${w.run_counts.failed.toLocaleString()}`, `${w.run_counts.failed.toLocaleString()} failed`)}</span>
+                          {!!w.run_counts.cancelled && <span>{L(`取消 ${w.run_counts.cancelled.toLocaleString()}`, `${w.run_counts.cancelled.toLocaleString()} cancelled`)}</span>}
+                        </> : L("累计统计暂不可用", "Cumulative counts unavailable")}</span>
                       </span>
                     </button>
                     <span className="wf-row-actions">

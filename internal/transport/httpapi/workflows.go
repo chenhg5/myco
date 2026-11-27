@@ -78,6 +78,13 @@ func workflowDTO(o *app.WorkflowOut, withDef bool) api.Workflow {
 	w := o.Workflow
 	out := api.Workflow{ID: w.ID, Name: w.Name, Title: w.Def.Title, Tags: w.Def.Tags, Group: w.Def.Group, Description: w.Def.Description, Project: w.Project, Owner: w.Owner, Version: w.Version,
 		Enabled: w.Enabled, Steps: len(w.Def.Steps), Active: o.Active, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt}
+	if o.RunCounts != nil {
+		counts := &api.WorkflowRunCounts{Running: o.RunCounts["running"], Waiting: o.RunCounts["waiting"], Succeeded: o.RunCounts["succeeded"], Failed: o.RunCounts["failed"], Cancelled: o.RunCounts["cancelled"]}
+		for _, n := range o.RunCounts {
+			counts.Total += n
+		}
+		out.RunCounts = counts
+	}
 	if o.LastRun != nil {
 		r := runDTO(o.LastRun, nil)
 		out.LastRun = &r

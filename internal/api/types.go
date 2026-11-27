@@ -2054,22 +2054,34 @@ type TemplateUsed struct {
 
 // Workflow is a stored workflow. Definition is its JSON (on get and apply).
 type Workflow struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Title       string          `json:"title,omitempty"`
-	Tags        []string        `json:"tags,omitempty"`
-	Group       string          `json:"group,omitempty"`
-	Description string          `json:"description,omitempty"`
-	Project     string          `json:"project,omitempty"`
-	Owner       string          `json:"owner,omitempty"`
-	Version     int             `json:"version"`
-	Enabled     bool            `json:"enabled"`
-	Steps       int             `json:"steps"`
-	Active      int             `json:"active"`
-	LastRun     *WorkflowRun    `json:"last_run,omitempty"`
-	Definition  json.RawMessage `json:"definition,omitempty"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID          string             `json:"id"`
+	Name        string             `json:"name"`
+	Title       string             `json:"title,omitempty"`
+	Tags        []string           `json:"tags,omitempty"`
+	Group       string             `json:"group,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Project     string             `json:"project,omitempty"`
+	Owner       string             `json:"owner,omitempty"`
+	Version     int                `json:"version"`
+	Enabled     bool               `json:"enabled"`
+	Steps       int                `json:"steps"`
+	Active      int                `json:"active"`
+	LastRun     *WorkflowRun       `json:"last_run,omitempty"`
+	RunCounts   *WorkflowRunCounts `json:"run_counts,omitempty"`
+	Definition  json.RawMessage    `json:"definition,omitempty"`
+	CreatedAt   time.Time          `json:"created_at"`
+	UpdatedAt   time.Time          `json:"updated_at"`
+}
+
+// WorkflowRunCounts covers all runs of a workflow, across all versions.
+// It is optional for compatibility with older Hubs and non-list responses.
+type WorkflowRunCounts struct {
+	Total     int `json:"total"`
+	Running   int `json:"running"`
+	Waiting   int `json:"waiting"`
+	Succeeded int `json:"succeeded"`
+	Failed    int `json:"failed"`
+	Cancelled int `json:"cancelled"`
 }
 
 // WorkflowList answers GET /v1/workflows.

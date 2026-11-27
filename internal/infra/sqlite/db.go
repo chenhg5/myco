@@ -195,6 +195,8 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
   ended_at    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_workflow_runs ON workflow_runs(workflow_id, created_at DESC);
+-- Cover the frequently refreshed workflow catalog counts without run payload reads.
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_counts ON workflow_runs(workflow_id, status);
 CREATE INDEX IF NOT EXISTS idx_workflow_runs_active ON workflow_runs(status) WHERE status IN ('running', 'waiting');
 CREATE TABLE IF NOT EXISTS run_steps (
   id         TEXT PRIMARY KEY,

@@ -7,7 +7,9 @@ A workflow turns something you do often into fixed steps: each step goes to an a
 Click **Workflows** at the top of the sidebar. When something waits for your decision, an amber number shows next to it.
 
 - **Waiting for you**: at the very top, one card per decision; see "Decisions waiting for you" below.
-- **Your workflows**: one row each, with how many steps and what it does, and below a line for the latest run: its status (Waiting for you, Failed, Done, Running), what that run was about, and how long ago.
+- **Overview**: cumulative runs, currently in progress (including decisions), successes and failures across all listed workflows and all versions. Cancelled runs are shown separately. Counts refresh automatically; older workspaces show a dash for unavailable totals.
+- **Your workflows**: search the name, description or project; choose a project and filter by In progress, Awaiting decision, Last run failed, Never run or Off. Chip counts are workflows matching your search and project, not run counts. Sort by recent run, in progress first or name. Clear filters if nothing matches.
+- Each row shows current activity independently of the latest run, even when the workflow is off or a newer run has already finished. Below are cumulative run, success, failure and cancellation counts; open it to inspect individual runs.
 - Each row has **Run** and **⋯** (Edit, Turn off / Turn on, Delete) on the right; right-clicking gives the same menu.
 
 Workflows run on the workspace too, so they keep going while your computer is off; each step's agent or computer just needs to be online to take its step.
