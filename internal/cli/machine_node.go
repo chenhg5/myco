@@ -58,6 +58,10 @@ func (e *env) machineNodeHubs() (*config.Machine, []config.MachineHub, error) {
 // (idempotent: the same machine gets the same node back) and writes its
 // runner profile.
 func (e *env) ensureMachineNode(h config.MachineHub) (*api.Agent, error) {
+	return e.ensureMachineNodeContext(e.in.Ctx, h)
+}
+
+func (e *env) ensureMachineNodeContext(ctx context.Context, h config.MachineHub) (*api.Agent, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
@@ -67,7 +71,7 @@ func (e *env) ensureMachineNode(h config.MachineHub) (*api.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := c.Enroll(e.in.Ctx, req, false)
+	res, err := c.Enroll(ctx, req, false)
 	if err != nil {
 		return nil, err
 	}
@@ -120,31 +124,34 @@ func (e *env) ensureMachineNodesLogged(log *slog.Logger, done map[string]bool) b
 		if done[h.Hub] {
 			continue
 		}
-		a, err := e.ensureMachineNode(h)
-		if err != nil {
-			if runner.IsCredentialRejected(err) {
-				log.Error("这台机器的凭据已被 Hub 拒绝，可能已从 Hub 移除；如需重新加入，请使用加入链接，或运行 myco runner service uninstall", "hub", h.Hub, "err", err)
-				done[h.Hub] = true
-				continue
-			}
-			var ce *client.Error
-			if errors.As(err, &ce) && (ce.Code == "permission_denied" || ce.Code == "invalid_argument") {
-				// An older hub, or credentials that may not create one: don't retry.
-				log.Warn("machine node unavailable; myco agent spawn will not reach this machine", "hub", h.Hub, "err", err)
-				done[h.Hub] = true
-				continue
-			}
-			log.Warn("could not set up the machine node yet; retrying", "hub", h.Hub, "err", err)
-			all = false
-			continue
-		}
-		done[h.Hub] = true
-		if len(a.AllowFrom) == 0 {
-			log.Warn("machine node accepts spawn requests from any agent on the hub; restrict it with: myco agent update --name "+a.Name+" --allow-from <agent>[,<agent>...]",
-				"agent", a.Name, "hub", h.Hub)
-		}
+		done[h.Hub] = e.ensureMachineNodeLogged(e.in.Ctx, log, h)
+		all = all && done[h.Hub]
 	}
+
 	return all
+}
+
+// ensureMachineNodeLogged reports whether setup succeeded or cannot apply.
+// A transient failure remains retryable and never revokes saved credentials.
+func (e *env) ensureMachineNodeLogged(ctx context.Context, log *slog.Logger, h config.MachineHub) bool {
+	a, err := e.ensureMachineNodeContext(ctx, h)
+	if err != nil {
+		if runner.IsCredentialRejected(err) {
+			log.Error("这台机器的凭据已被 Hub 拒绝，可能已从 Hub 移除；如需重新加入，请使用加入链接，或运行 myco runner service uninstall", "hub", h.Hub, "err", err)
+			return true
+		}
+		var ce *client.Error
+		if errors.As(err, &ce) && (ce.Code == "permission_denied" || ce.Code == "invalid_argument") {
+			log.Warn("machine node unavailable; myco agent spawn will not reach this machine", "hub", h.Hub, "err", err)
+			return true
+		}
+		log.Warn("could not set up the machine node yet; retrying", "hub", h.Hub, "err", err)
+		return false
+	}
+	if len(a.AllowFrom) == 0 {
+		log.Warn("machine node accepts spawn requests from any agent on the hub; restrict it with: myco agent update --name "+a.Name+" --allow-from <agent>[,<agent>...]", "agent", a.Name, "hub", h.Hub)
+	}
+	return true
 }
 
 // saveProfile writes an agent's runner profile (~/.myco/agents/<name>.yaml),

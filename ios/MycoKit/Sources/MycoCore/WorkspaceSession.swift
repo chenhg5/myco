@@ -41,6 +41,9 @@ public final class WorkspaceSession {
 
     /// Told each time the workspace answered a refresh (to announce what is new).
     @ObservationIgnored public var refreshed: (@MainActor (WorkspaceSession) -> Void)?
+    /// Told whenever a workspace's agents are loaded (from the hub, or from
+    /// what it showed last): the app spreads their faces from it.
+    public static var agentsLoaded: (@MainActor ([Agent]) -> Void)?
 
     /// How often the lists refresh while the app is in front.
     public static let pollInterval: Duration = .seconds(5)
@@ -243,6 +246,7 @@ public final class WorkspaceSession {
         else { return }
         me = snapshot.me
         statuses = snapshot.statuses
+        Self.agentsLoaded?(statuses.map(\.agent))
         machines = snapshot.machines
         projects = snapshot.projects
         recent = snapshot.recent
@@ -301,6 +305,7 @@ public final class WorkspaceSession {
             async let recent = hub.recent(.myPairs)
             let (o, p, r) = try await (overview, projects, recent)
             statuses = o.agents
+            Self.agentsLoaded?(statuses.map(\.agent))
             machines = o.machines
             self.projects = p.filter { $0.archived != true }
             self.recent = r
@@ -370,7 +375,10 @@ public final class WorkspaceSession {
     public func setRun(of name: String, model: String, effort: String, access: String? = nil) async -> String? {
         do {
             let agent = try await hub.setRunSettings(of: name, model: model, effort: effort, access: access)
-            if let index = statuses.firstIndex(where: { $0.agent.name == name }) { statuses[index].agent = agent }
+            if let index = statuses.firstIndex(where: { $0.agent.name == name }) {
+                statuses[index].agent = agent
+                Self.agentsLoaded?(statuses.map(\.agent))
+            }
             return nil
         } catch let error as HubError where error.error == "not_found" || error.error == "http_404" || error.error == "http_405" {
             // A workspace from before this: shown, not switched.
@@ -389,7 +397,10 @@ public final class WorkspaceSession {
     public func listModelsAgain(of name: String) async -> String? {
         do {
             let agent = try await hub.listModelsAgain(of: name)
-            if let index = statuses.firstIndex(where: { $0.agent.name == name }) { statuses[index].agent = agent }
+            if let index = statuses.firstIndex(where: { $0.agent.name == name }) {
+                statuses[index].agent = agent
+                Self.agentsLoaded?(statuses.map(\.agent))
+            }
             return nil
         } catch let error as HubError {
             return error.message

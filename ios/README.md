@@ -233,4 +233,4 @@ The person can ask too: pulling a list down (the system's refresh; it runs in a 
 - The tab bar is the app's own (`MycoTabBar`): one row across, on each tab's first page. Faces carry no AI mark on the phone.
 - Follow `docs/design/app-ui.md` for words, colours and states: the same state has the same colour and the same words as on the desktop.
 - Text is `L("中文", "English")`, next to its use, as in `web/`.
-- An agent's name (`Naming`) and face (`MushroomLook`) are ports of `web/src/app/nodes.ts` and `persona.tsx`. Change them together.
+- An agent's name (`Naming`) and face (`MushroomLook`) are ports of `web/src/app/nodes.ts` and `persona.tsx`. Change them together, then run `node ios/scripts/gen-look-fixtures.mjs`: `LookTests` checks the phone's faces against the desktop's, pixel for pixel, including how a workspace spreads faces that would clash (`MushroomLook.rememberWorkspaceFaces`, fed by `WorkspaceSession.agentsLoaded`).

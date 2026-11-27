@@ -163,6 +163,12 @@ func (e *env) overrides() runnerOverrides {
 
 // buildRunner prepares a runner for one agent identity.
 func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, ov runnerOverrides, log *slog.Logger) (*runner.Runner, error) {
+	return e.buildRunnerContext(e.in.Ctx, cfgPath, cfg, sh, ov, log)
+}
+
+// startup only bounds the initial Hub handshake. Runtime reporters and inbox
+// polling retain the service context after startup succeeds.
+func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *config.Config, sh runnerShared, ov runnerOverrides, log *slog.Logger) (*runner.Runner, error) {
 	rc := cfg.Runner
 	first := func(vals ...string) string {
 		for _, v := range vals {
@@ -191,7 +197,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	}
 	e.withSealer(c, cfgPath, cfg)
 	c.Via = "runner" // yields to a session that keeps `inbox wait` running
-	me, err := c.Me(e.in.Ctx)
+	me, err := c.Me(startup)
 	if err != nil {
 		return nil, err
 	}
@@ -246,14 +252,6 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	if st, err := os.Stat(workdir); err != nil || !st.IsDir() {
 		return nil, errorf("not_found", ExitNotFound, "create it or set runner.workdir", "workdir %s does not exist", workdir)
 	}
-	var rep *runtimeReporter
-	if !sh.once {
-		rep = e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, maxAccess, initial, workdir, log)
-		go rep.watchMaxAccess(e.in.Ctx, 20*time.Second, maxAccess, e.machineMaxAccess)
-		if sh.slots != nil {
-			go rep.watchSlots(e.in.Ctx, sh.slots, runner.SlotOwner(cfg.Hub, me.Name))
-		}
-	}
 	timeout := ov.timeout
 	if timeout == 0 {
 		if timeout, err = time.ParseDuration(orDefault(rc.Timeout, "30m")); err != nil {
@@ -280,7 +278,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		log.Info("machine name changed; the session is on this machine, taking it over",
 			"agent", me.Name, "was", b.Environment, "now", host)
 	}
-	if me, err = c.Bind(e.in.Ctx, api.Binding{Harness: name, Environment: host, Workdir: workdir}); err != nil {
+	if me, err = c.Bind(startup, api.Binding{Harness: name, Environment: host, Workdir: workdir}); err != nil {
 		return nil, err
 	}
 	var sessions runner.SessionStore = runner.NewHubSessions(c, me.Binding.SessionID)
@@ -323,6 +321,14 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 			return env
 		}
 		return append(extra, env...) // myco's own variables win
+	}
+	var rep *runtimeReporter
+	if !sh.once {
+		rep = e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, maxAccess, initial, workdir, log)
+		go rep.watchMaxAccess(e.in.Ctx, 20*time.Second, maxAccess, e.machineMaxAccess)
+		if sh.slots != nil {
+			go rep.watchSlots(e.in.Ctx, sh.slots, runner.SlotOwner(cfg.Hub, me.Name))
+		}
 	}
 	if rep != nil && e.in.Getenv("CLAUDE_CODE_REMOTE_SESSION_ID") == "" && !strings.HasPrefix(me.Binding.Environment, "claude-cloud") && (h.Name() == "claude" || h.Name() == "codex" || h.Name() == "opencode") {
 		home, _ := os.UserHomeDir()
@@ -401,25 +407,58 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 	}, alog), nil
 }
 
+// Handshakes have a bounded retry window, separate from long-lived workers.
+const runnerStartupTimeout = 20 * time.Second
+
 // runAll serves every profile, rescanning for new ones until ctx ends.
 func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 	dir := config.ProfilesDir(e.defaultPath)
 	var (
-		wg      sync.WaitGroup
-		mu      sync.Mutex            // started: a runner ends by itself when its node is taken over
-		said    = map[string]bool{}   // replaced profiles already logged (path + token)
-		refused = map[string]string{} // profile -> the credential the hub refused
-		started = map[string]bool{}
-		failed  = map[string]string{} // profile -> last start error
-		machine = false               // machine nodes ensured
-		nodes   = map[string]bool{}   // hub -> machine node ensured
+		wg          sync.WaitGroup
+		mu          sync.Mutex            // started: a runner ends by itself when its node is taken over
+		said        = map[string]bool{}   // replaced profiles already logged (path + token)
+		refused     = map[string]string{} // profile -> the credential the hub refused
+		started     = map[string]bool{}
+		failed      = map[string]string{} // profile -> last start error
+		nodes       = map[string]bool{}   // hub -> machine node ensured
+		nodePending = map[string]bool{}
+		starts      = map[string]chan struct{}{} // per Hub; a slow Hub cannot consume another's startup slots
 	)
 	if sh.rescan == nil {
 		sh.rescan = make(chan struct{}, 1)
 	}
 	scan := func() int {
-		if !machine {
-			machine = e.ensureMachineNodesLogged(log, nodes)
+		if sh.once {
+			e.ensureMachineNodesLogged(log, nodes)
+		} else if _, hubs, err := e.machineNodeHubs(); err != nil {
+			log.Warn("reading machine.yaml failed", "err", err)
+		} else {
+			for _, hub := range hubs {
+				mu.Lock()
+				if nodes[hub.Hub] || nodePending[hub.Hub] {
+					mu.Unlock()
+					continue
+				}
+				nodePending[hub.Hub] = true
+				mu.Unlock()
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					ctx, cancel := context.WithTimeout(e.in.Ctx, runnerStartupTimeout)
+					defer cancel()
+					done := e.ensureMachineNodeLogged(ctx, log, hub)
+					mu.Lock()
+					nodes[hub.Hub] = done
+					delete(nodePending, hub.Hub)
+					mu.Unlock()
+					if done {
+						select {
+						case sh.rescan <- struct{}{}:
+						default:
+						}
+					}
+				}()
+			}
 		}
 		profiles, err := config.ListProfiles(dir)
 		if err != nil {
@@ -428,7 +467,7 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 		mu.Lock()
 		defer mu.Unlock()
 		for _, p := range profiles {
-			if started[p.Path] {
+			if started[p.Path] || (p.Config.Harness == machinenode.Name && nodePending[p.Config.Hub]) {
 				continue
 			}
 			if tok, ok := refused[p.Path]; ok {
@@ -456,37 +495,56 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 				log.Info("skipping agent without a local runner harness", "profile", p.Path, "harness", p.Config.Harness)
 				continue
 			}
-			r, err := e.buildRunner(p.Path, p.Config, sh, runnerOverrides{}, log)
-			if err != nil {
-				if runner.IsReplaced(err) {
-					markReplaced(p.Path, p.Config.Token, err)
-					refused[p.Path] = p.Config.Token
-					log.Info("skipping agent taken over by another session", "profile", p.Path, "agent", p.Config.Agent)
-					continue
-				}
-				if runner.IsCredentialRejected(err) {
-					refused[p.Path] = p.Config.Token
-					log.Error("这台机器的凭据已被 Hub 拒绝，可能已从 Hub 移除；如需重新加入，请使用加入链接，或运行 myco runner service uninstall", "hub", p.Config.Hub, "profile", p.Path, "err", err)
-					continue
-				}
-				// Retried on every scan (the hub may be restarting); log
-				// only when the reason changes.
-				msg := toError(err, "").Message
-				if failed[p.Path] != msg {
-					log.Error("cannot start agent; retrying every 30s", "profile", p.Path, "err", msg)
-					failed[p.Path] = msg
-				}
-				continue
+			started[p.Path] = true // includes a pending handshake; no duplicate scans
+			slots := starts[p.Config.Hub]
+			if slots == nil {
+				slots = make(chan struct{}, 4)
+				starts[p.Config.Hub] = slots
 			}
-			if _, ok := failed[p.Path]; ok {
-				log.Info("agent started after earlier failures", "profile", p.Path)
-				delete(failed, p.Path)
-			}
-			started[p.Path] = true
 			wg.Add(1)
-			path, token := p.Path, p.Config.Token
 			go func() {
 				defer wg.Done()
+				select {
+				case slots <- struct{}{}:
+				case <-e.in.Ctx.Done():
+					return
+				}
+				ctx, cancel := context.WithTimeout(e.in.Ctx, runnerStartupTimeout)
+				r, err := e.buildRunnerContext(ctx, p.Path, p.Config, sh, runnerOverrides{}, log)
+				cancel()
+				<-slots
+				mu.Lock()
+				if err != nil {
+					delete(started, p.Path)
+					if runner.IsReplaced(err) {
+						markReplaced(p.Path, p.Config.Token, err)
+						refused[p.Path] = p.Config.Token
+						log.Info("skipping agent taken over by another session", "profile", p.Path, "agent", p.Config.Agent)
+						mu.Unlock()
+						return
+					}
+					if runner.IsCredentialRejected(err) {
+						refused[p.Path] = p.Config.Token
+						log.Error("这台机器的凭据已被 Hub 拒绝，可能已从 Hub 移除；如需重新加入，请使用加入链接，或运行 myco runner service uninstall", "hub", p.Config.Hub, "profile", p.Path, "err", err)
+						mu.Unlock()
+						return
+					}
+					// Retried on every scan (the hub may be restarting); log
+					// only when the reason changes.
+					msg := toError(err, "").Message
+					if failed[p.Path] != msg {
+						log.Error("cannot start agent; retrying every 30s", "profile", p.Path, "err", msg)
+						failed[p.Path] = msg
+					}
+					mu.Unlock()
+					return
+				}
+				if _, ok := failed[p.Path]; ok {
+					log.Info("agent started after earlier failures", "profile", p.Path)
+					delete(failed, p.Path)
+				}
+				mu.Unlock()
+				path, token := p.Path, p.Config.Token
 				if err := r.Run(e.in.Ctx); runner.IsCredentialRejected(err) {
 					// Taken over (a handover) or its credential replaced:
 					// look again, as a new identity may have been saved in

@@ -8,6 +8,17 @@ on:
     # the publishing workflow needs those same runners.
     branches-ignore: ["release/v*"]
   pull_request:
+  # Read-only qualification for a frozen source; never builds a release/tag.
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: "Exact source SHA (empty uses the workflow commit)"
+        type: string
+        default: ""
+      force_full:
+        description: "Run the complete UI matrix"
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       source_sha:
@@ -73,25 +84,104 @@ jobs:
           fi
           git diff --name-only "$base" "${{ github.sha }}" | head -50
 
-  go:
+  go-race:
+    # Each shard independently lists the exact source. The go gate lists it
+    # again and requires one successful race result for every package.
     runs-on: ubuntu-latest
+    env:
+      RACE_SOURCE: ${{ inputs.source_sha || github.sha }}
+      RACE_TOOLS: ${{ github.workflow_sha }}
+      RACE_RUN: ${{ github.run_id }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    name: go-race (${{ matrix.shard }}/3)
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.source_sha || github.sha }}
+      # CI policy comes from this workflow's immutable definition, not from
+      # an older frozen source which may predate the sharding helper.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-tools
+          sparse-checkout: |
+            scripts/ci-race.py
+            scripts/ci-race.test.py
+            scripts/ci-race-weights.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Release source and build version regression checks
+      - name: Release source, build version and package coverage regressions
+        if: matrix.shard == 1
         run: |
           python3 scripts/release-source.test.py
           python3 scripts/build-version.test.py
+          python3 scripts/prepare-apps.test.py
+          python3 .ci-tools/scripts/ci-race.test.py
       - name: gofmt and vet
+        if: matrix.shard == 1
         run: make vet
-      - name: Unit and integration tests (race detector)
-        run: make test
+      - name: Unit and integration tests (race detector, shard ${{ matrix.shard }}/3)
+        run: |
+          python3 .ci-tools/scripts/ci-race.py run --index ${{ matrix.shard }} --count 3 \
+            --source "$RACE_SOURCE" --tools "$RACE_TOOLS" \
+            --run-id "$RACE_RUN" --out "$RUNNER_TEMP/race-${{ matrix.shard }}"
       - name: Smoke test (real binary, separate processes)
+        if: matrix.shard == 1
         run: make smoke
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: go-race-${{ inputs.source_sha || github.sha }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/race-${{ matrix.shard }}/
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
+
+  go:
+    # Preserve the release-required check name. A failed/cancelled/missing
+    # shard cannot be hidden by a successful sibling or stale artifact.
+    needs: go-race
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      RACE_SOURCE: ${{ inputs.source_sha || github.sha }}
+      RACE_TOOLS: ${{ github.workflow_sha }}
+      RACE_RUN: ${{ github.run_id }}
+    steps:
+      - name: Require every race shard and its checks
+        env:
+          RACE_RESULT: ${{ needs.go-race.result }}
+        run: test "$RACE_RESULT" = success
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-tools
+          sparse-checkout: |
+            scripts/ci-race.py
+            scripts/ci-race-weights.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: go-race-${{ inputs.source_sha || github.sha }}-*
+          path: race-reports
+      - name: Verify the independent complete package inventory and race results
+        run: |
+          python3 .ci-tools/scripts/ci-race.py verify --count 3 \
+            --source "$RACE_SOURCE" --tools "$RACE_TOOLS" \
+            --run-id "$RACE_RUN" --reports race-reports
 
   windows:
     # Native Windows: build and the tests that do not need a POSIX shell

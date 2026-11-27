@@ -114,6 +114,7 @@ public final class AppModel {
     /// - Parameter session: a workspace to show at once (the demo, in tests);
     ///   nil looks for the ones joined earlier.
     public init(session: WorkspaceSession? = nil, doors: Doors) {
+        WorkspaceSession.agentsLoaded = { MushroomLook.rememberWorkspaceFaces(of: $0) }
         FilePreview.words = { (L("关闭", "Close"), L("分享或存储", "Share or save")) }
         FilePreview.markdownWords = { (L("排版", "Formatted"), L("原文", "Source")) }
         UIBlockWords.words = {
