@@ -2,11 +2,14 @@ package console_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,7 +36,71 @@ func TestAppCreatesWorkspaceOnItsServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hs := httptest.NewServer(handler)
+	// These observations are server entry/return, not client completion or
+	// response-body timing. Keep incomplete requests in the case-local snapshot.
+	type phase struct {
+		name                string
+		entered, returned   time.Duration
+		entryCtx, returnCtx string
+		done                bool
+	}
+	var phasesMu sync.Mutex
+	var phases []phase
+	started := time.Now()
+	contextState := func(ctx context.Context) string {
+		switch {
+		case errors.Is(ctx.Err(), context.DeadlineExceeded):
+			return "deadline"
+		case errors.Is(ctx.Err(), context.Canceled):
+			return "canceled"
+		default:
+			return "active"
+		}
+	}
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := ""
+		// Inspect paths only to classify these fixture routes; never emit them.
+		path := strings.TrimPrefix(r.URL.Path, "/w/team-b")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/server/workspaces":
+			name = "create"
+		case r.Method == http.MethodPost && path == "/v1/console/pair":
+			name = "pair"
+		case r.Method == http.MethodGet && path == "/v1/overview":
+			name = "overview"
+		}
+		if name == "" {
+			handler.ServeHTTP(w, r)
+			return
+		}
+		phasesMu.Lock()
+		index := len(phases)
+		phases = append(phases, phase{name: name, entered: time.Since(started), entryCtx: contextState(r.Context())})
+		phasesMu.Unlock()
+		defer func() {
+			phasesMu.Lock()
+			defer phasesMu.Unlock()
+			phases[index].returned = time.Since(started)
+			phases[index].returnCtx = contextState(r.Context())
+			phases[index].done = true
+		}()
+		handler.ServeHTTP(w, r)
+	}))
+	defer func() {
+		phasesMu.Lock()
+		snapshot := append([]phase(nil), phases...)
+		phasesMu.Unlock()
+		// Only the test goroutine logs; handlers may still be finishing after
+		// this snapshot, so absence/unfinished entries are not causal proof.
+		for i, p := range snapshot {
+			t.Logf("workspace_server_phase seq=%d phase=%s event=enter at_ms=%d server_context=%s", i+1, p.name, p.entered.Milliseconds(), p.entryCtx)
+			if p.done {
+				t.Logf("workspace_server_phase seq=%d phase=%s event=return at_ms=%d elapsed_ms=%d server_context=%s", i+1, p.name, p.returned.Milliseconds(), (p.returned - p.entered).Milliseconds(), p.returnCtx)
+			} else {
+				t.Logf("workspace_server_phase seq=%d phase=%s event=incomplete snapshot_ms=%d server_context=unknown", i+1, p.name, time.Since(started).Milliseconds())
+			}
+		}
+	}()
 	t.Cleanup(func() { hs.Close(); closeWS(); cancel(); h.Close() })
 	admin, _ := client.New(hs.URL, adminToken)
 	link, err := admin.CreatePairing(context.Background())
@@ -55,6 +122,54 @@ func TestAppCreatesWorkspaceOnItsServer(t *testing.T) {
 	}
 	code, ws, raw := r.do("POST", "/app/hubs/"+id+"/workspaces", map[string]string{"name": "team-b", "display_name": "B 组"})
 	if code != 201 || ws["url"] != hs.URL+"/w/team-b" || ws["name"] != "B 组" {
+		t.Logf("workspace_create_failed at_ms=%d", time.Since(started).Milliseconds())
+		// Separate, fresh diagnostic budgets do not extend or retry creation.
+		// Neither a failed probe nor an expired probe proves absence.
+		serverExists := func() string {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			list, err := admin.Workspaces(ctx)
+			if err != nil || ctx.Err() != nil {
+				return "unknown"
+			}
+			for _, item := range list {
+				if item.Name == "team-b" {
+					return "yes"
+				}
+			}
+			return "no"
+		}()
+		locallyAdded := func() string {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			// Store.List has no context API. Bound the caller's wait and leave
+			// a late read-only result buffered; the worker never calls t.Log.
+			result := make(chan string, 1)
+			go func() {
+				list, err := b.Store.List()
+				if err != nil {
+					result <- "unknown"
+					return
+				}
+				for _, item := range list {
+					if item.URL == hs.URL+"/w/team-b" {
+						result <- "yes"
+						return
+					}
+				}
+				result <- "no"
+			}()
+			select {
+			case state := <-result:
+				if ctx.Err() != nil {
+					return "unknown"
+				}
+				return state
+			case <-ctx.Done():
+				return "unknown"
+			}
+		}()
+		t.Logf("workspace_readonly_check server_exists=%s locally_added=%s", serverExists, locallyAdded)
 		t.Fatalf("create: %d %s", code, raw)
 	}
 	_, _, list := r.do("GET", "/app/hubs", nil)
