@@ -388,7 +388,7 @@ that session's profile (~/.myco/agents/<agent>.yaml) so the CLI and "myco runner
 		labelCmd("remove", "Remove labels (a bare key removes all its values)", "myco agent label remove --label group=loops"),
 	)
 
-	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), resumeCommands()[0], resumeCommands()[1], login, bind, agentUpdateCommand(), agentStatusCommands(), agentRuntimeCommands(), label, agentSkillsCommands(), agentVisibilityCommand(), agentAliasCommands(), agentSpawnCommand(), agentHandoverCommands()[0], agentHandoverCommands()[1], agentHandoverCommands()[2], agentOwnerCommand(), agentPickCommand(), agentStatsCommand(), list, get, kick, remove, agentCleanupCommand())
+	return (&Command{Name: "agent", Summary: "Register, bind, label, alias and discover agents"}).Add(register, agentEnrollCommand(), resumeCommands()[0], resumeCommands()[1], login, bind, agentUpdateCommand(), agentStatusCommands(), agentRuntimeCommands(), label, agentSkillsCommands(), agentVisibilityCommand(), agentAliasCommands(), agentSpawnCommand(), agentForkCommand(), agentRetireCommand(), agentHandoverCommands()[0], agentHandoverCommands()[1], agentHandoverCommands()[2], agentOwnerCommand(), agentPickCommand(), agentStatsCommand(), list, get, kick, remove, agentCleanupCommand())
 }
 
 // bindingFromFlags merges --detect results with explicit flags.

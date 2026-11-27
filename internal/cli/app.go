@@ -239,6 +239,7 @@ func (e *env) agentClient() (*client.Client, error) {
 	}
 	// Why, for what a superagent's owner has to approve.
 	c.Reason = strings.TrimSpace(e.in.Getenv(EnvApprovalReason))
+	c.ParentMessage = strings.TrimSpace(e.in.Getenv("MYCO_MESSAGE_ID"))
 	return e.withSealer(c, e.cfgPath, e.cfg), nil
 }
 

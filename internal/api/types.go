@@ -493,6 +493,8 @@ type RenameMachineRequest struct {
 
 // Message is the public view of a message.
 type Message struct {
+	ParentID       string `json:"parent_id,omitempty"`
+	ReassignNote   string `json:"reassign_note,omitempty"`
 	ID             string `json:"id"`
 	From           string `json:"from"`
 	To             string `json:"to"`
@@ -592,6 +594,7 @@ type LabelsRequest struct {
 
 // BroadcastRequest is the body of POST /v1/broadcasts.
 type BroadcastRequest struct {
+	ParentID       string   `json:"parent_id,omitempty"`
 	Selector       string   `json:"selector"`
 	Type           string   `json:"type,omitempty"`
 	Body           string   `json:"body"`
@@ -648,6 +651,7 @@ type RegisterResponse struct {
 
 // SendRequest is the body of POST /v1/messages.
 type SendRequest struct {
+	ParentID       string   `json:"parent_id,omitempty"`
 	To             string   `json:"to"`
 	Type           string   `json:"type,omitempty"`
 	Body           string   `json:"body"`

@@ -43,9 +43,12 @@ const (
 
 // Client talks to one hub with one credential (agent or admin token).
 type Client struct {
-	base  *url.URL
-	token string
-	http  *http.Client
+	// ParentMessage is the optional task provenance supplied by the CLI's
+	// current runner context. Explicit SendRequest.ParentID takes precedence.
+	ParentMessage string
+	base          *url.URL
+	token         string
+	http          *http.Client
 	// Via marks this client's pulls (e.g. "runner"; see api.PullRequest.Via).
 	Via string
 	// WakeHeld opts a conversational runner into receiving resumptions.
@@ -366,6 +369,9 @@ func (c *Client) SetLabels(ctx context.Context, name string, req api.LabelsReque
 
 // Broadcast sends one message per agent matching req.Selector.
 func (c *Client) Broadcast(ctx context.Context, req api.BroadcastRequest, dry bool) (*api.BroadcastResponse, error) {
+	if req.ParentID == "" && orType(req.Type) == "task" {
+		req.ParentID = c.ParentMessage
+	}
 	if c.Sealer != nil {
 		body, err := c.sealBroadcast(ctx, req)
 		if err != nil {
@@ -374,7 +380,12 @@ func (c *Client) Broadcast(ctx context.Context, req api.BroadcastRequest, dry bo
 		req.Body = body
 	}
 	var out api.BroadcastResponse
-	return &out, c.do(ctx, http.MethodPost, "/v1/broadcasts", dryQuery(dry), req, &out)
+	err := c.do(ctx, http.MethodPost, "/v1/broadcasts", dryQuery(dry), req, &out)
+	if req.ParentID != "" && parentFieldUnsupported(err) {
+		req.ParentID = ""
+		err = c.do(ctx, http.MethodPost, "/v1/broadcasts", dryQuery(dry), req, &out)
+	}
+	return &out, err
 }
 
 // BroadcastStatus returns deliveries and replies of a broadcast; consume
@@ -475,6 +486,9 @@ func (c *Client) RemoveAlias(ctx context.Context, alias string, dry bool) (map[s
 
 // Send queues a message.
 func (c *Client) Send(ctx context.Context, req api.SendRequest, dry bool) (*api.SendResponse, error) {
+	if req.ParentID == "" && orType(req.Type) == "task" {
+		req.ParentID = c.ParentMessage
+	}
 	if c.Sealer != nil {
 		body, err := c.seal(ctx, req.To, orType(req.Type), req.Body, req.Attachments)
 		if err != nil {
@@ -483,7 +497,12 @@ func (c *Client) Send(ctx context.Context, req api.SendRequest, dry bool) (*api.
 		req.Body = body
 	}
 	var out api.SendResponse
-	if err := c.do(ctx, http.MethodPost, "/v1/messages", dryQuery(dry), req, &out); err != nil {
+	err := c.do(ctx, http.MethodPost, "/v1/messages", dryQuery(dry), req, &out)
+	if req.ParentID != "" && parentFieldUnsupported(err) {
+		req.ParentID = ""
+		err = c.do(ctx, http.MethodPost, "/v1/messages", dryQuery(dry), req, &out)
+	}
+	if err != nil {
 		return &out, err
 	}
 	c.open(ctx, &out.Message)

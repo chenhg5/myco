@@ -2564,7 +2564,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     ...(!termMode && pins ? [{ label: L("置顶一个网址", "Pin an address"), icon: PinIcon, onSelect: () => setPinAdding(true) }] : []),
     // 设定目标 (myco goal): woken on schedule to push it, until it is done.
     ...(!termMode && !observed && goals.supported && !goals.current && agent && agentKind(agent) === "agent"
-      ? [{ label: L("设定目标…", "Set a goal…"), icon: Target, onSelect: () => setGoalOpen(true) }] : []),
+      ? [{ label: L("设定目标", "Set a goal"), icon: Target, onSelect: () => setGoalOpen(true) }] : []),
     // (bare: the header has no find button, so find is here)
     ...(bare && !termMode ? [{ label: L("在这段对话里找", "Find in this chat"), icon: Search, hint: `${mod}F`, onSelect: () => setSearching(true) }] : []),
     // 专注模式 (AppMode): this chat alone, full screen, centred.

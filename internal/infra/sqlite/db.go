@@ -496,7 +496,7 @@ func open(path string, t *Timing) (*sql.DB, error) {
 	// A single writer connection serializes transactions and keeps
 	// ":memory:" databases shared across the pool.
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema + usageSchema + projectInvitationSchema + pageAttachmentSchema + watchSchema + goalSchema + modelProviderSchema); err != nil {
+	if _, err := db.Exec(schema + agentForkSchema + usageSchema + projectInvitationSchema + pageAttachmentSchema + watchSchema + goalSchema + modelProviderSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -573,6 +573,10 @@ func open(path string, t *Timing) (*sql.DB, error) {
 			db.Close()
 			return nil, fmt.Errorf("migrate: %w", err)
 		}
+	}
+	if err := migrateMessageCoordination(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	for _, ddl := range []string{
 		`CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)`,
@@ -652,7 +656,7 @@ var agentColumnsV2 = [][2]string{
 }
 
 // addColumns adds missing columns (idempotent, forward-only migrations).
-func addColumns(db *sql.DB, table string, cols [][2]string) error {
+func addColumns(db schemaConnection, table string, cols [][2]string) error {
 	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
 	if err != nil {
 		return err

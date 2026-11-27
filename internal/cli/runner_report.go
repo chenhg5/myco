@@ -423,7 +423,11 @@ func runnerFeatures(h harness.Harness) []string {
 	if h.Name() == "machine" {
 		// It opens a new agent's provider sealed for it (i115), or fetches
 		// one the hub keeps (i119).
-		return []string{"usage", "sealed_spawn", "hub_provider"}
+		features := []string{"usage", "sealed_spawn", "hub_provider"}
+		if managed, ok := h.(interface{ CanManageForks() bool }); ok && managed.CanManageForks() {
+			features = append(features, "fork_retire_v1")
+		}
+		return features
 	}
 	return []string{"usage"}
 }

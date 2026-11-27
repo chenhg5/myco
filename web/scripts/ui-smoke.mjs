@@ -5134,7 +5134,7 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail .goal-ended", { hasText: "你停止了目标" }).waitFor({ timeout: 5_000 });
       // A new one from the chat's ⋯.
       await page.locator(".conv-head").getByRole("button", { name: "更多" }).click();
-      await page.locator(".conv-menu").getByRole("menuitem", { name: "设定目标…" }).click();
+      await page.locator(".conv-menu").getByRole("menuitem", { name: "设定目标" }).click();
       const dlg = page.locator(".goal-dialog");
       await dlg.waitFor({ timeout: 5_000 });
       const start = dlg.getByRole("button", { name: "开始", exact: true });

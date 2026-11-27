@@ -109,7 +109,9 @@ const WorkflowTick = app.WorkflowTick
 
 // Hub is an assembled hub: the HTTP handler plus background workers.
 type Hub struct {
-	TaskMonitor     *app.TaskMonitorService
+	TaskMonitor *app.TaskMonitorService
+
+	Forks           *app.ForkService
 	PageAttachments *app.PageAttachmentService
 	Actions         *app.ActionService
 	Handler         http.Handler
@@ -239,6 +241,8 @@ func Build(o Options) (*Hub, error) {
 	machineSvc := app.NewMachineService(sqlite.NewMachineRepo(db), agentsRepo, messages, ids, clock, o.OnlineWindow)
 	machineSvc.SetRemovalDeps(agents, enroll)
 	srv.SetMachines(machineSvc)
+	forkSvc := app.NewForkService(sqlite.NewForkRepo(db), agentsRepo, machineSvc, messages, ids, clock)
+	srv.SetForks(forkSvc)
 	consoleSvc := app.NewConsoleService(sqlite.NewConsoleTokenRepo(db), security.Tokens{}, ids, clock)
 	consoleSvc.SetPairings(sqlite.NewConsolePairingRepo(db))
 	srv.SetConsole(consoleSvc)
@@ -431,7 +435,7 @@ func Build(o Options) (*Hub, error) {
 		return nil, fmt.Errorf("open private browser screenshots: %w", err)
 	}
 	actionSvc.SetBrowserScreenshots(screenshots)
-	h := &Hub{TaskMonitor: taskMonitor, PageAttachments: pageAttachments, Actions: actionSvc, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows, Watches: watches, Goals: goals,
+	h := &Hub{TaskMonitor: taskMonitor, Forks: forkSvc, PageAttachments: pageAttachments, Actions: actionSvc, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows, Watches: watches, Goals: goals,
 		browserScreenshotsPath: screenshotPath, Close: func() error { return errors.Join(screenshots.Close(), db.Close()) }, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}
 	if bk != nil {
 		// The first a few minutes after start, spread so that the
@@ -471,6 +475,7 @@ func Run(ctx context.Context, o Options) error {
 	go hub.TaskMonitor.Run(ctx)
 	go hub.Watches.Run(ctx)
 	go hub.Goals.Run(ctx)
+	go hub.Forks.Run(ctx)
 	if hub.RunBackups != nil {
 		go hub.RunBackups(ctx)
 	}

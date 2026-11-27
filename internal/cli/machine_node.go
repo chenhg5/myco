@@ -159,10 +159,17 @@ func (e *env) ensureMachineNodeLogged(ctx context.Context, log *slog.Logger, h c
 // keeping runner settings already there. It does not touch the env's current
 // config, so it is safe to call while runner --all serves other agents.
 func saveProfile(defaultPath, hub, agent, token string, b api.Binding, rc config.Runner) error {
+	return saveManagedProfile(defaultPath, hub, agent, token, b, rc, "")
+}
+
+func saveManagedProfile(defaultPath, hub, agent, token string, b api.Binding, rc config.Runner, forkID string) error {
 	path := profilePathFor(defaultPath, hub, agent)
 	cfg, err := config.Load(path)
 	if err != nil {
 		return err
+	}
+	if forkID != "" {
+		cfg.ForkID = forkID
 	}
 	cfg.Hub, cfg.Agent, cfg.Token, cfg.Harness, cfg.SessionID = hub, agent, token, b.Harness, b.SessionID
 	if cfg.Runner.Harness == "" {
@@ -245,7 +252,7 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 	// Read what this computer has ahead of the first ask (the App asks when
 	// adding an agent opens).
 	console.PrewarmMachineInventory(home, m.Hub)
-	return &machinenode.Node{
+	node := &machinenode.Node{
 		Hub: m.Hub, Machine: m.Machine, Prefix: m.NamePrefix,
 		Policy: machinenode.Policy{Home: home, Dirs: mf.Spawn.Dirs, MaxAccess: maxAccess},
 		LoadPolicy: func() (machinenode.Policy, error) {
@@ -327,7 +334,8 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 					}
 					rc.EnvFile, rc.Provider, rc.ProviderApplied = file, "", p.ProviderID
 				}
-				if err := saveProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc); err != nil {
+				forkID, _ := ctx.Value(managedForkKey{}).(string)
+				if err := saveManagedProfile(e.defaultPath, m.Hub, res.Agent.Name, res.Token, b, rc, forkID); err != nil {
 					return "", err
 				}
 				markSpawnedRun(e.defaultPath, res.Agent.Name, b.SessionID, p.CLI)
@@ -425,7 +433,13 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				return node, nil
 			},
 		},
-	}, nil
+	}
+	if sh.forkWorkers != nil {
+		node.Deps.ManagedFork = func(ctx context.Context, req harness.Request, id string, retire bool) (api.SpawnResult, error) {
+			return e.managedMachineFork(ctx, node, c, m.Hub, sh, req, id, retire)
+		}
+	}
+	return node, nil
 }
 
 // machineProvider is the cc-switch provider pinned on the machine node (for

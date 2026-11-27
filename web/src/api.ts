@@ -537,6 +537,8 @@ export interface HandoverResult {
 }
 export interface Attachment { file_id: string; name: string; size: number; sha256: string; content_type?: string }
 export interface Message {
+  parent_id?: string;
+  reassign_note?: string;
   id: string; from: string; to: string; thread_id: string; reply_to?: string; after?: string; type: string; body: string;
   status: string; attempts: number; error?: string; broadcast_id?: string; project?: string; attachments?: Attachment[];
   /** the automation that sent it (hubs from v0.19.22) */

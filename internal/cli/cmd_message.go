@@ -37,6 +37,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			{Name: "body-file", Kind: String, Help: "Read the message from a file ('-' = stdin)"},
 			{Name: "type", Kind: Enum, Values: []string{"task", "note"}, Default: "task", Help: "task expects a reply; note does not"},
 			{Name: "thread", Kind: String, Env: "MYCO_THREAD_ID", Help: "Continue an existing thread"},
+			{Name: "parent", Kind: String, Env: "MYCO_MESSAGE_ID", Help: "Message being handled when delegating this task (recorded as parent_id)"},
 			{Name: "after", Kind: String, Help: "Deliver after this task from you to the same agent finishes"},
 			{Name: "project", Kind: String, Env: "MYCO_PROJECT", Help: "Put a new thread in this project (you must be a member); a message in an existing thread belongs to its project"},
 			{Name: "idempotency-key", Kind: String, Help: "Retry-safe key: resending with the same key returns the original message"},
@@ -65,7 +66,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			res, err := c.Send(e.in.Ctx, api.SendRequest{
 				To: e.in.String("to"), Type: e.in.String("type"), Body: body,
 				ThreadID: e.in.String("thread"), After: e.in.String("after"), IdempotencyKey: e.in.String("idempotency-key"), Attachments: atts,
-				Project: e.in.String("project"),
+				Project: e.in.String("project"), ParentID: e.in.String("parent"),
 			}, dry)
 			if err != nil {
 				return err
@@ -603,7 +604,7 @@ choices by number; --body says it in words (or adds to the choice).`,
 	}
 
 	return (&Command{Name: "message", Summary: "Send, answer and track messages"}).Add(
-		send, get, wait, progress, ask, answer, steer, reply, suggest, fail, release, stopMessageCommand(),
+		send, get, wait, progress, ask, answer, steer, reply, suggest, fail, release, stopMessageCommand(), messageTreeCommand(), messageReassignCommand(),
 		transition("ack", "Start work on a pulled message (stops redelivery)", "myco message ack --id msg_abc123"),
 		transition("hold", "Set a task aside; a runner requires --until for a delegated task", "myco message hold --until msg_delegated"),
 		transition("done", "Close a message without replying (also one still queued, to drop it unread)", "myco message done --id msg_abc123"),

@@ -30,7 +30,9 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
-	taskMonitor   *app.TaskMonitorService
+	taskMonitor *app.TaskMonitorService
+
+	forks         *app.ForkService
 	databaseStats func() api.DatabasePoolStats
 	perf          *perf.Timings
 	goals         *app.GoalService
@@ -190,6 +192,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) routes() {
+	s.mux.HandleFunc("POST /v1/agents/fork", s.adminOrAgent(s.createAgentFork))
+	s.mux.HandleFunc("POST /v1/agents/retire", s.adminOrAgent(s.retireAgentFork))
+	s.mux.HandleFunc("GET /v1/agent-forks/{id}", s.adminOrAgent(s.getAgentFork))
+	s.mux.HandleFunc("GET /v1/me/agent-forks/{id}", s.agent(s.machineForkPlan))
+	s.mux.HandleFunc("POST /v1/me/agent-forks/{id}", s.agent(s.completeAgentFork))
 	m := s.mux
 	s.usageRoutes(m)
 	s.taskMonitorRoutes(m)
@@ -340,6 +347,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/ingress/{kind}", s.handleIngress)
 	m.HandleFunc("POST /v1/messages", s.agent(s.send))
 	m.HandleFunc("GET /v1/messages/{id}", s.agent(s.getMessage))
+	s.messageCoordinationRoutes(m)
 	m.HandleFunc("GET /v1/messages/{id}/steers", s.agent(s.getSteers))
 	m.HandleFunc("POST /v1/messages/{id}/ack", s.agent(s.transition(app.TransitionAck)))
 	m.HandleFunc("POST /v1/messages/{id}/hold", s.agent(s.transition(app.TransitionHold)))
@@ -1208,7 +1216,7 @@ func (s *Server) broadcast(w http.ResponseWriter, r *http.Request, a *domain.Age
 		return
 	}
 	dry := dryRun(r)
-	out, err := s.messages.Broadcast(r.Context(), a, app.BroadcastInput{Selector: req.Selector, Type: req.Type, Body: req.Body,
+	out, err := s.messages.Broadcast(r.Context(), a, app.BroadcastInput{ParentID: req.ParentID, Selector: req.Selector, Type: req.Type, Body: req.Body,
 		IdempotencyKey: req.IdempotencyKey, IncludeSelf: req.IncludeSelf, Attachments: req.Attachments, DryRun: dry})
 	if err != nil {
 		writeError(w, err)
@@ -1417,7 +1425,7 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	dry := dryRun(r)
 	out, err := s.messages.Send(r.Context(), a, app.SendInput{
 		To: req.To, Type: req.Type, Body: req.Body, ThreadID: req.ThreadID, After: req.After, IdempotencyKey: req.IdempotencyKey,
-		Attachments: req.Attachments, Project: req.Project, DryRun: dry,
+		Attachments: req.Attachments, Project: req.Project, ParentID: req.ParentID, DryRun: dry,
 	})
 	if err != nil {
 		writeError(w, err)

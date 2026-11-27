@@ -21,6 +21,8 @@ import (
 
 // Options tunes the runner.
 type Options struct {
+	// AuthorizeRun rechecks managed-copy ownership before every turn.
+	AuthorizeRun     func(context.Context, string) error
 	Processes        *processwatch.Manager
 	ProcessWorkspace string
 	ProcessMember    string
@@ -530,6 +532,25 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		defer r.untrackTask(m.ID)
 	}
 
+	if r.opts.AuthorizeRun != nil {
+		if err := r.opts.AuthorizeRun(ctx, m.ID); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			if retryableFinishError(err) {
+				r.requeue(ctx, log, m, key, "managed copy authorization refresh unavailable")
+				return
+			}
+			if m.Type == "task" {
+				if _, e := r.hub.Fail(ctx, m.ID, "managed copy is no longer authorized to run", false); e == nil {
+					r.clearPending(m.ID)
+				}
+			} else {
+				_ = r.hub.Complete(ctx, m.ID)
+			}
+			return
+		}
+	}
 	sessionID := r.sessions.Get(key)
 	// A copied node's first run makes the copy: it runs on the source
 	// session with Fork, whatever else uses the source meanwhile.
