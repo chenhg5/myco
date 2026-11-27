@@ -163,11 +163,23 @@ func (s *ModelProviderService) Update(ctx context.Context, member, id string, in
 			return nil, domain.Errf(domain.CodeConflict, "key_version must be %d or %d", p.KeyVersion, p.KeyVersion+1).
 				WithSuggestion("read the provider again: another device may have changed it")
 		}
+		// Where the key goes changing is a new version too, as with the
+		// key sealed (agents with the old settings are offered the new).
+		changes := func(v *string, cur string) bool { return v != nil && strings.TrimSpace(*v) != cur }
+		settingsChanged := !moving && (changes(in.Vendor, p.Vendor) || changes(in.AnthropicBase, p.AnthropicBase) || changes(in.OpenAIBase, p.OpenAIBase) || changes(in.SmallModel, p.SmallModel))
+		if settingsChanged && in.APIKey == nil {
+			key, err := s.openKey(p)
+			if err != nil {
+				return nil, err
+			}
+			in.APIKey = &key
+		}
 		if in.APIKey != nil {
-			// The version goes up for a new key only: the same key moved
-			// here, or entered again, keeps it (agents are not behind).
+			// The version goes up for a new key or new settings only: the
+			// same key moved here, or entered again, keeps it (agents are
+			// not behind).
 			version := p.KeyVersion
-			if !moving && !s.sameKey(p, *in.APIKey) {
+			if !moving && (settingsChanged || !s.sameKey(p, *in.APIKey)) {
 				version++
 			}
 			if in.KeyVersion != nil {
@@ -385,6 +397,16 @@ func (s *ModelProviderService) HubKeyLost(ctx context.Context) bool {
 	return err == nil && !create
 }
 
+// KeyHint is what may be shown of a key: its last four characters, and
+// nothing for a key shorter than twelve (the App's hint() alike), so a
+// short key is not kept or shown half in the clear.
+func KeyHint(key string) string {
+	if len(key) < 12 {
+		return ""
+	}
+	return key[len(key)-4:]
+}
+
 func keyErr(err error) error {
 	return domain.Errf(domain.CodeInvalidState, "the hub's key for secrets is missing: keys it kept are lost").
 		WithSuggestion("restore the hub's provider-secret.key from a backup, or enter the keys again")
@@ -464,7 +486,7 @@ func (s *ModelProviderService) apply(ctx context.Context, p *domain.ModelProvide
 			return keyErr(err)
 		}
 		p.KeyHub, p.KeyVersion, p.KeySealed = sealed, version, ""
-		p.KeyHint = key[max(0, len(key)-4):]
+		p.KeyHint = KeyHint(key)
 	}
 	if p.HubHeld() {
 		if p.KeyHub == "" {

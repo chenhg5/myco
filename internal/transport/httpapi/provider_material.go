@@ -132,9 +132,15 @@ func (s *Server) providerMaterial(w http.ResponseWriter, r *http.Request, a *dom
 		writeError(w, domain.Errf(domain.CodeNotFound, "this hub does not keep providers"))
 		return
 	}
-	if !s.secretReads.allow("agent:"+string(a.Name), time.Now()) {
+	// Held to a few a minute: refusals, and reads for a request id (a
+	// runner reads one once, again only when its receipt was lost). A
+	// grant is its own limit: made by a person for one spawn, used once.
+	limited := func() bool {
+		if s.secretReads.allow("agent:"+string(a.Name), time.Now()) {
+			return false
+		}
 		writeError(w, domain.Errf(domain.CodeRateLimited, "too many provider reads: try again in a minute"))
-		return
+		return true
 	}
 	id, grant := r.URL.Query().Get("id"), r.URL.Query().Get("grant")
 	switch {
@@ -142,6 +148,9 @@ func (s *Server) providerMaterial(w http.ResponseWriter, r *http.Request, a *dom
 		x, ok := s.grants.take(grant, a.Name, time.Now())
 		if !ok {
 			s.record(r, "provider.material.refused", string(a.Name), "grant")
+			if limited() {
+				return
+			}
 			writeError(w, domain.Errf(domain.CodePermissionDenied, "no such provider grant for this node (each is for one request, once, for 10 minutes)"))
 			return
 		}
@@ -154,6 +163,9 @@ func (s *Server) providerMaterial(w http.ResponseWriter, r *http.Request, a *dom
 		s.recordAs(r, app.Actor{Agent: a}, "provider.material", string(a.Name), "provider="+x.provider+" key_version="+strconv.Itoa(version)+" spawn")
 		writeJSON(w, http.StatusOK, m)
 	case id != "":
+		if limited() {
+			return
+		}
 		hp := a.RunSettings.ProviderHub
 		if hp == nil || hp.ID != id {
 			s.record(r, "provider.material.refused", string(a.Name), "request")
@@ -195,6 +207,9 @@ func (s *Server) providerMaterial(w http.ResponseWriter, r *http.Request, a *dom
 		s.recordAs(r, app.Actor{Agent: a}, "provider.material", string(a.Name), detail)
 		writeJSON(w, http.StatusOK, m)
 	default:
+		if limited() {
+			return
+		}
 		writeError(w, domain.Errf(domain.CodeInvalidArgument, "id or grant is required"))
 	}
 }
