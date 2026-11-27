@@ -2963,7 +2963,11 @@ async function runMatrix(browser, size, scheme) {
         await page.waitForFunction((id) => performance.getEntriesByName("myco.latency").some((e) => e.detail?.message === id && e.detail.stage === "app_paint_opportunity"), message, { timeout: 15_000 });
         const marks = await page.evaluate((id) => performance.getEntriesByName("myco.latency").filter((e) => e.detail?.message === id).map((e) => ({ at: e.startTime, detail: e.detail })), message);
         const expected = ["app_send", "app_send_ack", "app_trace_received", "app_text_dom", "app_paint_opportunity"];
-        if (marks.length !== expected.length || marks.some((m, i) => m.detail.stage !== expected[i] || i > 0 && m.at < marks[i - 1].at)) throw new Error(`首字时间点不完整或顺序错乱：${JSON.stringify(marks)}`);
+        const byStage = new Map(marks.map((m) => [m.detail.stage, m.at]));
+        const textOrder = ["app_send", "app_trace_received", "app_text_dom", "app_paint_opportunity"];
+        // Text may reach a poll before the original POST response. ACK is
+        // required, but must not be forced ahead of observed first text.
+        if (marks.length !== expected.length || expected.some((stage) => !byStage.has(stage)) || marks.some((m, i) => i > 0 && m.at < marks[i - 1].at) || textOrder.some((stage, i) => i > 0 && byStage.get(stage) < byStage.get(textOrder[i - 1])) || byStage.get("app_send_ack") < byStage.get("app_send")) throw new Error(`首字时间点不完整或顺序错乱：${JSON.stringify(marks)}`);
         if (marks.some((m) => Object.keys(m.detail).sort().join(",") !== "hub,message,observed_at_ms,stage") || JSON.stringify(marks).includes("Timing fixture")) throw new Error("首字计时只能记录标识和时间，不能记录内容");
       } finally {
         await page.unroute(sendPattern, sendFixture);
