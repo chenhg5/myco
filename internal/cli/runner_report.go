@@ -38,14 +38,20 @@ type runtimeReporter struct {
 	restartPath string
 	cfg         string // runner.model, if set
 
-	mu               sync.Mutex
-	base             *api.Runtime // nil until the CLI version is known
-	choice           providerChoice
-	model            string // the agent's run settings from the hub ("" = none)
-	effort           string
-	access           string
-	slots            *api.RunnerSlots
-	quota            *api.Quota // the account's limits, as the CLI last reported them
+	mu     sync.Mutex
+	base   *api.Runtime // nil until the CLI version is known
+	choice providerChoice
+	model  string // the agent's run settings from the hub ("" = none)
+	effort string
+	access string
+	slots  *api.RunnerSlots
+	quota  *api.Quota // the account's limits, as the CLI last reported them
+	// statuslineQuota is what Claude Code's status line last wrote for this
+	// agent; it stands in when the runner collects nothing (or nothing
+	// healthy) for the account.
+	statuslineQuota  *api.Quota
+	mycoDir          string // ~/.myco, where the status line keeps it
+	agent            string
 	quotaStore       *quota.Store
 	quotaCancel      context.CancelFunc
 	quotaSource      quota.Source
@@ -82,7 +88,8 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 	// Capacity reports must not wait for CLI version/tool discovery (which
 	// may take seconds on a busy computer). Enrich the same base later.
 	base := api.Runtime{RunnerInstance: runnerInstance, CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess), Features: runnerFeatures(h), Env: runnerEnv()}
-	rep := &runtimeReporter{restartPath: runnerRestartPath(e.defaultPath), c: c, log: log, cfg: rc.Model, choice: choice, models: cliModels(h.Name()), base: &base}
+	rep := &runtimeReporter{restartPath: runnerRestartPath(e.defaultPath), c: c, log: log, cfg: rc.Model, choice: choice, models: cliModels(h.Name()), base: &base,
+		mycoDir: config.Dir(e.defaultPath), agent: me.Name}
 	rep.flushLater() // clear any prior restart lease before slow CLI/tool discovery
 	go func() {
 		ctx, cancel := context.WithTimeout(e.in.Ctx, 30*time.Second)
@@ -289,7 +296,7 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		if r.access != "" {
 			rt.Access = r.access
 		}
-		rt.Quota = r.quota
+		rt.Quota = r.quotaLocked()
 		rt.RunnerSlots = r.slots
 		if r.maxAccess != "" {
 			rt.MaxAccess = r.maxAccess
@@ -306,7 +313,7 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		if err == nil {
 			r.last = rt
 		}
-		again := err == nil && (!reflect.DeepEqual(*r.base, base) || r.choice.name != ch.name || r.choice.host != ch.host || r.choice.source != ch.source || r.choice.model != ch.model || !reflect.DeepEqual(r.slots, rt.RunnerSlots) || !reflect.DeepEqual(r.quota, rt.Quota))
+		again := err == nil && (!reflect.DeepEqual(*r.base, base) || r.choice.name != ch.name || r.choice.host != ch.host || r.choice.source != ch.source || r.choice.model != ch.model || !reflect.DeepEqual(r.slots, rt.RunnerSlots) || !reflect.DeepEqual(r.quotaLocked(), rt.Quota))
 		r.mu.Unlock()
 		if err != nil {
 			r.log.Debug("runtime report failed (older hub?)", "err", err)

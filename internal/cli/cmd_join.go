@@ -611,6 +611,22 @@ Safe to re-run: the same session gets the same agent back.`,
 			}
 			cloud := b.Harness == "claude-cloud" || b.Harness == "inbox"
 			out := map[string]any{"agent": res.Agent, "created": res.Created, "detected": how, "config": e.cfgPath}
+			// Claude Code can report this session's usage limits by itself:
+			// its status line gets them after each turn. Setting it here is
+			// what makes quota reporting automatic rather than something the
+			// agent has to remember.
+			var statusLineNote string
+			if b.Harness == "claude" || b.Harness == "claude-cloud" {
+				if sr, err := statusLineApply(config.Dir(e.defaultPath), e.in.Getenv, false, false); err != nil {
+					out["statusline_error"] = err.Error()
+				} else if sr.Changed {
+					out["statusline"] = map[string]any{"path": sr.Path, "chained": sr.Chained, "previous": sr.Previous}
+					statusLineNote = "Claude Code's status line now keeps this session's usage limits for myco (myco agent runtime statusline --uninstall undoes it)"
+					if sr.Chained {
+						statusLineNote += "; the line that was there still runs"
+					}
+				}
+			}
 			if len(elsewhere) > 0 {
 				out["also_in"], out["session"] = identitiesOf(elsewhere), sessionMode
 			}
@@ -678,6 +694,9 @@ Safe to re-run: the same session gets the same agent back.`,
 					fmt.Fprintln(w, inboxReceiveNote)
 				} else {
 					fmt.Fprintln(w, openSessionNote)
+				}
+				if statusLineNote != "" {
+					fmt.Fprintln(w, statusLineNote)
 				}
 				for _, p := range installedTo {
 					fmt.Fprintf(w, "installed the myco skill: %s (a running session may need a restart to load it)\n", p)

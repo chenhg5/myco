@@ -31,6 +31,7 @@ func (r *runtimeReporter) startQuota(ctx context.Context, dir string, input func
 	r.quotaInput = input
 	r.mu.Unlock()
 	go func() {
+		r.pollStatusLineQuota(time.Now().UTC())
 		tick := time.NewTicker(20 * time.Second)
 		defer tick.Stop()
 		for {
@@ -52,6 +53,7 @@ func (r *runtimeReporter) startQuota(ctx context.Context, dir string, input func
 			} else {
 				r.bindQuota(fresh)
 			}
+			r.pollStatusLineQuota(time.Now().UTC())
 			select {
 			case <-ctx.Done():
 				return
@@ -93,6 +95,42 @@ func (r *runtimeReporter) setQuota(ref string, q *api.Quota) {
 	r.mu.Unlock()
 	r.flushLater()
 }
+
+// quotaLocked is the quota to report: a status line observation stands in
+// when the runner collects nothing for the account, or nothing healthy.
+func (r *runtimeReporter) quotaLocked() *api.Quota {
+	if r.statuslineQuota != nil && (r.quota == nil || r.quota.ProfileRef == "" || r.quota.Status != "ok") {
+		return r.statuslineQuota
+	}
+	return r.quota
+}
+
+// pollStatusLineQuota picks up what Claude Code's status line last wrote for
+// this agent: at most one report every five minutes, never over a newer or
+// healthy native collection. The marker on disk is shared with a session's
+// inbox wait, so the two do not report the same observation twice.
+func (r *runtimeReporter) pollStatusLineQuota(now time.Time) {
+	if r == nil || r.mycoDir == "" || r.agent == "" {
+		return
+	}
+	r.mu.Lock()
+	current := r.quota
+	r.mu.Unlock()
+	q, at, ok := statusLineQuotaFor(r.mycoDir, r.agent, now, current)
+	if !ok {
+		return
+	}
+	r.mu.Lock()
+	if r.stopped {
+		r.mu.Unlock()
+		return
+	}
+	r.statuslineQuota = q
+	r.mu.Unlock()
+	writeStatusLineReport(r.mycoDir, r.agent, statusLineReport{ObservedAt: at, ReportedAt: now})
+	r.flushLater()
+}
+
 func quotaEnvironment(extra []string) map[string]string {
 	out := map[string]string{}
 	for _, pair := range append(os.Environ(), extra...) {
