@@ -234,6 +234,7 @@ func Build(o Options) (*Hub, error) {
 	overview := app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow)
 	overview.SetPresence(messages.Presence())
 	srv.SetOverview(overview)
+	srv.SetCoordinationStats(app.NewCoordinationService(sqlite.NewCoordinationRepo(db)))
 	machineSvc := app.NewMachineService(sqlite.NewMachineRepo(db), agentsRepo, messages, ids, clock, o.OnlineWindow)
 	machineSvc.SetRemovalDeps(agents, enroll)
 	srv.SetMachines(machineSvc)

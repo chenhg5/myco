@@ -59,6 +59,7 @@ type Server struct {
 	mux             *http.ServeMux
 	ingress         map[string]Ingress
 	files           *app.FileService
+	coordStats      *app.CoordinationService
 	overview        *app.OverviewService
 	console         *app.ConsoleService
 	machines        *app.MachineService
@@ -297,6 +298,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/agents", s.adminOrAgent(s.listAgents))
 	m.HandleFunc("GET /v1/agents/{name}", s.adminOrAgent(s.getAgent))
 	m.HandleFunc("GET /v1/overview", s.handleOverview)
+	s.routeCoordinationStats(m)
 	// A node's card: its owner and admins (console), or a coordinator agent
 	// of the same owner (its own token).
 	m.HandleFunc("PUT /v1/agents/{name}/labels", s.cardEditor("edit the labels of", func(w http.ResponseWriter, r *http.Request, by *domain.Agent) {

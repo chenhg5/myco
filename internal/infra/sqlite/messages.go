@@ -31,7 +31,7 @@ func insertMessage(ctx context.Context, x execer, m *domain.Message) error {
 		idem = m.IdempotencyKey
 	}
 	att, _ := json.Marshal(nonNil(m.Attachments))
-	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := x.ExecContext(ctx, `INSERT INTO messages (`+msgCols+`,first_acked_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
 		m.ID, m.From, m.To, m.ThreadID, m.ReplyTo, m.After, m.Type, m.Body, m.Status, m.Attempts,
 		ms(m.LeaseUntil), m.Error, idem, ms(m.CreatedAt), ms(m.UpdatedAt), m.BroadcastID, string(att), m.FromOwner, m.Project, m.Ask, m.Asking, m.Answers, m.Suggest, m.Automation, m.Workflow, m.Result, m.GrantedBy, m.HoldUntil, m.HoldWake, m.HoldRecovered)
 	if isUniqueViolation(err) {
@@ -41,8 +41,8 @@ func insertMessage(ctx context.Context, x execer, m *domain.Message) error {
 }
 
 func updateMessage(ctx context.Context, x execer, m *domain.Message) error {
-	_, err := x.ExecContext(ctx, `UPDATE messages SET status=?, attempts=?, lease_until=?, error=?, updated_at=?, asking=?, suggest=?, hold_until=?, hold_wake=?, hold_recovered=? WHERE id=?`,
-		m.Status, m.Attempts, ms(m.LeaseUntil), m.Error, ms(m.UpdatedAt), m.Asking, m.Suggest, m.HoldUntil, m.HoldWake, m.HoldRecovered, m.ID)
+	_, err := x.ExecContext(ctx, `UPDATE messages SET first_acked_at=CASE WHEN first_acked_at=0 AND status!='acked' AND ?='acked' THEN ? ELSE first_acked_at END, status=?, attempts=?, lease_until=?, error=?, updated_at=?, asking=?, suggest=?, hold_until=?, hold_wake=?, hold_recovered=? WHERE id=?`,
+		m.Status, ms(m.UpdatedAt), m.Status, m.Attempts, ms(m.LeaseUntil), m.Error, ms(m.UpdatedAt), m.Asking, m.Suggest, m.HoldUntil, m.HoldWake, m.HoldRecovered, m.ID)
 	return internal(err)
 }
 

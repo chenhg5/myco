@@ -1933,3 +1933,29 @@ For a fresh execution-time ownership check, `GET /v1/me` includes optional
 string means unowned; absence (an older Hub or unreadable record) means unknown.
 The process-stop runner refuses unknown ownership or a machine owner different
 from the verified agent owner, including a machine transferred without its nodes.
+
+### Coordination statistics (read-only)
+
+Authenticated admin/member/agent credentials:
+
+| Method | Route | Query | Response |
+|---|---|---|---|
+| GET | `/v1/stats/agents` | `name`, `project`, `since=7d` | `api.AgentStatsList` |
+| GET | `/v1/stats/agent-pick` | `skill`, `cli`, `project`, `machine`, `count=3`, `strict=false` | `api.AgentPickList` |
+| GET | `/v1/stats/coordinator` | `name` (default caller agent), `since=7d` | `api.CoordinatorStats` |
+
+These routes return `version: 1`. Durations accept Go duration syntax plus `d`,
+positive and at most 366 days; count is 1..100. Timings are seconds with explicit
+sample counts and null for unavailable values. New clients report `unsupported`
+against old Hubs; existing runners need no new fields or calls. No mutation,
+reservation, token refresh or `dry_run` is involved.
+
+Visible profiles are filtered separately from caller-readable task history.
+Non-manager history is limited to participant messages, identified by `scope`;
+project selection never expands it. Private account quota visibility is applied
+before selection. No message bodies, raw error text or credential data are returned.
+Cohorts, outcome definitions, queue coverage, resend/reassignment inference,
+follow-up counts, percentile convention and deterministic ranking weights are
+specified in [Coordination statistics](coordination-statistics.md). API structs
+live in `internal/api/coordination_stats.go`; web contracts in
+`web/src/lib/coordination-stats.ts`.

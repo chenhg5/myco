@@ -535,6 +535,8 @@ func open(path string, t *Timing) (*sql.DB, error) {
 		{"suggest", "TEXT NOT NULL DEFAULT ''"},
 		// When its recipient last showed it is working on it (ms).
 		{"active_at", "INTEGER NOT NULL DEFAULT 0"},
+		// Exact first acknowledgement for queue statistics; old rows remain unknown.
+		{"first_acked_at", "INTEGER NOT NULL DEFAULT -1"},
 		// The automation that sent it (v0.19.22).
 		{"automation", "TEXT NOT NULL DEFAULT ''"},
 		// The workflow run that sent it, and a reply's structured result
@@ -574,6 +576,9 @@ func open(path string, t *Timing) (*sql.DB, error) {
 	}
 	for _, ddl := range []string{
 		`CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_task_stats ON messages(created_at, id, from_agent, to_agent, project, status, first_acked_at) WHERE type='task'`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_stats_reply ON messages(reply_to, type, created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_stats_thread ON messages(thread_id, from_agent, type, created_at, to_agent)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_broadcast ON messages(broadcast_id) WHERE broadcast_id != ''`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_project ON messages(project, thread_id) WHERE project != ''`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_after ON messages(after) WHERE after != ''`,
