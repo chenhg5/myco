@@ -1530,6 +1530,12 @@ textarea.app-input {
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+/* (its words take the room left of the icon, no more: a long command in
+   them wraps instead of pushing the dialog wider) */
+.app-notice > div {
+  flex: 1;
+  min-width: 0;
+}
 .app-notice svg {
   width: 14px;
   height: 14px;
@@ -1560,6 +1566,8 @@ textarea.app-input {
   max-width: 380px;
   max-height: calc(100% - 60px);
   overflow-y: auto;
+  /* (never scrolled sideways: what is too wide wraps or scrolls in itself) */
+  overflow-x: hidden;
   padding: 18px;
   border-radius: 12px;
   background: var(--card);
@@ -5900,7 +5908,7 @@ button.app-label:hover { filter: brightness(0.95); }
 .ws-command .app-modal-actions { margin-top: 2px; }
 .ws-switch { margin-right: auto; }
 /* A short command inside a notice stays on one line (it is copied, not read). */
-.app-notice .app-command code { white-space: nowrap; overflow-x: auto; }
+.app-notice .app-command code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .pc-machine-tag { margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 11px; color: var(--muted); background: var(--pill); }
 .app-check-line { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 2px; font-size: 13px; color: var(--fg); cursor: pointer; }
 .app-check-line input { margin-top: 1px; flex: none; }
@@ -10256,6 +10264,7 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 /* The header shares the column of the messages and the box you write in:
    its line and its edges end where the box's do, not 90px further out. */
 .app-shell.is-focus .conv-detail > .conv-head,
+.app-shell.is-focus .conv-detail > .conv-tops,
 .app-shell.is-focus .conv-detail > .pin-bar,
 .app-shell.is-focus .conv-detail > .plan-bar,
 .app-shell.is-focus .conv-detail > .watch-bar,
@@ -10268,6 +10277,13 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .app-shell.is-focus .conv-detail > .conv-head { padding: 0 2px; }
 .app-shell.is-focus .conv-detail > .pin-bar { padding-left: 2px; }
 .app-shell.is-focus .conv-detail > .plan-bar { padding-left: 2px; padding-right: 2px; }
+/* The top block (plan, goal, watches) in that column too: a card with
+   rounded corners rather than a band across the window. */
+.app-shell.is-focus .conv-detail > .conv-tops {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
 /* The search in the chat ends where the column does. */
 .app-shell.is-focus .conv-body > .conv-search {
   right: calc(var(--conv-pad) + (100% - var(--conv-pad) - var(--conv-pad-l) - min(calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l)), calc(100% - var(--conv-pad) - var(--conv-pad-l)))) / 2);

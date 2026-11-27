@@ -2113,6 +2113,19 @@ async function runMatrix(browser, size, scheme) {
       if (!/^不填就新建 ~\/code\/demo-team\//.test(await vpsFolder.getAttribute("placeholder") || "")) throw new Error("只允许一个文件夹的电脑，新文件夹应建在它里面");
       await clickVisible(page, dialog.locator(".ws-computer", { hasText: "Codex" }));
       await dialog.locator("[data-testid=remote-ai-missing] code", { hasText: "npm install -g @openai/codex" }).waitFor({ timeout: 5_000 });
+      // A long command (CodeBuddy's, say) wraps in the notice: the dialog
+      // never grows wider or scrolls sideways.
+      const fits = await dialog.evaluate((el) => {
+        const code = el.querySelector("[data-testid=remote-ai-missing] code");
+        const was = code.textContent;
+        code.textContent = 'npm install -g --prefix "$HOME/.local" @tencent-ai/codebuddy-code@latest --registry=https://registry.npmmirror.com';
+        const box = el.getBoundingClientRect();
+        const r = code.closest("[data-testid=remote-ai-missing]").getBoundingClientRect();
+        const out = { sideways: el.scrollWidth - el.clientWidth, right: Math.round(r.right - box.right) };
+        code.textContent = was;
+        return out;
+      });
+      if (fits.sideways > 1 || fits.right > 0) throw new Error(`长命令不该把弹框撑宽：横向多出 ${fits.sideways}px，提示超出 ${fits.right}px`);
       await vpsFolder.fill("~/elsewhere");
       await dialog.locator("[data-testid=allowed-dirs].is-bad").waitFor({ timeout: 5_000 });
       // This App reaches it: it can allow that folder there at once.
@@ -6943,7 +6956,9 @@ async function runMatrix(browser, size, scheme) {
       // The header's line, the pinned row's and the box you write in end at
       // the same place.
       const cbox = await page.locator(".conv-detail:visible .conv-compose-box").first().boundingBox();
-      for (const sel of [".conv-head", ".pin-bar"]) {
+      for (const sel of [".conv-head", ".pin-bar", ".conv-tops"]) {
+        // (the top block: when the chat has a plan, a goal or a watch)
+        if (sel === ".conv-tops" && !(await page.locator(`.conv-detail:visible > ${sel}`).count())) continue;
         const b = await page.locator(`.conv-detail:visible > ${sel}`).first().boundingBox();
         if (!b || !cbox || Math.abs(b.x - cbox.x) > 2 || Math.abs(b.x + b.width - cbox.x - cbox.width) > 2) {
           throw new Error(`专注模式的 ${sel} 应和输入框对齐（${b?.x}–${b && b.x + b.width}，输入框 ${cbox?.x}–${cbox && cbox.x + cbox.width}）`);
