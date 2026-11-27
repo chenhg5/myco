@@ -318,7 +318,10 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				markSpawnedRun(e.defaultPath, res.Agent.Name, sessionID, p.CLI)
 				return res.Agent.Name, nil
 			},
-			SealedProvider: func(ctx context.Context, cli string, p api.EncryptedProvider) (map[string]string, *harness.ProviderSettings, error) {
+			SealedProvider: func(ctx context.Context, cli, sender string, p api.EncryptedProvider) (map[string]string, *harness.ProviderSettings, error) {
+				if err := providerSenderOK(ctx, c, sender, p.From); err != nil {
+					return nil, nil, err
+				}
 				raw, err := c.OpenProvider(ctx, p)
 				if err != nil {
 					return nil, nil, errors.New("cannot decrypt it")
@@ -448,4 +451,35 @@ func spawnedEnvFile(defaultPath, agent, machineFile string, vars map[string]stri
 		return "", errors.New("cannot save the new agent's provider settings")
 	}
 	return file, nil
+}
+
+// providerSenderOK: a provider sealed for this computer is taken only from
+// its owner (a person's device, "@console:<owner>"), sent by them, or by the
+// hub for them ("@admin": the hub checked it was the computer's owner at
+// one of their devices). An agent, or anyone sealing for another, is
+// refused: it could point the new agent, and all it is given, elsewhere.
+func providerSenderOK(ctx context.Context, c *client.Client, sender, sealedBy string) error {
+	owner, ok := strings.CutPrefix(sealedBy, "@console:")
+	if !ok || owner == "" {
+		return errors.New("it was not sealed by a person")
+	}
+	if sender != machinenode.AdminSender && sender != sealedBy {
+		return errors.New("it was not sent by whoever sealed it")
+	}
+	me, err := c.Me(ctx)
+	if err != nil {
+		return errors.New("this computer's owner could not be checked")
+	}
+	if me.Owner == "" {
+		// No owner on record: only through the hub, which checked that the
+		// sender owns the hub.
+		if sender != machinenode.AdminSender {
+			return errors.New("this computer has no owner on record to check it against")
+		}
+		return nil
+	}
+	if owner != me.Owner {
+		return errors.New("it was not sealed by this computer's owner")
+	}
+	return nil
 }

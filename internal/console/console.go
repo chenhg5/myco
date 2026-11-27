@@ -977,12 +977,12 @@ func (b *Backend) Handler() http.Handler {
 		sr.ProviderEncrypted, sr.ProviderRef = nil, nil
 		var (
 			prov   *api.ModelProvider
-			key    string
+			sec    providerSecret
 			sealed bool
 		)
 		if in.Provider != "" {
 			var err error
-			if prov, key, sealed, err = sealedSpawn(r.Context(), c, r.PathValue("mid"), &sr, in.Provider); err != nil {
+			if prov, sec, sealed, err = sealedSpawn(r.Context(), c, r.PathValue("mid"), &sr, in.Provider); err != nil {
 				writeErr(w, err)
 				return
 			}
@@ -997,7 +997,7 @@ func (b *Backend) Handler() http.Handler {
 			// has joined, before anything is sent to it.
 			ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 			defer cancel()
-			if err := deliverAfterJoin(ctx, c, *prov, key, res.Agent, sr.Model); err != nil {
+			if err := deliverAfterJoin(ctx, c, *prov, sec, res.Agent, sr.Model); err != nil {
 				writeErr(w, err)
 				return
 			}

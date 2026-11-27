@@ -293,3 +293,92 @@ func TestRemoteProviderSelectionApplier(t *testing.T) {
 		t.Fatal("follow machine did not clear provider variables safely")
 	}
 }
+
+// A runner takes a custom provider only when its agent's owner sealed it
+// (at one of their devices): not another member's, not an agent's, whatever
+// the hub hands it.
+func TestARunnerTakesOnlyItsOwnersSealedProvider(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	ctx := context.Background()
+	hub, err := hubserver.Build(hubserver.Options{DBPath: filepath.Join(home, "hub.db"), AdminToken: "admin-test-token", Policy: app.DefaultMessagePolicy(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(hub.Handler)
+	defer func() { srv.Close(); hub.Close() }()
+	mk := func(token string) *client.Client { c, _ := client.New(srv.URL, token); return c }
+	admin := mk("admin-test-token")
+	if _, err := admin.SetHubSettings(ctx, api.HubSettings{E2E: true}); err != nil {
+		t.Fatal(err)
+	}
+	device := func(name string) *client.Client {
+		inv, _ := admin.InviteMember(ctx, api.InviteRequest{Name: name})
+		pair, err := mk("").Pair(ctx, strings.Split(inv.Link, "/c/")[1], name+"-device")
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := mk(pair.Token)
+		id, _ := e2e.NewIdentity()
+		c.Sealer = &client.Sealer{Me: "@console:" + name, ID: id, Device: true}
+		if err := c.RegisterKeys(ctx); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	alice, eve := device("alice"), device("eve")
+	reg, _ := admin.Register(ctx, api.RegisterRequest{Name: "target", Binding: api.Binding{Harness: "claude", SessionID: "target-session"}}, false)
+	if _, err := admin.SetAgentOwner(ctx, "target", "alice"); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := admin.Register(ctx, api.RegisterRequest{Name: "lead", Binding: api.Binding{Harness: "claude", SessionID: "lead-session"}}, false)
+	lead := mk(other.Token)
+	leadID, _ := e2e.NewIdentity()
+	lead.Sealer = &client.Sealer{Me: "lead", ID: leadID}
+	_ = lead.RegisterKeys(ctx)
+	agent := mk(reg.Token)
+	id, _ := e2e.NewIdentity()
+	agent.Sealer = &client.Sealer{Me: "target", ID: id}
+	if err := agent.RegisterKeys(ctx); err != nil {
+		t.Fatal(err)
+	}
+	path := config.ProfilePath(filepath.Join(home, "config.yaml"), "target")
+	if err := config.Save(path, &config.Config{Hub: srv.URL, Agent: "target", Token: reg.Token, Harness: "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	apply := remoteProviderApplier(path, agent)
+	raw, _ := json.Marshal(provider.Manual{BaseURL: "https://attacker.test", APIKey: "x"})
+	custom := "custom"
+	for who, sealer := range map[string]*client.Client{"another member": eve, "an agent": lead} {
+		body, err := e2e.Seal(sealer.Sealer.ID, e2e.Header{From: sealer.Sealer.Me, To: "target", Type: e2e.ProviderSettingsType, ReplyTo: "pe-" + sealer.Sealer.Me}, raw, []string{id.Public().Enc})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rs := api.RunSettings{Provider: &custom, ProviderEncrypted: &api.EncryptedProvider{ID: "pe-" + sealer.Sealer.Me, From: sealer.Sealer.Me, Body: body}}
+		if err := apply(ctx, rs); err == nil || !strings.Contains(err.Error(), "refused") {
+			t.Fatalf("%s's provider: %v", who, err)
+		}
+		if cfg, _ := config.Load(path); cfg.Runner.EnvFile != "" {
+			t.Fatalf("%s's provider was written", who)
+		}
+	}
+	// Its owner's is taken.
+	good, err := alice.SealProvider(ctx, "target", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := agent.ReportRuntime(ctx, api.Runtime{CLI: "claude", Features: []string{"remote_provider"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := alice.PatchRunSettings(ctx, "target", api.RunSettingsPatch{Provider: &custom, ProviderEncrypted: good}); err != nil {
+		t.Fatal(err)
+	}
+	me, _ := agent.Me(ctx)
+	if err := apply(ctx, *me.RunSettings); err != nil {
+		t.Fatalf("its owner's provider: %v", err)
+	}
+	if cfg, _ := config.Load(path); cfg.Runner.ProviderApplied != good.ID {
+		t.Fatal("its owner's provider was not written")
+	}
+}

@@ -114,6 +114,16 @@ func (s *ModelProviderService) Update(ctx context.Context, member, id string, in
 	if in.KeySealed != nil && in.KeyVersion == nil {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "key_sealed comes with key_version")
 	}
+	// Where the key goes is sealed with it: a new vendor, address or small
+	// model comes with the key sealed again, at the next version (the
+	// member's App uses only what it opens; this keeps the hub's copy, which
+	// is shown, from being changed alone).
+	changes := func(v *string, cur string) bool { return v != nil && strings.TrimSpace(*v) != cur }
+	if changes(in.Vendor, p.Vendor) || changes(in.AnthropicBase, p.AnthropicBase) || changes(in.OpenAIBase, p.OpenAIBase) || changes(in.SmallModel, p.SmallModel) {
+		if in.KeySealed == nil || in.KeyVersion == nil || *in.KeyVersion != p.KeyVersion+1 {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "a new vendor, address or small model is sealed with the key: send key_sealed at key_version %d", p.KeyVersion+1)
+		}
+	}
 	if in.KeyVersion != nil && *in.KeyVersion != p.KeyVersion && *in.KeyVersion != p.KeyVersion+1 {
 		return nil, domain.Errf(domain.CodeConflict, "key_version must be %d (a new key) or %d (sealed again)", p.KeyVersion+1, p.KeyVersion).
 			WithSuggestion("read the provider again: another device may have changed it")

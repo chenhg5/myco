@@ -148,8 +148,13 @@ export function ModelProvidersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverv
                     p.models?.length && p.models_at ? L(`${p.models.length} 个模型 · ${timeAgo(p.models_at, Date.now())}`, `${p.models.length} models · ${timeAgo(p.models_at, Date.now())}`) : ""]
                     .filter(Boolean).join(" · ")}
                 </small>
-                {!p.key_readable && (
+                {p.seal_again ? (
+                  <small className="app-field-hint is-bad" data-testid="provider-seal-again">{L("这是旧版本存的：地址没和 key 一起加密。编辑它，重新填一次 key 才能用。", "Saved by an older version, its addresses are not sealed with its key: edit it and enter the key again to use it.")}</small>
+                ) : !p.key_readable && (
                   <small className="app-field-hint">{L("在你另一台已经能用它的设备上打开一次 App，这台就能解开；或者编辑它重新填 key。", "Open the App once on another of your devices that can use it, and this one can too; or edit it and enter the key again.")}</small>
+                )}
+                {p.settings_changed && (
+                  <small className="app-field-hint is-bad" data-testid="provider-settings-changed">{L("工作区上记的地址和跟 key 一起加密的不一样，有人改过。用的仍是加密的那份（上面显示的就是）；不是你改的，请检查工作区的管理权限。", "The workspace's copy of its address differs from the one sealed with its key: someone changed it. The sealed one (shown) is still what is used; if it was not you, check who can manage the workspace.")}</small>
                 )}
               </div>
               <div className="app-member-actions">
