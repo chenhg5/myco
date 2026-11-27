@@ -89,3 +89,12 @@ func (r *ModelProviderRepo) Delete(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+func (r *ModelProviderRepo) AnyHubHeld(ctx context.Context) (bool, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM model_providers WHERE json_extract(data,'$.key_hub') IS NOT NULL AND json_extract(data,'$.key_hub')!=''`).Scan(&n)
+	if err != nil {
+		return false, internal(err)
+	}
+	return n > 0, nil
+}

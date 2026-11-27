@@ -6,9 +6,12 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/myco-ai/myco/internal/infra/hubkey"
 )
 
 func makeHub(t *testing.T, dir, value string) {
@@ -153,5 +156,61 @@ func TestPruneKeepsNewest(t *testing.T) {
 	}
 	if ValidName("../x.tar.gz") || ValidName("myco-backup-a/b.tar.gz") || !ValidName(l[0].Name) {
 		t.Fatal("ValidName")
+	}
+}
+
+// A workspace's own key (i119) goes into its backup and comes back with
+// it, for its user only; the one there before is kept aside.
+func TestTheHubsKeyIsBackedUpAndRestored(t *testing.T) {
+	ctx := context.Background()
+	data := t.TempDir()
+	team := filepath.Join(data, "workspaces", "team")
+	makeHub(t, data, "root")
+	makeHub(t, team, "team")
+	key := filepath.Join(team, hubkey.FileName)
+	if err := os.WriteFile(key, []byte(strings.Repeat("k", 32)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 27, 9, 30, 0, 0, time.UTC)
+	info, err := Write(ctx, filepath.Join(data, "backups"), Sources(filepath.Join(data, "hub.db"), "", true), "server", "v1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a new key replaced it since (a hub moved without its key)
+	if err := os.WriteFile(key, []byte(strings.Repeat("n", 32)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(filepath.Join(data, "backups", info.Name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	tmp, _ := os.MkdirTemp(data, ".restore-")
+	m, err := Extract(ctx, f, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.SHA256["workspaces/team/"+hubkey.FileName]; !ok {
+		t.Fatalf("the key is not in the backup: %v", m.SHA256)
+	}
+	if _, ok := m.SHA256[hubkey.FileName]; ok {
+		t.Fatal("a key the root hub never had")
+	}
+	aside, err := Restore(tmp, data, m, now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := os.Stat(key)
+	if b, _ := os.ReadFile(key); err != nil || string(b) != strings.Repeat("k", 32) || (runtime.GOOS != "windows" && st.Mode().Perm() != 0o600) {
+		t.Fatalf("the restored key: %q %v", b, err)
+	}
+	kept := ""
+	for _, d := range aside {
+		if b, err := os.ReadFile(filepath.Join(d, hubkey.FileName)); err == nil {
+			kept = string(b)
+		}
+	}
+	if kept != strings.Repeat("n", 32) {
+		t.Fatalf("the key that was there is not kept aside: %q", kept)
 	}
 }

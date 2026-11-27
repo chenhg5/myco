@@ -1083,6 +1083,9 @@ export const appApi = {
     request<ModelProvider>("POST", `app/hubs/${enc(hubId)}/providers`, input),
   updateModelProvider: (hubId: string, id: string, input: Partial<ModelProviderInput>) =>
     request<ModelProvider>("PATCH", `app/hubs/${enc(hubId)}/providers/${enc(id)}`, input),
+  /** hands a key sealed for the member's devices to the hub (encryption off, after the person agreed) */
+  moveModelProvider: (hubId: string, id: string, custody: "hub" | "e2e") =>
+    request<ModelProvider>("POST", `app/hubs/${enc(hubId)}/providers/${enc(id)}/custody`, { custody }),
   deleteModelProvider: (hubId: string, id: string) =>
     request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/providers/${enc(id)}`),
   /** Reads the vendor's models once with the key: a saved provider's (id), or the form's. */

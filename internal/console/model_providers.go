@@ -39,6 +39,12 @@ type ConsoleProvider struct {
 	// SealAgain: it was sealed before its addresses went into the
 	// envelope; it is used only once saved again with its key.
 	SealAgain bool `json:"seal_again,omitempty"`
+	// MoveToHub: its key is sealed for the member's devices, but the
+	// workspace has end-to-end encryption off now: it is used once the
+	// hub keeps it (after the person agrees). MoveToDevices: the hub keeps
+	// it, and the workspace has encryption on now: it is sealed for the
+	// member's devices when this App opens the list.
+	MoveToHub bool `json:"move_to_hub,omitempty"`
 }
 
 // providerSecret is what a provider's envelope holds: the key and every
@@ -92,6 +98,7 @@ func (b *Backend) registerModelProviders(m *http.ServeMux) {
 	m.HandleFunc("POST /app/hubs/{id}/providers/test", b.withHubTimeout(30*time.Second, b.testProvider))
 	m.HandleFunc("POST /app/hubs/{id}/providers/{pid}/test", b.withHubTimeout(30*time.Second, b.testProvider))
 	m.HandleFunc("POST /app/hubs/{id}/providers/{pid}/push", b.withHubTimeout(2*time.Minute, b.pushProvider))
+	m.HandleFunc("POST /app/hubs/{id}/providers/{pid}/custody", b.withHubTimeout(30*time.Second, b.moveProvider))
 }
 
 // providerMember is the member this device belongs to (providers are
@@ -120,8 +127,21 @@ func (b *Backend) listModelProviders(w http.ResponseWriter, r *http.Request, c *
 	}{E2E: list.E2E, Providers: []ConsoleProvider{}}
 	for _, p := range list.Providers {
 		cp := ConsoleProvider{ModelProvider: p}
-		if merr == nil && list.E2E {
+		switch {
+		case p.Custody == "hub" && list.E2E && merr == nil:
+			// encryption turned on: sealed for the member's devices now
+			cp = moveToDevices(r.Context(), c, member, p)
+		case p.Custody == "hub":
+			cp.KeyReadable, cp.KeyHint = !p.KeyLost, p.KeyHint
+		case merr == nil && list.E2E:
 			cp = describe(r.Context(), c, member, p)
+		default:
+			// sealed for the member's devices, encryption off now: the hub
+			// is to keep it, once the person agrees
+			cp.MoveToHub = true
+			if sec, err := openSecret(r.Context(), c, member, p); err == nil {
+				cp.KeyReadable, cp.KeyHint, cp.ModelProvider = true, hint(sec.APIKey), sec.shown(p)
+			}
 		}
 		cp.KeySealed = ""
 		out.Providers = append(out.Providers, cp)
@@ -172,6 +192,21 @@ func (b *Backend) createProvider(w http.ResponseWriter, r *http.Request, c *clie
 	}
 	sec := secretFrom(providerSecret{APIKey: key}, in)
 	id := "prv_" + strings.ToLower(rand.Text())[:16]
+	if held, err := hubKeeps(r.Context(), c); err != nil {
+		writeErr(w, err)
+		return
+	} else if held {
+		// encryption off: the hub keeps the key (i119)
+		req := api.ModelProviderRequest{ID: id, Name: in.Name, Vendor: &sec.Vendor, AnthropicBase: &sec.AnthropicBase, OpenAIBase: &sec.OpenAIBase,
+			SmallModel: &sec.SmallModel, APIKey: &key}
+		p, err := c.CreateModelProvider(r.Context(), req)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, ConsoleProvider{ModelProvider: *p, KeyReadable: true, KeyHint: hint(key)})
+		return
+	}
 	body, err := sealSecret(r.Context(), c, member, id, 1, sec)
 	if err != nil {
 		writeErr(w, err)
@@ -205,6 +240,23 @@ func (b *Backend) updateProvider(w http.ResponseWriter, r *http.Request, c *clie
 	cur, err := findProvider(r.Context(), c, id)
 	if err != nil {
 		writeErr(w, err)
+		return
+	}
+	if cur.Custody == "hub" {
+		// the hub keeps the key: the settings go as they are, the key only
+		// when a new one is entered
+		req := api.ModelProviderRequest{Name: in.Name}
+		sec := secretFrom(providerSecret{Vendor: cur.Vendor, AnthropicBase: cur.AnthropicBase, OpenAIBase: cur.OpenAIBase, SmallModel: cur.SmallModel}, in)
+		req.Vendor, req.AnthropicBase, req.OpenAIBase, req.SmallModel = &sec.Vendor, &sec.AnthropicBase, &sec.OpenAIBase, &sec.SmallModel
+		if key != "" {
+			req.APIKey = &key
+		}
+		p, err := c.UpdateModelProvider(r.Context(), id, req)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, ConsoleProvider{ModelProvider: *p, KeyReadable: !p.KeyLost, KeyHint: p.KeyHint})
 		return
 	}
 	member, err := providerMember(r.Context(), c)
@@ -363,6 +415,13 @@ func providerWithSecret(ctx context.Context, c *client.Client, id string) (*api.
 	if err != nil {
 		return nil, providerSecret{}, err
 	}
+	if p.Custody == "hub" {
+		// the hub sends it itself (deliverProvider): no key here
+		if p.KeyLost {
+			return nil, providerSecret{}, keyLost()
+		}
+		return p, providerSecret{Vendor: p.Vendor, AnthropicBase: p.AnthropicBase, OpenAIBase: p.OpenAIBase, SmallModel: p.SmallModel}, nil
+	}
 	member, err := providerMember(ctx, c)
 	if err != nil {
 		return nil, providerSecret{}, err
@@ -385,6 +444,13 @@ func unreadable(err error) error {
 // deliverProvider seals the provider for one agent and records which
 // provider and key version it has.
 func deliverProvider(ctx context.Context, c *client.Client, p api.ModelProvider, sec providerSecret, a api.Agent, model string) error {
+	if p.Custody == "hub" {
+		// the hub keeps the key: it sends it to the agent's runner itself
+		custom := "custom"
+		_, err := c.PatchRunSettings(ctx, a.Name, api.RunSettingsPatch{Provider: &custom,
+			ProviderHub: &api.HubProviderRequest{ID: providerRequestID(), Ref: &api.ProviderRef{ID: p.ID, KeyVersion: p.KeyVersion}, Model: strings.TrimSpace(model)}})
+		return err
+	}
 	cli := a.Binding.Harness
 	if a.Runtime != nil && a.Runtime.CLI != "" {
 		cli = a.Runtime.CLI
@@ -406,22 +472,8 @@ func deliverProvider(ctx context.Context, c *client.Client, p api.ModelProvider,
 // manualFor is the custom provider an agent of cli gets: the sealed
 // address for that CLI, the key, the model and the small model.
 func manualFor(sec providerSecret, cli, model string) ([]byte, error) {
-	m := provider.Manual{APIKey: sec.APIKey, Model: strings.TrimSpace(model), SmallModel: sec.SmallModel}
-	switch cli {
-	case "claude":
-		m.BaseURL = sec.AnthropicBase
-		if m.SmallModel == "" {
-			if v, ok := provider.VendorByID(sec.Vendor); ok {
-				m.SmallModel = v.Small
-			}
-		}
-	case "codex":
-		m.BaseURL, m.WireAPI, m.SmallModel = sec.OpenAIBase, "chat", ""
-	}
-	if m.BaseURL == "" {
-		return nil, &client.Error{Status: 400, Code: "invalid_argument", Message: "this provider has no address for " + cli}
-	}
-	if err := m.Validate(cli); err != nil {
+	m, err := provider.ManualFor(sec.Vendor, sec.AnthropicBase, sec.OpenAIBase, sec.SmallModel, sec.APIKey, cli, model)
+	if err != nil {
 		return nil, &client.Error{Status: 400, Code: "invalid_argument", Message: err.Error()}
 	}
 	return json.Marshal(m)
@@ -434,6 +486,17 @@ func sealedSpawn(ctx context.Context, c *client.Client, machineID string, in *ap
 	p, sec, err = providerWithSecret(ctx, c, providerID)
 	if err != nil {
 		return nil, sec, false, err
+	}
+	if p.Custody == "hub" {
+		// the hub keeps the key: its machine node fetches it, once, for
+		// this request (i119); a node that cannot gets it after it joins
+		if node := nodeOf(ctx, c, machineID); node != "" {
+			if a, err := c.GetAgent(ctx, node); err == nil && a.Runtime != nil && slices.Contains(a.Runtime.Features, "hub_provider") {
+				in.ProviderHub, in.ProviderRef = true, &api.ProviderRef{ID: p.ID, KeyVersion: p.KeyVersion}
+				return p, sec, true, nil
+			}
+		}
+		return p, sec, false, nil
 	}
 	raw, err := manualFor(sec, in.CLI, in.Model)
 	if err != nil {
@@ -471,6 +534,18 @@ func sealedSpawn(ctx context.Context, c *client.Client, machineID string, in *ap
 // (an older machine): once its runner has registered its key, before
 // anything is sent to it.
 func deliverAfterJoin(ctx context.Context, c *client.Client, p api.ModelProvider, sec providerSecret, agent, model string) error {
+	for p.Custody == "hub" {
+		// once its runner says it can fetch one
+		if a, err := c.GetAgent(ctx, agent); err == nil && a.Runtime != nil && slices.Contains(a.Runtime.Features, "hub_provider") {
+			return deliverProvider(ctx, c, p, sec, *a, model)
+		}
+		select {
+		case <-ctx.Done():
+			return &client.Error{Status: 504, Code: "runner_too_old", Message: "the new agent's runner cannot take a provider the hub keeps",
+				Suggestion: "update myco on that computer, then choose the provider again in the agent's details"}
+		case <-time.After(2 * time.Second):
+		}
+	}
 	for {
 		keys, err := c.KeysOf(ctx, agent)
 		if err == nil && len(keys.Keys[agent]) == 1 {
@@ -505,6 +580,14 @@ func findProvider(ctx context.Context, c *client.Client, id string) (*api.ModelP
 // openSecret opens a provider's envelope. One sealed before its addresses
 // were is not used (errSealAgain): the hub's addresses cannot be trusted.
 func openSecret(ctx context.Context, c *client.Client, member string, p api.ModelProvider) (providerSecret, error) {
+	if p.Custody == "hub" {
+		// kept by the hub, its settings with it: read for the owner only
+		k, err := c.ModelProviderKey(ctx, p.ID)
+		if err != nil {
+			return providerSecret{}, err
+		}
+		return providerSecret{APIKey: k.APIKey, Vendor: p.Vendor, AnthropicBase: p.AnthropicBase, OpenAIBase: p.OpenAIBase, SmallModel: p.SmallModel}, nil
+	}
 	raw, err := c.OpenProviderKey(ctx, member, p)
 	if err != nil {
 		return providerSecret{}, err
@@ -560,4 +643,104 @@ func hint(key string) string {
 		return ""
 	}
 	return key[len(key)-4:]
+}
+
+// hubKeeps reports whether the hub keeps keys in this workspace
+// (end-to-end encryption off, i119).
+func hubKeeps(ctx context.Context, c *client.Client) (bool, error) {
+	list, err := c.ModelProviders(ctx)
+	if err != nil {
+		return false, err
+	}
+	return !list.E2E, nil
+}
+
+func keyLost() error {
+	return &client.Error{Status: 409, Code: "key_lost", Message: "this provider's key is lost: the hub's key file is gone",
+		Suggestion: "enter the key again in Settings › Model providers"}
+}
+
+// providerRequestID names a provider request (acknowledged by the runner).
+func providerRequestID() string { return "prq_" + strings.ToLower(rand.Text()) }
+
+func nodeOf(ctx context.Context, c *client.Client, machineID string) string {
+	machines, err := c.Machines(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, m := range machines {
+		if m.ID == machineID {
+			return m.Node
+		}
+	}
+	return ""
+}
+
+// moveToDevices seals a key the hub kept for the member's devices, now
+// that the workspace has encryption on, and has the hub drop its copy (the
+// same key: its version stays).
+func moveToDevices(ctx context.Context, c *client.Client, member string, p api.ModelProvider) ConsoleProvider {
+	cp := ConsoleProvider{ModelProvider: p, KeyHint: p.KeyHint}
+	if p.KeyLost {
+		return cp
+	}
+	sec, err := openSecret(ctx, c, member, p)
+	if err != nil {
+		return cp
+	}
+	body, err := sealSecret(ctx, c, member, p.ID, p.KeyVersion, sec)
+	if err != nil {
+		return cp
+	}
+	custody, v := "e2e", p.KeyVersion
+	up, err := c.UpdateModelProvider(ctx, p.ID, api.ModelProviderRequest{Custody: &custody, KeySealed: &body, KeyVersion: &v})
+	if err != nil {
+		return cp
+	}
+	return ConsoleProvider{ModelProvider: sec.shown(*up), KeyReadable: true, KeyHint: hint(sec.APIKey)}
+}
+
+// moveProvider hands a key sealed for the member's devices to the hub,
+// once the workspace has encryption off and the person agreed (the App
+// asks first): {"custody": "hub"}.
+func (b *Backend) moveProvider(w http.ResponseWriter, r *http.Request, c *client.Client) {
+	var in struct {
+		Custody string `json:"custody"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	cur, err := findProvider(r.Context(), c, r.PathValue("pid"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	member, err := providerMember(r.Context(), c)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	if in.Custody != "hub" {
+		// to the member's devices: done when the list is read with
+		// encryption on
+		writeJSON(w, http.StatusOK, moveToDevices(r.Context(), c, member, *cur))
+		return
+	}
+	if cur.Custody == "hub" {
+		writeJSON(w, http.StatusOK, ConsoleProvider{ModelProvider: *cur, KeyReadable: !cur.KeyLost, KeyHint: cur.KeyHint})
+		return
+	}
+	sec, err := openSecret(r.Context(), c, member, *cur)
+	if err != nil {
+		writeErr(w, unreadable(err))
+		return
+	}
+	custody := "hub"
+	p, err := c.UpdateModelProvider(r.Context(), cur.ID, api.ModelProviderRequest{Custody: &custody, APIKey: &sec.APIKey,
+		Vendor: &sec.Vendor, AnthropicBase: &sec.AnthropicBase, OpenAIBase: &sec.OpenAIBase, SmallModel: &sec.SmallModel})
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ConsoleProvider{ModelProvider: *p, KeyReadable: true, KeyHint: p.KeyHint})
 }

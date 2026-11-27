@@ -4033,17 +4033,23 @@ const server = http.createServer(async (req, res) => {
         ? [{ id: "MiniMax-M2", name: "MiniMax M2" }, { id: "MiniMax-M2-lite" }]
         : vendor === "deepseek" ? [{ id: "deepseek-v4", name: "DeepSeek V4" }, { id: "deepseek-v4-flash" }] : [{ id: "model-1" }];
       const hint = (k) => (k && k.length >= 12 ? k.slice(-4) : "");
-      if (parts.length === 4 && method === "GET") return send(res, 200, { e2e: !!hub.e2e, providers: hub.providers });
+      // Who keeps the key (i119): the member's devices with encryption on,
+      // the hub with it off; turning encryption on moves them to the
+      // devices at the next look, off asks to hand them to the hub.
+      const shown = (p) => {
+        if (p.custody === "hub" && hub.e2e) p.custody = "e2e";
+        return { ...p, move_to_hub: p.custody !== "hub" && !hub.e2e ? true : undefined };
+      };
+      if (parts.length === 4 && method === "GET") return send(res, 200, { e2e: !!hub.e2e, providers: hub.providers.map(shown) });
       if (parts.length === 4 && method === "POST") {
         const body = await readBody(req);
-        if (!hub.e2e) return fail(res, 409, "e2e_required", "model providers keep their keys end-to-end encrypted: this workspace has encryption off");
         if (!body?.api_key) return fail(res, 400, "invalid_argument", "enter the API key");
         const host = VENDOR_HOSTS[body.vendor];
         const p = { id: "prv_" + Math.random().toString(36).slice(2, 12), name: body.name || body.vendor, vendor: body.vendor,
           anthropic_base: body.anthropic_base || (host ? `https://${host}/anthropic` : ""), openai_base: body.openai_base || (host ? `https://${host}/v1` : ""),
-          small_model: body.small_model || "", key_version: 1, key_readable: true, key_hint: hint(body.api_key), created_at: now, updated_at: now };
+          small_model: body.small_model || "", key_version: 1, key_readable: true, key_hint: hint(body.api_key), custody: hub.e2e ? "e2e" : "hub", created_at: now, updated_at: now };
         hub.providers.push(p);
-        return send(res, 201, p);
+        return send(res, 201, shown(p));
       }
       if (parts.length === 5 && parts[4] === "test" && method === "POST") {
         const body = await readBody(req);
@@ -4063,6 +4069,13 @@ const server = http.createServer(async (req, res) => {
       if (parts.length === 5 && method === "DELETE") {
         hub.providers = hub.providers.filter((x) => x !== p);
         return send(res, 200, { ok: true });
+      }
+      if (parts.length === 6 && parts[5] === "custody" && method === "POST") {
+        const body = await readBody(req);
+        if (body.custody === "hub" && hub.e2e) return fail(res, 400, "invalid_argument", "this workspace has end-to-end encryption on");
+        p.custody = body.custody === "hub" ? "hub" : "e2e";
+        p.updated_at = now;
+        return send(res, 200, shown(p));
       }
       if (parts.length === 6 && parts[5] === "test" && method === "POST") {
         p.models = models(p.vendor);

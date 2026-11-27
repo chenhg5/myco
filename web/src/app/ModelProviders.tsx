@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { KeyRound, Lock, Plus } from "lucide-react";
+import { KeyRound, Plus } from "lucide-react";
 import { appApi, type HubOverview, type ModelProviderInput } from "@/appapi";
 import type { ModelProvider, RuntimeModel } from "@/api";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
@@ -47,8 +47,17 @@ function usersOf(hub: HubOverview | undefined, p: ModelProvider) {
   return { all: agents, behind: agents.filter((a) => (a.run_settings?.provider_ref?.key_version || 0) < p.key_version) };
 }
 
+/** Who keeps keys in a workspace, in one line (i119): with end-to-end
+ *  encryption off the hub does, and its administrator could read them. */
+export function custodyLine(e2e: boolean): string {
+  return e2e
+    ? L("key 加密后存在工作区里，只有你自己的设备能解开。", "Keys are encrypted for your own devices before they are kept in the workspace.")
+    : L("key 保存在 Hub 上，Hub 管理员能看到；团队共用建议开启端到端加密。", "Keys are kept on the hub, where its administrator could see them; for a shared team, turn on end-to-end encryption.");
+}
+
 /** Settings › 模型供应商: the member's vendors and keys, for every computer
- *  they add an agent on. Keys are sealed for their own devices. */
+ *  they add an agent on. With end-to-end encryption on, keys are sealed for
+ *  their own devices; off, the hub keeps them (i119). */
 export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: { hubsOv?: HubOverview[]; onRefresh: () => Promise<void>; onOpenWorkspaces?: () => void }) {
   const hubs = (hubsOv || []).filter((h) => h.ok && h.me?.member);
   const [hubId, setHubId] = useState("");
@@ -59,6 +68,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState<unknown>(null);
   const [note, setNote] = useState("");
+  const [moving, setMoving] = useState<ModelProvider | null>(null);
   if (!hub) {
     return (
       <section className="app-setting-card">
@@ -110,13 +120,27 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
       setBusy("");
     }
   };
+  const moveToHub = async () => {
+    if (!moving) return;
+    setBusy(moving.id);
+    setActionError(null);
+    try {
+      await appApi.moveModelProvider(hub.id, moving.id, "hub");
+      setMoving(null);
+      await load();
+    } catch (e) {
+      setActionError(e);
+    } finally {
+      setBusy("");
+    }
+  };
   const deletingUsers = deleting ? usersOf(hub, deleting).all.length : 0;
   const providers = list?.providers || [];
   const empty = !!list && providers.length === 0;
   return (
     <>
       {/* One row: what this is, which workspace (when there are several),
-          and adding one (only when it can be). */}
+          and adding one. */}
       <div className="app-members-head pv-head">
         <span className="app-group-title">
           <span className="name">{L("我的模型供应商", "My model providers")}</span>
@@ -127,7 +151,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
             {hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
           </select>
         )}
-        {e2e && providers.length > 0 && (
+        {providers.length > 0 && (
           <button type="button" className="app-btn app-btn-small app-btn-primary pv-add" onClick={() => setEditing("new")} data-testid="providers-add">
             <Plus />{L("新增", "Add")}
           </button>
@@ -136,31 +160,22 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
       <section className="app-setting-card app-members" data-testid="providers">
         <ErrorText error={error || actionError} />
         {note && <p className="app-small-note app-offline-ok">{note}</p>}
-        {!e2e ? (
-          // Why it cannot be used yet, and the way there.
-          <div className="pv-state" data-testid="providers-e2e-off">
-            <span className="pv-state-icon"><Lock /></span>
-            <div className="pv-state-body">
-              <b>{L("先打开端到端加密", "Turn on end-to-end encryption first")}</b>
-              <p>{L("key 会加密后存在工作区里，只有你自己的设备能解开，所以这个工作区要先打开端到端加密。",
-                "Keys are kept in the workspace encrypted for your own devices, so this workspace needs end-to-end encryption first.")}</p>
-              <div className="pv-state-actions">
-                {onOpenWorkspaces && (
-                  <button type="button" className="app-btn app-btn-small app-btn-primary" onClick={onOpenWorkspaces} data-testid="providers-open-e2e">
-                    {L("去打开", "Turn it on")}
-                  </button>
-                )}
-                <span className="pv-state-or">{L("或者照旧到 agent 所在的电脑上，在它的「服务商」里填。", "Or, as before, enter it on the agent's computer, in its Provider row.")}</span>
-              </div>
-            </div>
-          </div>
-        ) : empty ? (
+        {!e2e && (
+          // Who keeps keys, said once (i119): nothing is in the way.
+          <p className="app-small-note" data-testid="providers-hub-kept">
+            {custodyLine(false)}{" "}
+            {onOpenWorkspaces && (
+              <button type="button" className="app-kv-link" onClick={onOpenWorkspaces} data-testid="providers-open-e2e">{L("开启端到端加密", "Turn on encryption")}</button>
+            )}
+          </p>
+        )}
+        {empty && (
           <div className="pv-state" data-testid="providers-empty">
             <span className="pv-state-icon"><KeyRound /></span>
             <div className="pv-state-body">
               <b>{L("还没有模型供应商", "No model providers yet")}</b>
-              <p>{L("新增一个（比如 OpenCode Go、DeepSeek、Kimi），以后在任何一台电脑上新增 agent 都能直接选。",
-                "Add one (OpenCode Go, DeepSeek, Kimi…), then pick it whenever you add an agent on any of your computers.")}</p>
+              <p>{L("有自己的 key（DeepSeek、Kimi、MiniMax、OpenCode Go……）就新增一个，以后在任何一台电脑上新增 agent 都能直接选。",
+                "Have your own key (DeepSeek, Kimi, MiniMax, OpenCode Go…)? Add it, then pick it whenever you add an agent on any of your computers.")}</p>
               <div className="pv-state-actions">
                 <button type="button" className="app-btn app-btn-small app-btn-primary" onClick={() => setEditing("new")} data-testid="providers-add">
                   <Plus />{L("新增模型供应商", "Add a model provider")}
@@ -168,7 +183,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
               </div>
             </div>
           </div>
-        ) : null}
+        )}
         {providers.map((p) => {
           const users = usersOf(hub, p);
           return (
@@ -177,12 +192,18 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
                 <b>{p.name}</b>
                 <small>
                   {[vendorName(p.vendor), hostOf(p.anthropic_base || p.openai_base),
-                    p.key_readable ? (p.key_hint ? L(`key ···${p.key_hint}`, `key ···${p.key_hint}`) : L("key 已保存", "key saved")) : L("这台设备还解不开 key", "This device cannot open the key yet"),
+                    p.key_lost ? L("key 已丢失", "key lost")
+                      : p.key_readable ? (p.key_hint ? L(`key ···${p.key_hint}`, `key ···${p.key_hint}`) : L("key 已保存", "key saved")) : L("这台设备还解不开 key", "This device cannot open the key yet"),
+                    p.custody === "hub" ? L("Hub 保管", "Kept by the hub") : L("端到端加密", "End-to-end encrypted"),
                     users.all.length ? L(`${users.all.length} 个 agent 在用`, `${users.all.length} agents use it`) : "",
                     p.models?.length && p.models_at ? L(`${p.models.length} 个模型 · ${timeAgo(p.models_at, Date.now())}`, `${p.models.length} models · ${timeAgo(p.models_at, Date.now())}`) : ""]
                     .filter(Boolean).join(" · ")}
                 </small>
-                {p.seal_again ? (
+                {p.key_lost ? (
+                  <small className="app-field-hint is-bad" data-testid="provider-key-lost">{L("Hub 上用来解开 key 的密钥文件不见了（比如换了服务器没带上）。编辑它，重新填一次 key 就能用；或者从备份恢复 Hub。", "The hub's key file that opens it is gone (moved to another server without it?). Edit it and enter the key again, or restore the hub from a backup.")}</small>
+                ) : p.move_to_hub ? (
+                  <small className="app-field-hint" data-testid="provider-move-to-hub">{L("工作区关了端到端加密：交给 Hub 保管后才能继续用。", "The workspace has end-to-end encryption off now: hand the key to the hub to keep using it.")}</small>
+                ) : p.seal_again ? (
                   <small className="app-field-hint is-bad" data-testid="provider-seal-again">{L("这是旧版本存的：地址没和 key 一起加密。编辑它，重新填一次 key 才能用。", "Saved by an older version, its addresses are not sealed with its key: edit it and enter the key again to use it.")}</small>
                 ) : !p.key_readable && (
                   <small className="app-field-hint">{L("在你另一台已经能用它的设备上打开一次 App，这台就能解开；或者编辑它重新填 key。", "Open the App once on another of your devices that can use it, and this one can too; or edit it and enter the key again.")}</small>
@@ -197,7 +218,12 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
                     {L(`推送新 key（${users.behind.length}）`, `Push new key (${users.behind.length})`)}
                   </button>
                 )}
-                <button type="button" className="app-btn app-btn-plain app-btn-small" disabled={!!busy || !p.key_readable} onClick={() => void test(p)}>
+                {p.move_to_hub && p.key_readable && (
+                  <button type="button" className="app-btn app-btn-small" disabled={!!busy} onClick={() => setMoving(p)} data-testid="provider-move">
+                    {L("交给 Hub 保管", "Hand to the hub")}
+                  </button>
+                )}
+                <button type="button" className="app-btn app-btn-plain app-btn-small" disabled={!!busy || !p.key_readable || !!p.move_to_hub} onClick={() => void test(p)}>
                   {busy === p.id ? L("正在测试", "Testing") : L("测试", "Test")}
                 </button>
                 <button type="button" className="app-btn app-btn-plain app-btn-small" disabled={!!busy} onClick={() => setEditing(p)}>{L("编辑", "Edit")}</button>
@@ -207,15 +233,25 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
           );
         })}
       </section>
-      {e2e && (
-        <p className="app-hint pv-foot">{L("key 在这台电脑上加密后存到工作区，只有你自己的设备能解开，工作区看不到。新增 agent 时只写到那台电脑上（它的 env 文件，权限 600）。",
-          "Keys are encrypted on this computer before they are kept in the workspace: only your own devices open them, the workspace cannot. When you add an agent, the key is written only to that computer (its env file, mode 600).")}</p>
-      )}
+      <p className="app-hint pv-foot">{e2e
+        ? L("key 在这台电脑上加密后存到工作区，只有你自己的设备能解开，工作区看不到。新增 agent 时只写到那台电脑上（它的 env 文件，权限 600）。",
+          "Keys are encrypted on this computer before they are kept in the workspace: only your own devices open them, the workspace cannot. When you add an agent, the key is written only to that computer (its env file, mode 600).")
+        : L("key 由 Hub 用工作区自己的密钥加密后保存，只发给你选的那台电脑上的 agent（写进它的 env 文件，权限 600）。打开端到端加密后，这台 App 会把它改成只有你的设备能解开。",
+          "The hub keeps keys encrypted with the workspace's own key, and sends one only to the agent you pick (into its env file, mode 600). Once end-to-end encryption is on, this App re-encrypts them for your devices alone.")}</p>
 
       {editing && (
-        <ProviderEditor hubId={hub.id} provider={editing === "new" ? null : editing} onClose={() => setEditing(null)}
+        <ProviderEditor hubId={hub.id} e2e={e2e} provider={editing === "new" ? null : editing} onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await load(); }} />
       )}
+      <ConfirmDialog
+        open={!!moving}
+        onOpenChange={(o) => !o && setMoving(null)}
+        title={L(`把「${moving?.name || ""}」交给 Hub 保管？`, `Hand “${moving?.name || ""}” to the hub?`)}
+        description={L("key 会在这台电脑上解开，交给 Hub 保存。Hub 管理员能看到它。以后打开端到端加密，会再改回只有你的设备能解开。", "The key is opened on this computer and given to the hub to keep. The hub's administrator could see it. Turn end-to-end encryption on later, and it is encrypted for your devices alone again.")}
+        confirmLabel={L("交给 Hub", "Hand it over")}
+        busy={!!busy}
+        onConfirm={() => void moveToHub()}
+      />
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
@@ -233,7 +269,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
 
 /** Adding or editing a provider: the vendor (its addresses filled in), the
  *  key (sent only to this App's backend, which seals it), a test. */
-function ProviderEditor({ hubId, provider, onClose, onSaved }: { hubId: string; provider: ModelProvider | null; onClose: () => void; onSaved: () => Promise<void> }) {
+function ProviderEditor({ hubId, e2e, provider, onClose, onSaved }: { hubId: string; e2e: boolean; provider: ModelProvider | null; onClose: () => void; onSaved: () => Promise<void> }) {
   const [form, setForm] = useState<ModelProviderInput>(() => provider
     ? { name: provider.name, vendor: provider.vendor, anthropic_base: provider.anthropic_base || "", openai_base: provider.openai_base || "", small_model: provider.small_model || "" }
     : { name: VENDORS[0].name, vendor: VENDORS[0].id, anthropic_base: VENDORS[0].anthropic, openai_base: VENDORS[0].openai, small_model: "" });
@@ -326,7 +362,8 @@ function ProviderEditor({ hubId, provider, onClose, onSaved }: { hubId: string; 
           placeholder={provider ? L("不改就留空", "Leave blank to keep it") : L("填上这家给你的 key", "The key this vendor gave you")} data-testid="provider-api-key" />
         <span className="app-field-hint">{provider
           ? L("填了就换成新的 key，用它的 agent 会提示推送。", "A new key replaces it; agents that use it are offered the new one.")
-          : L("在这台电脑上加密后才存到工作区，只有你自己的设备能解开。", "Encrypted on this computer before it is kept in the workspace; only your own devices open it.")}</span>
+          : e2e ? L("在这台电脑上加密后才存到工作区，只有你自己的设备能解开。", "Encrypted on this computer before it is kept in the workspace; only your own devices open it.")
+          : L("由 Hub 保管（Hub 管理员能看到），只发给你选的那台电脑上的 agent。", "The hub keeps it (its administrator could see it) and sends it only to the agent you pick.")}</span>
       </label>
       {tested && <p className="app-small-note app-offline-ok" data-testid="provider-tested">{L(`读到 ${tested.length} 个模型：${tested.slice(0, 4).map((m) => m.id).join("、")}${tested.length > 4 ? " 等" : ""}`, `${tested.length} models: ${tested.slice(0, 4).map((m) => m.id).join(", ")}${tested.length > 4 ? " and more" : ""}`)}</p>}
       <ErrorText error={error} />
@@ -339,5 +376,172 @@ function ProviderEditor({ hubId, provider, onClose, onSaved }: { hubId: string; 
         </button>
       </div>
     </Modal>
+  );
+}
+
+/** 「模型从哪来」, at the top of the new-agent dialog (i119): the computer's
+ *  own sign-in, one of the member's model providers, or one added right
+ *  here with their own API key (saved, then picked). With a provider, the
+ *  model is one of the models it listed. Who keeps the key is said, not
+ *  asked. */
+export function ModelSource({ hubId, cli, machineName, value, onChange, model, onModel, busy }: {
+  hubId: string;
+  cli: string;
+  machineName: string;
+  /** the chosen provider's id; "" for the computer's own */
+  value: string;
+  onChange: (id: string) => void;
+  model: string;
+  onModel: (m: string) => void;
+  busy?: boolean;
+}) {
+  const mine = useModelProviders(hubId);
+  const [adding, setAdding] = useState(false);
+  useEffect(() => setAdding(false), [cli]);
+  if (cli !== "claude" && cli !== "codex") return null;
+  const e2e = !!mine.list?.e2e;
+  const usable = (mine.list?.providers || []).filter((p) => p.key_readable && !p.move_to_hub && (cli === "claude" ? p.anthropic_base : p.openai_base));
+  const chosen = usable.find((p) => p.id === value);
+  const program = cli === "codex" ? "Codex" : "Claude Code";
+  const models = chosen?.models || [];
+  return (
+    <div className="app-field" data-testid="model-source">
+      <span className="app-field-label">{L("模型从哪来", "Where its model comes from")}</span>
+      <div className="app-provider-list" role="radiogroup" aria-label={L("模型从哪来", "Where its model comes from")}>
+        <label className={cn("app-provider-opt", !value && !adding && "picked")}>
+          <input type="radio" name="model-source" checked={!value && !adding} onChange={() => { onChange(""); onModel(""); setAdding(false); }} disabled={busy} />
+          <span>
+            <b>{L(`「${machineName}」上的登录或设置`, `“${machineName}”'s own sign-in or settings`)}</b>
+            <small>{L(`用那台电脑上 ${program} 自己的账号`, `${program}'s own account on that computer`)}</small>
+          </span>
+        </label>
+        {usable.map((p) => (
+          <label key={p.id} className={cn("app-provider-opt", value === p.id && !adding && "picked")} data-testid={`model-source-${p.id}`}>
+            <input type="radio" name="model-source" checked={value === p.id && !adding} onChange={() => { onChange(p.id); onModel(""); setAdding(false); }} disabled={busy} />
+            <span>
+              <b>{p.name}</b>
+              <small>{[vendorName(p.vendor), p.models?.length ? L(`${p.models.length} 个模型`, `${p.models.length} models`) : "", p.key_hint ? `key ···${p.key_hint}` : ""].filter(Boolean).join(" · ")}</small>
+            </span>
+          </label>
+        ))}
+        <label className={cn("app-provider-opt", adding && "picked")} data-testid="model-source-add">
+          <input type="radio" name="model-source" checked={adding} onChange={() => setAdding(true)} disabled={busy} />
+          <span>
+            <b>{L("+ 用自己的 API key", "+ Use your own API key")}</b>
+            <small>{usable.length
+              ? L("再接一家", "Add another vendor")
+              : L("有自己的 key（DeepSeek、Kimi、MiniMax、OpenCode Go……）可以直接接", "Have your own key (DeepSeek, Kimi, MiniMax, OpenCode Go…)? Use it directly")}</small>
+          </span>
+        </label>
+      </div>
+      {adding && (
+        <QuickProvider hubId={hubId} cli={cli} e2e={e2e} busy={busy}
+          onSaved={async (p, first) => { await mine.load(); setAdding(false); onChange(p.id); onModel(first || ""); }} />
+      )}
+      {chosen && !adding && (
+        <label className="app-field" data-testid="model-source-model">
+          <span className="app-field-label">{L("模型", "Model")}</span>
+          {models.length ? (
+            <select className="app-select-field" value={model} onChange={(e) => onModel(e.target.value)} disabled={busy}>
+              <option value="">{L("它默认的模型", "Its default model")}</option>
+              {models.map((m) => <option key={m.id} value={m.id}>{m.name ? `${m.name} (${m.id})` : m.id}</option>)}
+            </select>
+          ) : (
+            <input className="app-input mono" value={model} onChange={(e) => onModel(e.target.value.trim())} disabled={busy} spellCheck={false}
+              placeholder={L("不填就用它默认的；在 设置 › 模型供应商 里点「测试」可以读出列表", "Blank: its default. Test it in Settings › Model providers to list the models")} />
+          )}
+        </label>
+      )}
+      {(chosen || adding) && <span className="app-field-hint" data-testid="model-source-custody">{custodyLine(e2e)}</span>}
+    </div>
+  );
+}
+
+/** Adding a provider inside another dialog: a vendor, its key, a test,
+ *  "Save and use" (it is then tested once more, to list its models). */
+function QuickProvider({ hubId, cli, e2e, busy, onSaved }: {
+  hubId: string;
+  cli: string;
+  e2e: boolean;
+  busy?: boolean;
+  onSaved: (p: ModelProvider, firstModel: string) => Promise<void>;
+}) {
+  const [vendor, setVendor] = useState(VENDORS[0].id);
+  const [base, setBase] = useState("");
+  const [key, setKey] = useState("");
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [tested, setTested] = useState<RuntimeModel[] | null>(null);
+  const v = VENDORS.find((x) => x.id === vendor);
+  const custom = !v;
+  const input = (): ModelProviderInput => {
+    const name = v?.name || (() => { try { return new URL(base.trim()).host; } catch { return L("自定义", "Custom"); } })();
+    return custom
+      ? { name, vendor: "custom", anthropic_base: cli === "claude" ? base.trim() : "", openai_base: cli === "codex" ? base.trim() : "", small_model: "", api_key: key.trim() }
+      : { name, vendor, anthropic_base: v.anthropic, openai_base: v.openai, small_model: "", api_key: key.trim() };
+  };
+  const badBase = custom && (() => { try { const x = new URL(base.trim()); return !/^https?:$/.test(x.protocol) || !!x.username || !!x.search || !!x.hash; } catch { return true; } })();
+  const ready = !!key.trim() && !badBase && !working && !busy;
+  const test = async () => {
+    setWorking(true);
+    setError(null);
+    setTested(null);
+    try {
+      setTested((await appApi.testModelProvider(hubId, null, input())).models);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setWorking(false);
+    }
+  };
+  const save = async () => {
+    setWorking(true);
+    setError(null);
+    try {
+      const p = await appApi.createModelProvider(hubId, input());
+      // its models, kept for the model list (a vendor that cannot list them
+      // still works: the model is then typed)
+      await appApi.testModelProvider(hubId, p.id).catch(() => undefined);
+      await onSaved(p, "");
+    } catch (e) {
+      setError(e);
+    } finally {
+      setWorking(false);
+    }
+  };
+  return (
+    <div className="app-provider-manual" data-testid="model-source-new">
+      <label className="app-field">
+        <span className="app-field-label">{L("哪一家", "Which vendor")}</span>
+        <select className="app-select-field" value={vendor} onChange={(e) => { setVendor(e.target.value); setTested(null); }} disabled={working || busy} data-testid="model-source-vendor">
+          {VENDORS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          <option value="custom">{L("自定义地址", "A custom address")}</option>
+        </select>
+      </label>
+      {custom && (
+        <label className="app-field">
+          <span className="app-field-label">{cli === "codex" ? L("OpenAI 兼容的地址", "OpenAI-compatible address") : L("Anthropic 兼容的地址", "Anthropic-compatible address")}</span>
+          <input className="app-input mono" value={base} onChange={(e) => { setBase(e.target.value); setTested(null); }} spellCheck={false} disabled={working || busy}
+            placeholder={cli === "codex" ? "https://api.example.com/v1" : "https://api.example.com/anthropic"} data-testid="model-source-base" />
+          {base.trim() && badBase && <span className="app-field-hint is-bad">{L("地址要以 http:// 或 https:// 开头，不带用户名、? 或 #", "Addresses start with http:// or https://, with no user name, ? or #")}</span>}
+        </label>
+      )}
+      <label className="app-field">
+        <span className="app-field-label">{L("API key", "API key")}</span>
+        <input className="app-input" type="password" autoComplete="new-password" value={key} onChange={(e) => { setKey(e.target.value); setTested(null); }}
+          disabled={working || busy} placeholder={L("填上这家给你的 key", "The key this vendor gave you")} data-testid="model-source-key" />
+      </label>
+      {tested && <p className="app-small-note app-offline-ok" data-testid="model-source-tested">{L(`读到 ${tested.length} 个模型：${tested.slice(0, 4).map((m) => m.id).join("、")}${tested.length > 4 ? " 等" : ""}`, `${tested.length} models: ${tested.slice(0, 4).map((m) => m.id).join(", ")}${tested.length > 4 ? " and more" : ""}`)}</p>}
+      <ErrorText error={error} />
+      <div className="app-setting-actions">
+        <button type="button" className="app-btn app-btn-small" onClick={() => void test()} disabled={!ready} data-testid="model-source-test">
+          {working && !tested ? L("正在测试", "Testing") : L("测试", "Test")}
+        </button>
+        <button type="button" className="app-btn app-btn-small" onClick={() => void save()} disabled={!ready} data-testid="model-source-save">
+          {L("保存并选用", "Save and use")}
+        </button>
+      </div>
+      {!e2e && <span className="app-field-hint">{L("存进「我的模型供应商」，以后在任何一台电脑上新增 agent 都能直接选。", "Saved to My model providers: pick it whenever you add an agent on any computer.")}</span>}
+    </div>
   );
 }

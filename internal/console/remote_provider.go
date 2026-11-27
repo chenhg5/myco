@@ -48,6 +48,23 @@ func (b *Backend) putRemoteAgentProvider(w http.ResponseWriter, r *http.Request,
 		writeErr(w, &client.Error{Status: 400, Code: "invalid_argument", Message: err.Error()})
 		return
 	}
+	if held, err := hubKeeps(r.Context(), c); err != nil {
+		writeErr(w, err)
+		return
+	} else if held {
+		// encryption off: the hub keeps them for this agent alone, and its
+		// runner fetches them (i119)
+		p := "custom"
+		m := in.Manual
+		updated, err := c.PatchRunSettings(r.Context(), name, api.RunSettingsPatch{Provider: &p, ProviderHub: &api.HubProviderRequest{ID: providerRequestID(),
+			Manual: &api.HubManual{BaseURL: m.BaseURL, APIKey: m.APIKey, Model: m.Model, WireAPI: m.WireAPI, SmallModel: m.SmallModel}}})
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, updated)
+		return
+	}
 	raw, err := json.Marshal(in.Manual)
 	if err != nil {
 		writeErr(w, &client.Error{Status: 400, Code: "invalid_argument", Message: "invalid custom provider settings"})

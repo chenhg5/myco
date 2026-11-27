@@ -20,7 +20,7 @@ import (
 func remoteProviderApplier(path string, c *client.Client) func(context.Context, api.RunSettings) error {
 	var mu sync.Mutex
 	return func(ctx context.Context, rs api.RunSettings) error {
-		if rs.Provider == nil && rs.ProviderEncrypted == nil {
+		if rs.Provider == nil && rs.ProviderEncrypted == nil && rs.ProviderHub == nil {
 			return nil
 		}
 		mu.Lock()
@@ -33,6 +33,28 @@ func remoteProviderApplier(path string, c *client.Client) func(context.Context, 
 			return fmt.Errorf("provider selection missing")
 		}
 		ref := *rs.Provider
+		if ref == "custom" && rs.ProviderHub != nil {
+			// Kept by the hub for this agent (i119): fetched, once applied
+			// acknowledged, and from then on only here.
+			p := rs.ProviderHub
+			if cfg.Runner.ProviderApplied != p.ID {
+				if err := ownerSealed(ctx, c, p.From); err != nil {
+					return fmt.Errorf("provider settings refused: %v", err)
+				}
+				got, err := c.ProviderMaterial(ctx, p.ID, "")
+				if err != nil {
+					return fmt.Errorf("cannot fetch provider settings: %v", err)
+				}
+				if got.ID != p.ID || got.From != p.From {
+					return fmt.Errorf("provider settings refused: not the ones set")
+				}
+				m := provider.Manual{BaseURL: got.BaseURL, APIKey: got.APIKey, Model: got.Model, WireAPI: got.WireAPI, SmallModel: got.SmallModel}
+				if err := applyManual(path, cfg, m, p.ID); err != nil {
+					return err
+				}
+			}
+			return c.AckProvider(ctx, p.ID)
+		}
 		if ref == "custom" {
 			p := rs.ProviderEncrypted
 			if p == nil {
@@ -49,19 +71,11 @@ func remoteProviderApplier(path string, c *client.Client) func(context.Context, 
 					return fmt.Errorf("cannot decrypt provider settings")
 				}
 				var m provider.Manual
-				if json.Unmarshal(raw, &m) != nil || m.Validate(profileHarness(cfg)) != nil {
+				if json.Unmarshal(raw, &m) != nil {
 					return fmt.Errorf("invalid decrypted provider settings")
 				}
-				file := cfg.Runner.EnvFile
-				if file == "" {
-					file = filepath.Join(filepath.Dir(filepath.Dir(path)), "env", filepath.Base(path)+".env")
-				}
-				if err := provider.WriteEnv(file, cfg.Agent, m.Variables(profileHarness(cfg))); err != nil {
-					return fmt.Errorf("cannot save private provider settings")
-				}
-				cfg.Runner.EnvFile, cfg.Runner.Provider, cfg.Runner.ProviderApplied = file, "", p.ID
-				if err := config.Save(path, cfg); err != nil {
-					return fmt.Errorf("cannot save provider profile")
+				if err := applyManual(path, cfg, m, p.ID); err != nil {
+					return err
 				}
 			}
 			return c.AckProvider(ctx, p.ID)
@@ -85,6 +99,26 @@ func remoteProviderApplier(path string, c *client.Client) func(context.Context, 
 		cfg.Runner.Provider = ref
 		return config.Save(path, cfg)
 	}
+}
+
+// applyManual writes a custom provider's settings to the agent's env file
+// (for its user only) and records request id as applied.
+func applyManual(path string, cfg *config.Config, m provider.Manual, id string) error {
+	if m.Validate(profileHarness(cfg)) != nil {
+		return fmt.Errorf("invalid provider settings")
+	}
+	file := cfg.Runner.EnvFile
+	if file == "" {
+		file = filepath.Join(filepath.Dir(filepath.Dir(path)), "env", filepath.Base(path)+".env")
+	}
+	if err := provider.WriteEnv(file, cfg.Agent, m.Variables(profileHarness(cfg))); err != nil {
+		return fmt.Errorf("cannot save private provider settings")
+	}
+	cfg.Runner.EnvFile, cfg.Runner.Provider, cfg.Runner.ProviderApplied = file, "", id
+	if err := config.Save(path, cfg); err != nil {
+		return fmt.Errorf("cannot save provider profile")
+	}
+	return nil
 }
 
 func localProviderOptions(cli string) []api.ProviderOption {

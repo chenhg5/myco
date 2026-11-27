@@ -278,6 +278,52 @@ type RunSettings struct {
 	// the App sets it to a new value (the time) and the runner asks when
 	// it changes. Runners with the "models_refresh" feature only.
 	ModelsRefresh string `json:"models_refresh,omitempty"`
+	// ProviderHub: a custom provider the hub keeps for the agent until its
+	// runner fetches it (i119, encryption off): which request, and who set
+	// it. Never the settings themselves.
+	ProviderHub *HubProviderInfo `json:"provider_hub,omitempty"`
+}
+
+// HubProviderInfo is a provider the hub keeps for an agent, as its
+// settings show it: GET /v1/me/provider-material?id=ID gives its runner
+// the settings.
+type HubProviderInfo struct {
+	ID   string `json:"id"`
+	From string `json:"from"`
+}
+
+// HubProviderRequest sends an agent a custom provider the hub keeps (i119,
+// with the workspace's end-to-end encryption off; the agent's owner only,
+// to a runner with the "hub_provider" feature). ID is a new request id;
+// then either Ref (one of the owner's model providers, with Model) or
+// Manual (an address and key for this agent alone).
+type HubProviderRequest struct {
+	ID     string       `json:"id"`
+	Ref    *ProviderRef `json:"ref,omitempty"`
+	Model  string       `json:"model,omitempty"`
+	Manual *HubManual   `json:"manual,omitempty"`
+}
+
+// HubManual is a custom provider's settings, given to the hub to keep.
+type HubManual struct {
+	BaseURL    string `json:"base_url"`
+	APIKey     string `json:"api_key"`
+	Model      string `json:"model,omitempty"`
+	WireAPI    string `json:"wire_api,omitempty"`
+	SmallModel string `json:"small_model,omitempty"`
+}
+
+// ProviderMaterial is a provider's settings, key included, for the one
+// runner or machine node the hub keeps them for (GET
+// /v1/me/provider-material). From is who set them.
+type ProviderMaterial struct {
+	ID         string `json:"id"`
+	From       string `json:"from"`
+	BaseURL    string `json:"base_url"`
+	APIKey     string `json:"api_key"`
+	Model      string `json:"model,omitempty"`
+	WireAPI    string `json:"wire_api,omitempty"`
+	SmallModel string `json:"small_model,omitempty"`
 }
 
 // RunSettingsPatch preserves every field omitted by an App update.
@@ -292,6 +338,9 @@ type RunSettingsPatch struct {
 	// ProviderRef, with a custom provider: the model provider it came
 	// from; {"id": ""} clears it.
 	ProviderRef *ProviderRef `json:"provider_ref,omitempty"`
+	// ProviderHub, with Provider "custom": a provider the hub keeps for the
+	// agent (i119). Not with ProviderEncrypted.
+	ProviderHub *HubProviderRequest `json:"provider_hub,omitempty"`
 }
 
 // ProviderRef points at one of a member's model providers and the
@@ -318,12 +367,30 @@ type ModelProvider struct {
 	ModelsAt   *time.Time     `json:"models_at,omitempty"`
 	KeySealed  string         `json:"key_sealed"`
 	KeyVersion int            `json:"key_version"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
+	// Custody is who keeps the key (i119): "e2e", sealed for the member's
+	// devices (KeySealed), or "hub", kept by the hub with the workspace's
+	// own key, which its administrator could read. KeyHint is the key's
+	// last four characters ("hub" only); KeyLost: the hub's key to it is
+	// gone, and the key must be entered again.
+	Custody   string    `json:"custody,omitempty"`
+	KeyHint   string    `json:"key_hint,omitempty"`
+	KeyLost   bool      `json:"key_lost,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// ProviderKey is a provider's key, for its owner only (GET
+// /v1/console/providers/{id}/key, "hub" custody): to seal it for their
+// devices when the workspace turns end-to-end encryption on, or to list
+// the vendor's models from their computer.
+type ProviderKey struct {
+	APIKey     string `json:"api_key"`
+	KeyVersion int    `json:"key_version"`
 }
 
 // ModelProviderList is a member's model providers. E2E says whether the
-// workspace has end-to-end encryption on (without it none can be added).
+// workspace has end-to-end encryption on: on, keys are sealed for the
+// member's devices; off, the hub keeps them (i119).
 type ModelProviderList struct {
 	E2E       bool            `json:"e2e"`
 	Providers []ModelProvider `json:"providers"`
@@ -346,6 +413,13 @@ type ModelProviderRequest struct {
 	ModelsAt      *time.Time      `json:"models_at,omitempty"`
 	KeySealed     *string         `json:"key_sealed,omitempty"`
 	KeyVersion    *int            `json:"key_version,omitempty"`
+	// APIKey, with the workspace's end-to-end encryption off (i119), is the
+	// key itself, for the hub to keep (never with KeySealed). Custody, when
+	// set, must be the workspace's: "hub" with encryption off, "e2e" with
+	// it on; changing it moves a provider's key across (with APIKey, or
+	// with KeySealed at the same key_version).
+	APIKey  *string `json:"api_key,omitempty"`
+	Custody *string `json:"custody,omitempty"`
 }
 
 // Machine is a computer, server or cloud environment agents run on.
@@ -923,6 +997,14 @@ type SpawnRequest struct {
 	// ProviderRef is the member's model provider it came from.
 	ProviderEncrypted *EncryptedProvider `json:"provider_encrypted,omitempty"`
 	ProviderRef       *ProviderRef       `json:"provider_ref,omitempty"`
+	// ProviderHub, from the App (i119, encryption off): the new agent's
+	// provider is ProviderRef's, which the hub keeps. The hub then sends
+	// the machine ProviderGrant instead: one use, for this request only,
+	// with which its node fetches the settings (GET
+	// /v1/me/provider-material?grant=...). Machines with the
+	// "hub_provider" feature only.
+	ProviderHub   bool   `json:"provider_hub,omitempty"`
+	ProviderGrant string `json:"provider_grant,omitempty"`
 	// TakeOver, from the hub only (POST /v1/agents/{name}/handover): a
 	// take-over link token. The new session takes that node over instead of
 	// joining as a new agent; Brief is its first prompt (the handover note).

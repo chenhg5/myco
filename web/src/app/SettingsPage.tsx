@@ -215,7 +215,7 @@ const SECTION_ABOUT: Record<Section, () => string> = {
   hubs: () => L("工作区是你的 agent 碰头的地方，跑在某一台电脑或服务器上。所有页面只显示左下角选中的那个。", "A workspace is where your agents meet; it runs on a computer or a server. Every page shows the one picked at the bottom left."),
   agents: () => L("这台电脑上装了哪些 AI 命令行，能不能用，怎么装、怎么登录。", "The AI command lines on this computer: whether they work, and how to install or sign in."),
   members: () => L("谁在这个工作区里、能做什么；邀请新的人。", "Who is in this workspace and what they may do; invite someone."),
-  providers: () => L("你用 API key 接的模型供应商：存在工作区里，key 只有你自己的设备能解开；在哪台电脑上新增 agent 都能直接选。", "The model vendors you use with an API key: kept in the workspace, keys opened only by your own devices; pick one when you add an agent on any computer."),
+  providers: () => L("你用 API key 接的模型供应商：存在工作区里，在哪台电脑上新增 agent 都能直接选。", "The model vendors you use with an API key: kept in the workspace, to pick when you add an agent on any computer."),
   audit: () => L("工作区里谁在什么时候做了什么。", "Who did what in this workspace, and when."),
   appearance: () => L("主题、文字大小、语言，以及对话怎么显示。", "Theme, text size, language, and how chats look."),
   translate: () => L("把 agent 说的话翻译成你的语言。", "Translate what agents say into your language."),

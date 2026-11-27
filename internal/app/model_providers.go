@@ -26,6 +26,31 @@ type ModelProviderService struct {
 	clock Clock
 	// vendor reports whether a catalogue vendor id is known.
 	vendor func(string) bool
+	// box is the workspace's own key, for keys the hub keeps (i119);
+	// heldElsewhere reports other values it sealed (agents' providers).
+	box           SecretBox
+	heldElsewhere func(context.Context) (bool, error)
+	// manual makes a provider's settings for a CLI and model.
+	manual func(ProviderSettings, string, string) (api.ProviderMaterial, error)
+}
+
+// SecretBox is the workspace's own key (infra/hubkey): what the hub keeps
+// for members is sealed with it, bound to a purpose.
+type SecretBox interface {
+	Present() bool
+	Seal(purpose string, plain []byte, create bool) (string, error)
+	Open(purpose, sealed string) ([]byte, error)
+}
+
+// ProviderSettings are a model provider's, with its key, for a CLI.
+type ProviderSettings struct {
+	Vendor, AnthropicBase, OpenAIBase, SmallModel, APIKey string
+}
+
+// SetHubCustody lets the hub keep keys (i119): box seals them; held
+// reports values it sealed outside providers; manual makes settings.
+func (s *ModelProviderService) SetHubCustody(box SecretBox, held func(context.Context) (bool, error), manual func(ProviderSettings, string, string) (api.ProviderMaterial, error)) {
+	s.box, s.heldElsewhere, s.manual = box, held, manual
 }
 
 func NewModelProviderService(repo domain.ModelProviderRepository, e2e *E2EService, clock Clock, vendor func(string) bool) *ModelProviderService {
@@ -43,6 +68,7 @@ const (
 	maxProviderURL   = 300
 	maxProviderModel = 80
 	maxProviderKey   = 16 << 10 // the sealed key
+	maxPlainKey      = 4 << 10  // the key itself
 )
 
 // E2E reports whether the workspace has end-to-end encryption on.
@@ -78,8 +104,18 @@ func (s *ModelProviderService) Create(ctx context.Context, member string, in api
 	if !modelProviderID.MatchString(in.ID) {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "id must be prv_ and 8 to 40 lowercase letters or digits")
 	}
-	if in.Name == nil || in.Vendor == nil || in.KeySealed == nil || in.KeyVersion == nil || *in.KeyVersion != 1 {
-		return nil, domain.Errf(domain.CodeInvalidArgument, "name, vendor, key_sealed and key_version 1 are required")
+	custody, err := s.custodyFor(ctx, in.Custody)
+	if err != nil {
+		return nil, err
+	}
+	if custody == domain.CustodyHub {
+		if in.Name == nil || in.Vendor == nil || in.APIKey == nil || in.KeySealed != nil || (in.KeyVersion != nil && *in.KeyVersion != 1) {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "name, vendor and api_key are required (the hub keeps the key: this workspace has end-to-end encryption off)")
+		}
+		one := 1
+		in.KeyVersion = &one
+	} else if in.Name == nil || in.Vendor == nil || in.KeySealed == nil || in.KeyVersion == nil || *in.KeyVersion != 1 || in.APIKey != nil {
+		return nil, domain.Errf(domain.CodeInvalidArgument, "name, vendor, key_sealed and key_version 1 are required (this workspace has end-to-end encryption on: the key is sealed for your devices)")
 	}
 	have, err := s.repo.List(ctx, member)
 	if err != nil {
@@ -89,8 +125,8 @@ func (s *ModelProviderService) Create(ctx context.Context, member string, in api
 		return nil, domain.Errf(domain.CodeInvalidArgument, "at most %d model providers", domain.MaxModelProviders)
 	}
 	now := s.clock.Now().UTC()
-	p := &domain.ModelProvider{ID: in.ID, Owner: member, CreatedAt: now, UpdatedAt: now}
-	if err := s.apply(ctx, p, in); err != nil {
+	p := &domain.ModelProvider{ID: in.ID, Owner: member, Custody: custody, CreatedAt: now, UpdatedAt: now}
+	if err := s.apply(ctx, p, in, false); err != nil {
 		return nil, err
 	}
 	if err := s.repo.Create(ctx, p); err != nil {
@@ -111,24 +147,64 @@ func (s *ModelProviderService) Update(ctx context.Context, member, id string, in
 	if in.ID != "" && in.ID != id {
 		return nil, domain.Errf(domain.CodeInvalidArgument, "the id cannot change")
 	}
-	if in.KeySealed != nil && in.KeyVersion == nil {
-		return nil, domain.Errf(domain.CodeInvalidArgument, "key_sealed comes with key_version")
+	custody, err := s.custodyFor(ctx, in.Custody)
+	if err != nil {
+		return nil, err
 	}
-	// Where the key goes is sealed with it: a new vendor, address or small
-	// model comes with the key sealed again, at the next version (the
-	// member's App uses only what it opens; this keeps the hub's copy, which
-	// is shown, from being changed alone).
-	changes := func(v *string, cur string) bool { return v != nil && strings.TrimSpace(*v) != cur }
-	if changes(in.Vendor, p.Vendor) || changes(in.AnthropicBase, p.AnthropicBase) || changes(in.OpenAIBase, p.OpenAIBase) || changes(in.SmallModel, p.SmallModel) {
-		if in.KeySealed == nil || in.KeyVersion == nil || *in.KeyVersion != p.KeyVersion+1 {
-			return nil, domain.Errf(domain.CodeInvalidArgument, "a new vendor, address or small model is sealed with the key: send key_sealed at key_version %d", p.KeyVersion+1)
+	moving := custody != p.Custody && !(custody == domain.CustodyE2E && p.Custody == "")
+	if custody == domain.CustodyHub {
+		if in.KeySealed != nil {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "the hub keeps this provider's key: send api_key, not key_sealed")
+		}
+		if moving && in.APIKey == nil {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "moving the key to the hub: send it as api_key")
+		}
+		if in.KeyVersion != nil && *in.KeyVersion != p.KeyVersion && *in.KeyVersion != p.KeyVersion+1 {
+			return nil, domain.Errf(domain.CodeConflict, "key_version must be %d or %d", p.KeyVersion, p.KeyVersion+1).
+				WithSuggestion("read the provider again: another device may have changed it")
+		}
+		if in.APIKey != nil {
+			// The version goes up for a new key only: the same key moved
+			// here, or entered again, keeps it (agents are not behind).
+			version := p.KeyVersion
+			if !moving && !s.sameKey(p, *in.APIKey) {
+				version++
+			}
+			if in.KeyVersion != nil {
+				version = *in.KeyVersion
+			}
+			in.KeyVersion = &version
+		}
+	} else {
+		if in.APIKey != nil {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "this workspace has end-to-end encryption on: send the key sealed for your devices (key_sealed), not api_key")
+		}
+		if in.KeySealed != nil && in.KeyVersion == nil {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "key_sealed comes with key_version")
+		}
+		if moving && in.KeySealed == nil {
+			return nil, domain.Errf(domain.CodeInvalidArgument, "moving the key off the hub: send it sealed for your devices (key_sealed at key_version %d)", p.KeyVersion)
+		}
+		// Where the key goes is sealed with it: a new vendor, address or
+		// small model comes with the key sealed again, at the next version
+		// (the member's App uses only what it opens; this keeps the hub's
+		// copy, which is shown, from being changed alone).
+		changes := func(v *string, cur string) bool { return v != nil && strings.TrimSpace(*v) != cur }
+		if !moving && (changes(in.Vendor, p.Vendor) || changes(in.AnthropicBase, p.AnthropicBase) || changes(in.OpenAIBase, p.OpenAIBase) || changes(in.SmallModel, p.SmallModel)) {
+			if in.KeySealed == nil || in.KeyVersion == nil || *in.KeyVersion != p.KeyVersion+1 {
+				return nil, domain.Errf(domain.CodeInvalidArgument, "a new vendor, address or small model is sealed with the key: send key_sealed at key_version %d", p.KeyVersion+1)
+			}
+		}
+		if in.KeyVersion != nil && *in.KeyVersion != p.KeyVersion && *in.KeyVersion != p.KeyVersion+1 {
+			return nil, domain.Errf(domain.CodeConflict, "key_version must be %d (a new key) or %d (sealed again)", p.KeyVersion+1, p.KeyVersion).
+				WithSuggestion("read the provider again: another device may have changed it")
 		}
 	}
-	if in.KeyVersion != nil && *in.KeyVersion != p.KeyVersion && *in.KeyVersion != p.KeyVersion+1 {
-		return nil, domain.Errf(domain.CodeConflict, "key_version must be %d (a new key) or %d (sealed again)", p.KeyVersion+1, p.KeyVersion).
-			WithSuggestion("read the provider again: another device may have changed it")
-	}
-	if err := s.apply(ctx, p, in); err != nil {
+	// A lost key entered again by its owner may make the workspace a new
+	// key: their own act, not the hub hiding the loss.
+	reentering := p.HubHeld() && custody == domain.CustodyHub && in.APIKey != nil && s.KeyLost(p)
+	p.Custody = custody
+	if err := s.apply(ctx, p, in, reentering); err != nil {
 		return nil, err
 	}
 	p.UpdatedAt = s.clock.Now().UTC()
@@ -151,15 +227,171 @@ func (s *ModelProviderService) writable(ctx context.Context, member string) erro
 	if member == "" {
 		return domain.Errf(domain.CodePermissionDenied, "model providers belong to members: sign in as one")
 	}
-	if !s.E2E(ctx) {
-		return domain.Errf(domain.CodeE2ERequired, "model providers keep their keys end-to-end encrypted: this workspace has encryption off").
-			WithSuggestion("turn on end-to-end encryption in the workspace settings, or enter the provider on the agent's computer")
-	}
 	return nil
 }
 
+// custodyFor is who keeps keys now: the member's devices with end-to-end
+// encryption on, the hub with it off (i119). A request may name it, and
+// must name that one.
+func (s *ModelProviderService) custodyFor(ctx context.Context, asked *string) (string, error) {
+	custody := domain.CustodyE2E
+	if !s.E2E(ctx) {
+		if s.box == nil {
+			return "", domain.Errf(domain.CodeE2ERequired, "this hub keeps model providers' keys end-to-end encrypted only: this workspace has encryption off").
+				WithSuggestion("turn on end-to-end encryption in the workspace settings, or update the hub")
+		}
+		custody = domain.CustodyHub
+	}
+	if asked != nil && *asked != custody {
+		if custody == domain.CustodyHub {
+			return "", domain.Errf(domain.CodeE2ERequired, "this workspace has end-to-end encryption off: the hub keeps the key").
+				WithSuggestion("turn on end-to-end encryption in the workspace settings to keep keys on your devices")
+		}
+		return "", domain.Errf(domain.CodeInvalidArgument, "this workspace has end-to-end encryption on: keys are sealed for your devices, not kept by the hub")
+	}
+	return custody, nil
+}
+
+// sameKey reports whether key is the one the hub keeps for p now.
+func (s *ModelProviderService) sameKey(p *domain.ModelProvider, key string) bool {
+	if !p.HubHeld() || s.box == nil || p.KeyHub == "" {
+		return false
+	}
+	got, err := s.box.Open(domain.HubKeyPurpose(p.ID, p.Owner, p.KeyVersion), p.KeyHub)
+	return err == nil && string(got) == strings.TrimSpace(key)
+}
+
+// KeyLost reports whether the hub keeps p's key but cannot open it now
+// (the workspace's key file is gone): it must be entered again.
+func (s *ModelProviderService) KeyLost(p *domain.ModelProvider) bool {
+	if !p.HubHeld() {
+		return false
+	}
+	if s.box == nil || p.KeyHub == "" || !s.box.Present() {
+		return true
+	}
+	_, err := s.box.Open(domain.HubKeyPurpose(p.ID, p.Owner, p.KeyVersion), p.KeyHub)
+	return err != nil
+}
+
+// Key answers the key the hub keeps for the member's provider: for its
+// owner only, to seal it for their devices or to list the vendor's
+// models from their computer.
+func (s *ModelProviderService) Key(ctx context.Context, member, id string) (string, int, error) {
+	p, err := s.Owned(ctx, member, id)
+	if err != nil {
+		return "", 0, err
+	}
+	key, err := s.openKey(p)
+	return key, p.KeyVersion, err
+}
+
+func (s *ModelProviderService) openKey(p *domain.ModelProvider) (string, error) {
+	if !p.HubHeld() {
+		return "", domain.Errf(domain.CodeInvalidArgument, "this provider's key is sealed for its owner's devices: the hub cannot open it")
+	}
+	if s.box == nil || p.KeyHub == "" || !s.box.Present() {
+		return "", domain.Errf(domain.CodeInvalidState, "this provider's key is lost: the hub's key file is gone").
+			WithSuggestion("enter the key again in Settings › Model providers")
+	}
+	got, err := s.box.Open(domain.HubKeyPurpose(p.ID, p.Owner, p.KeyVersion), p.KeyHub)
+	if err != nil {
+		return "", domain.Errf(domain.CodeInvalidState, "this provider's key cannot be opened").
+			WithSuggestion("enter the key again in Settings › Model providers")
+	}
+	return string(got), nil
+}
+
+// Material is a provider's settings for an agent on cli with model, its
+// key included (the hub keeps it): for the one runner or node it goes to.
+func (s *ModelProviderService) Material(ctx context.Context, id, owner, cli, model string) (api.ProviderMaterial, int, error) {
+	p, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return api.ProviderMaterial{}, 0, err
+	}
+	if p.Owner != owner {
+		return api.ProviderMaterial{}, 0, domain.Errf(domain.CodePermissionDenied, "this provider is not its owner's")
+	}
+	key, err := s.openKey(p)
+	if err != nil {
+		return api.ProviderMaterial{}, 0, err
+	}
+	if s.manual == nil {
+		return api.ProviderMaterial{}, 0, domain.Errf(domain.CodeUnsupported, "this hub cannot send providers")
+	}
+	m, err := s.manual(ProviderSettings{Vendor: p.Vendor, AnthropicBase: p.AnthropicBase, OpenAIBase: p.OpenAIBase, SmallModel: p.SmallModel, APIKey: key}, cli, model)
+	if err != nil {
+		return api.ProviderMaterial{}, 0, domain.Errf(domain.CodeInvalidArgument, "%v", err)
+	}
+	return m, p.KeyVersion, nil
+}
+
+// SealForAgent keeps an agent's own custom settings (an address and key
+// given for it alone), sealed with the workspace's key for that agent and
+// request.
+func (s *ModelProviderService) SealForAgent(ctx context.Context, agent, id string, plain []byte) (string, error) {
+	if s.box == nil {
+		return "", domain.Errf(domain.CodeUnsupported, "this hub cannot keep providers")
+	}
+	create, err := s.mayMakeKey(ctx)
+	if err != nil {
+		return "", err
+	}
+	out, err := s.box.Seal(domain.HubProviderPurpose(agent, id), plain, create)
+	if err != nil {
+		return "", keyErr(err)
+	}
+	return out, nil
+}
+
+// OpenForAgent opens what SealForAgent kept.
+func (s *ModelProviderService) OpenForAgent(agent, id, sealed string) ([]byte, error) {
+	if s.box == nil || !s.box.Present() {
+		return nil, domain.Errf(domain.CodeInvalidState, "the provider the hub kept for this agent is lost: the hub's key file is gone").
+			WithSuggestion("set the agent's provider again")
+	}
+	out, err := s.box.Open(domain.HubProviderPurpose(agent, id), sealed)
+	if err != nil {
+		return nil, domain.Errf(domain.CodeInvalidState, "the provider the hub kept for this agent cannot be opened")
+	}
+	return out, nil
+}
+
+// mayMakeKey: the workspace's key may be made now only if nothing sealed
+// with one is kept (else it was lost, and a new one would hide that).
+func (s *ModelProviderService) mayMakeKey(ctx context.Context) (bool, error) {
+	if s.box.Present() {
+		return false, nil
+	}
+	held, err := s.repo.AnyHubHeld(ctx)
+	if err != nil || held {
+		return false, err
+	}
+	if s.heldElsewhere != nil {
+		if held, err := s.heldElsewhere(ctx); err != nil || held {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// HubKeyLost reports whether values sealed with the workspace's key are
+// kept while the key is gone (for a warning when the hub starts).
+func (s *ModelProviderService) HubKeyLost(ctx context.Context) bool {
+	if s.box == nil || s.box.Present() {
+		return false
+	}
+	create, err := s.mayMakeKey(ctx)
+	return err == nil && !create
+}
+
+func keyErr(err error) error {
+	return domain.Errf(domain.CodeInvalidState, "the hub's key for secrets is missing: keys it kept are lost").
+		WithSuggestion("restore the hub's provider-secret.key from a backup, or enter the keys again")
+}
+
 // apply checks and sets what the request carries.
-func (s *ModelProviderService) apply(ctx context.Context, p *domain.ModelProvider, in api.ModelProviderRequest) error {
+func (s *ModelProviderService) apply(ctx context.Context, p *domain.ModelProvider, in api.ModelProviderRequest, reentering bool) error {
 	if in.Name != nil {
 		name := strings.TrimSpace(*in.Name)
 		if name == "" || len(name) > maxProviderName || strings.IndexFunc(name, unicode.IsControl) >= 0 {
@@ -214,8 +446,31 @@ func (s *ModelProviderService) apply(ctx context.Context, p *domain.ModelProvide
 			return err
 		}
 		p.KeySealed, p.KeyVersion = *in.KeySealed, version
+		p.KeyHub, p.KeyHint = "", ""
 	}
-	if p.KeySealed == "" {
+	if in.APIKey != nil {
+		key := strings.TrimSpace(*in.APIKey)
+		if key == "" || len(key) > maxPlainKey || strings.IndexFunc(key, unicode.IsControl) >= 0 || strings.ContainsAny(key, " \t") {
+			return domain.Errf(domain.CodeInvalidArgument, "api_key must be one word on one line")
+		}
+		create, err := s.mayMakeKey(ctx)
+		if err != nil {
+			return err
+		}
+		create = create || (reentering && !s.box.Present())
+		version := *in.KeyVersion
+		sealed, err := s.box.Seal(domain.HubKeyPurpose(p.ID, p.Owner, version), []byte(key), create)
+		if err != nil {
+			return keyErr(err)
+		}
+		p.KeyHub, p.KeyVersion, p.KeySealed = sealed, version, ""
+		p.KeyHint = key[max(0, len(key)-4):]
+	}
+	if p.HubHeld() {
+		if p.KeyHub == "" {
+			return domain.Errf(domain.CodeInvalidArgument, "api_key is required")
+		}
+	} else if p.KeySealed == "" {
 		return domain.Errf(domain.CodeInvalidArgument, "key_sealed is required")
 	}
 	return nil
