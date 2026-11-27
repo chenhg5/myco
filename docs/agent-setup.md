@@ -245,6 +245,12 @@ Collect information before you change anything:
 - Hub on a server: `sudo bash install-hub.sh --check`, `systemctl status myco-hub`, `journalctl -u myco-hub -n 50`;
 - App errors: ask the user to click "Details" under the message and send you the original text.
 
+Hub clients replace their shared connection pool after two requests to the same Hub reach the
+client's own deadline without response headers within five minutes. Replacement happens at most once
+every 30 seconds and logs one warning; it preserves the proxy setting and leaves in-flight requests
+running. Caller cancellations and response-body timeouts do not trigger replacement. The failed
+request is returned to the caller for its normal retry handling.
+
 | Symptom (what the user sees, or the original text in "Details") | Common cause | How to check | What to do |
 |---|---|---|---|
 | The App shows "Can't reach this hub right now, or it is answering too slowly."; the original text is `i/o timeout` or `deadline exceeded` | The Hub is not running; the network is down; **a proxy is also capturing local network addresses** | On the computer with the App, run `curl -sS -m 5 <hub>/v1/health`; check whether Clash, Surge or a company VPN is on; `env \| grep -i _proxy` | If the Hub is not running, start it. If a proxy is on, try a direct connection: ask the user to turn off the proxy or its TUN mode once, or add the Hub's address to the proxy's direct rules or to `NO_PROXY` (ask before changing it). From App v0.19.24, local network addresses always connect directly; upgrade older Apps first |

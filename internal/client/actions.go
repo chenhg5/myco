@@ -249,7 +249,7 @@ func (c *Client) CompleteActionJob(ctx context.Context, jobID string, done api.A
 func (c *Client) raw(ctx context.Context, method, path string, query url.Values, body []byte, contentType string) ([]byte, string, error) {
 	u := c.urlFor(path)
 	u.RawQuery = query.Encode()
-	rctx, cancel := context.WithTimeout(ctx, plainBound)
+	rctx, cancel := boundedContext(ctx, plainBound)
 	defer cancel()
 	var rd io.Reader
 	if body != nil {

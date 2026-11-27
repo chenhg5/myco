@@ -113,7 +113,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	// Bound every call, long-polls included (their wait plus a margin): a
 	// connection that died while the computer slept or changed networks
 	// otherwise hangs forever without an error, and a runner never retries.
-	rctx, cancel := context.WithTimeout(ctx, requestBound(query))
+	rctx, cancel := boundedContext(ctx, requestBound(query))
 	defer cancel()
 	req, err := http.NewRequestWithContext(rctx, method, u.String(), body)
 	if err != nil {
