@@ -231,10 +231,20 @@ func snapshotGroup(dir string, r *browserGroup) error {
 // The caller holds the profile lease. Never remove a record or release the
 // lease until the kernel confirms that the recorded group no longer exists.
 func terminateBrowserGroup(dir string, r browserGroup, reapLeader bool) error {
-	for _, phase := range []struct {
+	done, hung, err := stopBrowserLeader(dir, r, reapLeader)
+	if done || err != nil {
+		return err
+	}
+	phases := []struct {
 		signal syscall.Signal
 		wait   time.Duration
-	}{{syscall.SIGTERM, 5 * time.Second}, {syscall.SIGKILL, 5 * time.Second}} {
+	}{{syscall.SIGTERM, 5 * time.Second}, {syscall.SIGKILL, 5 * time.Second}}
+	if hung {
+		// (Chrome ignored SIGTERM: a TERM to its helpers now would make it
+		// crash; SIGKILL leaves no crash report)
+		phases = phases[1:]
+	}
+	for _, phase := range phases {
 		gone, err := groupGone(r.PGID)
 		if err != nil {
 			return groupCause("cleanup_failed", err)
@@ -281,6 +291,70 @@ func terminateBrowserGroup(dir string, r browserGroup, reapLeader bool) error {
 	}
 	return groupError("cleanup_pending")
 }
+
+// stopBrowserLeader asks Chrome alone to quit first (SIGTERM to the group
+// leader: Chrome itself, the launch shim having exec'd into it), so that it
+// shuts down and ends its own helpers. Signalling the whole group at once
+// kills the helpers under a browser that is still running, which makes it
+// crash: macOS then shows "Google Chrome quit unexpectedly". Reports whether
+// the group is gone; when Chrome is not identified or does not finish in
+// time, the group phases follow.
+func stopBrowserLeader(dir string, r browserGroup, reapLeader bool) (done, hung bool, err error) {
+	if r.Profile != filepath.Base(dir) {
+		return false, false, nil
+	}
+	current, scanErr := groupProcesses(r.PGID)
+	if scanErr != nil {
+		return false, false, nil
+	}
+	leader := false
+	for _, p := range current {
+		if p.PID != r.PGID || p.Zombie {
+			continue
+		}
+		for _, m := range r.Members {
+			leader = leader || sameProcess(p, m)
+		}
+	}
+	if !leader { // (gone, or not the process recorded)
+		return false, false, nil
+	}
+	if syscall.Kill(r.PGID, syscall.SIGTERM) != nil {
+		return false, false, nil
+	}
+	// Until Chrome has exited (it ends its helpers on the way): what is
+	// left after that goes with the group.
+	until := time.Now().Add(3 * time.Second)
+	for time.Now().Before(until) {
+		current, scanErr := groupProcesses(r.PGID)
+		if scanErr == nil {
+			reapKnownBrowserChildren(r, current, reapLeader)
+		}
+		gone, goneErr := groupGone(r.PGID)
+		if goneErr != nil {
+			return false, false, groupCause("cleanup_failed", goneErr)
+		}
+		if gone {
+			return true, false, removeBrowserGroup(dir)
+		}
+		if scanErr == nil && !leaderRunning(r, current) {
+			time.Sleep(100 * time.Millisecond) // (its helpers' last moment)
+			return false, false, nil
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	return false, true, nil
+}
+
+func leaderRunning(r browserGroup, current []groupProcess) bool {
+	for _, p := range current {
+		if p.PID == r.PGID && !p.Zombie {
+			return true
+		}
+	}
+	return false
+}
+
 func recoverProfileProcesses(dir string, owner *groupProcess) error {
 	r, err := readBrowserGroup(dir)
 	if errors.Is(err, os.ErrNotExist) {
