@@ -34,6 +34,7 @@ internal/provider           provider settings (cc-switch, captured env)
 internal/console            local backend the App talks to
 internal/web/dist           built web UI, embedded in the binary (generated, committed)
 internal/integration        hub + HTTP + client + CLI wired in one process
+internal/coordeval          the coordination test: fake agents, scenarios, scores (docs/coord-eval.md)
 web/                        React + Vite + Tailwind source of the UI
 ios/                        iOS app (SwiftUI; see ios/README.md). Built with Xcode on a Mac, not by `make`
 skill/myco/SKILL.md         skill that teaches an agent to use myco
@@ -54,6 +55,7 @@ make web                # rebuild web/ into internal/web/dist (Node 18+)
 cd web && npm run typecheck
 cd web && npm run dev:app   # UI against the mock App backend; prepare locked apps first (docs/building.md)
 make app                # macOS only: bin/myco.app
+make coord-eval CLI=claude   # coordination test against a real Claude Code/Codex coordinator (spends tokens; not CI; docs/coord-eval.md)
 scripts/ship.sh         # push to main: rebuilds dist if web/ changed, rebases (dist-only conflicts rebuilt), pushes; --check runs vet+test first
 ```
 
