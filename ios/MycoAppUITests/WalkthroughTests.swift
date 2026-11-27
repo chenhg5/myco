@@ -423,6 +423,23 @@ final class WalkthroughTests: XCTestCase {
         try? XCUIScreen.main.screenshot().pngRepresentation.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name + ".png"))
     }
 
+    /// The members' faces, light and dark (cap shapes and what they wear,
+    /// spread in the workspace as on the desktop), to look at.
+    @MainActor
+    func testMembersShowTheirFaces() {
+        for appearance in ["light", "dark"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-myco-lang", "en", "-myco-appearance", appearance, "-myco-start", "demo"]
+            app.launch()
+            XCTAssertTrue(app.buttons["chrome.members"].waitForExistence(timeout: 15))
+            shot("faces-chats-\(appearance)")
+            app.buttons["chrome.members"].tap()
+            XCTAssertTrue(app.buttons["member.studio-codex-e07b"].waitForExistence(timeout: 5))
+            shot("faces-members-\(appearance)")
+            app.terminate()
+        }
+    }
+
     @MainActor
     func testAddingAnAgentGivesASentenceWithARealLink() {
         let app = launch()

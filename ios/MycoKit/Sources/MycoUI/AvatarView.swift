@@ -20,6 +20,7 @@ public struct AvatarView: View {
     let status: StatusTone?
     let badge: Badge?
     let away: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     public init(_ face: Face, size: CGFloat = 40, status: StatusTone? = nil, badge: Badge? = nil, away: Bool = false) {
         self.face = face
@@ -53,16 +54,22 @@ public struct AvatarView: View {
         switch face {
         case .mushroom(let look):
             let cap = Color(hex: look.capColor)
+            let dark = colorScheme == .dark
             ZStack {
                 RoundedRectangle(cornerRadius: size * 0.32, style: .continuous).fill(MycoColor.card)
-                RoundedRectangle(cornerRadius: size * 0.32, style: .continuous).fill(cap.opacity(0.18))
-                PixelGrid(rows: look.rows, top: 2, sprout: look.sprout) { key in
-                    switch key {
-                    case "C": return cap
-                    case "o": return Color.white.opacity(0.85)
-                    case "S": return Color(hex: 0xEFE3CC)
-                    case "e", "g": return Color(hex: 0x2F2A22)
-                    case "b": return Color(hex: 0xE86E6E, opacity: 0.55)
+                RoundedRectangle(cornerRadius: size * 0.32, style: .continuous).fill(cap.opacity(dark ? 0.22 : 0.16))
+                RoundedRectangle(cornerRadius: size * 0.32, style: .continuous).strokeBorder(cap.opacity(0.3), lineWidth: 0.5)
+                MushroomPixels(pixels: look.pixels) { paint in
+                    switch paint {
+                    case .color(let hex): return Color(hex: hex)
+                    case .part("C"): return cap
+                    case .part("o"): return Color.white.opacity(0.85)
+                    // the stem: a warm beige with its right edge in shade, so it
+                    // reads on a pale tile; cream on dark
+                    case .part("S"): return Color(hex: dark ? 0xEFE3CC : 0xDCC398)
+                    case .part("T"): return Color(hex: dark ? 0xD4C19B : 0xC09F6C)
+                    case .part("e"), .part("g"): return Color(hex: 0x2F2A22)
+                    case .part("b"): return Color(hex: 0xE86E6E, opacity: 0.55)
                     default: return nil
                     }
                 }
@@ -71,7 +78,7 @@ public struct AvatarView: View {
         case .computer:
             ZStack {
                 RoundedRectangle(cornerRadius: size * 0.32, style: .continuous).fill(MycoColor.pill)
-                PixelGrid(rows: Self.screen, top: 0, sprout: false) { key in
+                PixelGrid(rows: Self.screen) { key in
                     switch key {
                     case "W": return Color(hex: 0x5A5F6B)
                     case "F": return Color(hex: 0x15171C)
@@ -99,26 +106,18 @@ public struct AvatarView: View {
 /// Twelve columns of square pixels, drawn on whole points so edges stay crisp.
 struct PixelGrid: View {
     let rows: [String]
-    /// Empty rows above the drawing (a mushroom leaves two for its sprout).
-    let top: Int
-    let sprout: Bool
     let fill: (Character) -> Color?
 
     var body: some View {
         Canvas { context, size in
-            let total = CGFloat(rows.count + top)
+            let total = CGFloat(rows.count)
             let pixel = min(size.width / 12, size.height / total)
             let originX = (size.width - pixel * 12) / 2
             let originY = (size.height - pixel * total) / 2
             func rect(_ x: Int, _ y: Int, _ w: Int = 1, _ h: Int = 1) -> Path {
                 Path(CGRect(
-                    x: originX + CGFloat(x) * pixel, y: originY + CGFloat(y + top) * pixel,
+                    x: originX + CGFloat(x) * pixel, y: originY + CGFloat(y) * pixel,
                     width: CGFloat(w) * pixel + 0.3, height: CGFloat(h) * pixel + 0.3))
-            }
-            if sprout {
-                let green = Color(hex: 0x5AA86A)
-                context.fill(rect(6, -2, 1, 2), with: .color(green))
-                context.fill(rect(7, -2, 1, 1), with: .color(green))
             }
             for (y, row) in rows.enumerated() {
                 for (x, key) in row.enumerated() {
@@ -126,7 +125,32 @@ struct PixelGrid: View {
                 }
             }
         }
-        .aspectRatio(12 / CGFloat(rows.count + top), contentMode: .fit)
+        .aspectRatio(12 / CGFloat(rows.count), contentMode: .fit)
+    }
+}
+
+/// A mushroom's drawing (12 by 14 pixels), on whole points like `PixelGrid`.
+struct MushroomPixels: View {
+    let pixels: [[MushroomLook.Paint?]]
+    let fill: (MushroomLook.Paint) -> Color?
+
+    var body: some View {
+        Canvas { context, size in
+            let total = CGFloat(pixels.count)
+            let pixel = min(size.width / 12, size.height / total)
+            let originX = (size.width - pixel * 12) / 2
+            let originY = (size.height - pixel * total) / 2
+            for (y, row) in pixels.enumerated() {
+                for (x, paint) in row.enumerated() {
+                    guard let paint, let color = fill(paint) else { continue }
+                    let rect = CGRect(
+                        x: originX + CGFloat(x) * pixel, y: originY + CGFloat(y) * pixel,
+                        width: pixel + 0.3, height: pixel + 0.3)
+                    context.fill(Path(rect), with: .color(color))
+                }
+            }
+        }
+        .aspectRatio(12 / CGFloat(pixels.count), contentMode: .fit)
     }
 }
 

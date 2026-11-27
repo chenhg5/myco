@@ -22,6 +22,14 @@ extension AvatarView.Face {
 }
 
 extension MushroomLook {
+    /// Spreads the faces of a workspace's agents, so no two drawn from ids
+    /// share a colour and a cap shape (as the desktop app does).
+    static func rememberWorkspaceFaces(of agents: [Agent]) {
+        rememberWorkspaceFaces(agents.filter { Naming.kind(of: $0) == .agent }.map {
+            Member(id: $0.id.isEmpty ? $0.name : $0.id, createdAt: $0.createdAt, avatar: $0.avatar)
+        })
+    }
+
     static func of(_ agent: Agent?) -> MushroomLook {
         guard let agent else { return MushroomLook(seed: "?") }
         return MushroomLook(seed: agent.id.isEmpty ? agent.name : agent.id, avatar: agent.avatar)
