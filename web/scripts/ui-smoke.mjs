@@ -3151,15 +3151,32 @@ async function runMatrix(browser, size, scheme) {
     await step("单聊 · agent 名字变成链接", async () => {
       // (and a short name people write: cloud-7 for cloud-7-claude-rmv6)
       const routeURL = /\/app\/overview(\?|$)/;
-      await page.route(routeURL, async (route) => {
-        const response = await route.fetch();
-        const json = await response.json();
-        const list = (json.hubs || []).find((h) => h.id === "hub_studio")?.overview?.agents;
-        const model = list?.find((x) => x.agent?.kind === "agent");
-        if (list && model && !list.some((x) => x.agent.name === "cloud-7-claude-rmv6")) {
-          list.push({ ...model, agent: { ...model.agent, id: "ag_cloud7", name: "cloud-7-claude-rmv6", display_name: "移动端工程师", avatar: undefined } });
-        }
-        await route.fulfill({ response, json });
+      // The App polls this every 5s, so a handler can still be running when
+      // the step ends (unroute, reload). Each one is kept and waited for
+      // before the reload, and never left to reject on its own (that killed
+      // the whole run). A request already finished elsewhere (the page
+      // navigated, or it was unrouted) is the only thing let go; any other
+      // error fails the step.
+      const inflight = new Set();
+      const routeErrors = [];
+      await page.route(routeURL, (route) => {
+        const handled = (async () => {
+          const response = await route.fetch();
+          const json = await response.json();
+          const list = (json.hubs || []).find((h) => h.id === "hub_studio")?.overview?.agents;
+          const model = list?.find((x) => x.agent?.kind === "agent");
+          if (list && model && !list.some((x) => x.agent.name === "cloud-7-claude-rmv6")) {
+            list.push({ ...model, agent: { ...model.agent, id: "ag_cloud7", name: "cloud-7-claude-rmv6", display_name: "移动端工程师", avatar: undefined } });
+          }
+          await route.fulfill({ response, json });
+        })().catch(async (e) => {
+          if (/Route is already handled/.test(String(e?.message || e))) return;
+          routeErrors.push(e);
+          await route.abort().catch(() => undefined);
+        });
+        inflight.add(handled);
+        void handled.finally(() => inflight.delete(handled));
+        return handled;
       });
       await page.reload({ waitUntil: "domcontentloaded" });
       await page.locator(".app-shell").waitFor();
@@ -3195,8 +3212,11 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".conv-detail .conv-head", { hasText: "Review (Codex 云端)" }).first().waitFor({ timeout: 15_000 });
       } finally {
         await page.unroute(routeURL);
+        await Promise.allSettled([...inflight]);
         await page.reload({ waitUntil: "domcontentloaded" });
         await page.locator(".app-shell").waitFor();
+        // (a handler's own error is the cause of whatever failed after it)
+        if (routeErrors.length) throw routeErrors[0];
       }
     });
 
