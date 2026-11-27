@@ -40,10 +40,10 @@ In "Add an agent", first pick **This computer** under "Where it is", then one of
 
 **Start a new one**:
 
-1. **Which AI**: click a CLI.
+1. **Which AI**: click a CLI. The common ones show first, with any other that computer has installed; the rest are under **More**.
 2. **Where its model comes from** (Claude Code and Codex): by default, its own sign-in on that computer. Have your own API key (DeepSeek, Kimi, MiniMax, OpenCode Go…)? Pick **+ Use your own API key**: choose the vendor, enter the key, **Test**, then **Save and use**; it is kept in Settings › Model providers, to pick on any computer from then on. With a provider picked, **Model** lists its models. The row also says who keeps the key: with end-to-end encryption on, only your devices open it; off, the hub keeps it, and its administrator could see it.
-3. **Which folder it works in**: optional; left empty, a new one is made where this computer allows. Folders you used before are listed below; click to fill one in.
-4. **Its role**: "Backend engineer", say; optional.
+3. **Its name**: what people call it, "Backend helper", say; optional.
+4. **Which folder it works in**: optional; left empty, a new one is made where this computer allows (named after it). Folders you used before are listed below; click to fill one in.
 5. Open **More: model, effort, access** if you need them.
 6. Click **Start it**.
 

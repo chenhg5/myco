@@ -2157,12 +2157,12 @@ async function runMatrix(browser, size, scheme) {
         const labels = [...el.querySelectorAll(".app-field-label")].map((x) => x.textContent || "");
         const line = el.querySelector("[data-testid=allowed-dirs] .add-dirs-line");
         return {
-          roleFirst: labels.findIndex((t) => t.startsWith("它的分工")) < labels.findIndex((t) => t.startsWith("在哪个文件夹干活")),
+          roleFirst: labels.findIndex((t) => t.startsWith("它的名字")) < labels.findIndex((t) => t.startsWith("在哪个文件夹干活")),
           oneLine: !!line && line.getBoundingClientRect().height < 24,
           recent: !!el.querySelector(".add-recent .add-recent-label"),
         };
       });
-      if (!lower.roleFirst) throw new Error("分工应在文件夹前面（不填文件夹时用它起名）");
+      if (!lower.roleFirst) throw new Error("名字应在文件夹前面（不填文件夹时用它起名）");
       if (!lower.oneLine) throw new Error("允许的文件夹应只占一行");
       if (!lower.recent) throw new Error("用过的文件夹应写明「用过的」");
       await settle(page, 200);

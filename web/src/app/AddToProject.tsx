@@ -979,10 +979,10 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
         </div>
       )}
       <ModelSource hubId={hubId} cli={cli} machineName={machine.name} value={providerId} onChange={setProviderId} model={model} onModel={setModel} busy={!!busy} />
-      {/* (its role first: it also names the folder made when none is given) */}
+      {/* (its name first: it also names the folder made when none is given) */}
       <label className="app-field">
-        <span className="app-field-label">{L("它的分工（可以不填）", "Its role (optional)")}</span>
-        <input className="app-input" value={role} onChange={(e) => setRole(e.target.value)} placeholder={L("比如 后端工程师", "e.g. Backend engineer")} disabled={!!busy} />
+        <span className="app-field-label">{L("它的名字（可以不填）", "Its name (optional)")}</span>
+        <input className="app-input" value={role} onChange={(e) => setRole(e.target.value)} placeholder={L("比如 后端小助手", "e.g. Backend helper")} disabled={!!busy} />
       </label>
       <label className="app-field">
         <span className="app-field-label">{autoDir ? L("在哪个文件夹干活（可以不填）", "Which folder it works in (optional)") : L("在哪个文件夹干活", "Which folder it works in")}</span>
