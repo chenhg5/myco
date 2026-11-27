@@ -232,6 +232,7 @@ A menu stays open when another panel scrolls (including a streaming chat), or wh
 
 ### 6.9 Hints and errors
 
+- **Automations and workflows** are cards in a grid (`.pc-list.au-cards`: as many to a row as fit at 280px or more, one column on a narrow window): name, what and when (a long description cut at two lines), the last run, and 运行 and ⋯ at the card's foot; no icon on the left (it repeated what the words say). A failure is never a red sentence: in a run list "失败了" is a small chip on a pale red ground and its reason sits beside it in grey, one line, cut, whole on hover; an automation's last run that did not go keeps only its red dot (the words grey); a workflow's failure count has a red dot before it, not red words (UI smoke "工作流", "自动化").
 - Dialogs (`Modal`) never scroll sideways: what is too wide wraps or scrolls inside itself (a command in a notice, `.app-notice .app-command`, wraps; UI smoke "项目 · 添加 agent" checks a long install command). The title is followed by its description with 14px under it; a dialog with no description (the words are there for screen readers only) keeps the same 14px under its title (项目设置 and the like; UI smoke "项目资料").
 - Inline errors use `ErrorText`: first say what happened, then what can be done. Cannot reach the Hub and Hub version too old have ready-made wording; do not give the user the raw error.
 - Warnings use `.app-warn` / `.app-notice` (an orange icon with one sentence).

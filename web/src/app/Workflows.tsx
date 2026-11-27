@@ -399,7 +399,7 @@ export function WorkflowsPage({ hubId, rows, now, projects = [], open, onOpened,
               </div>
               <p className="wf-catalog-note" role="status">{L(`显示 ${filtered.length} / ${list.length} 个工作流`, `Showing ${filtered.length} of ${list.length} workflows`)}</p>
               {filtered.length === 0 && <div className="app-empty" data-testid="workflows-no-results"><h2>{L("没有符合条件的工作流", "No matching workflows")}</h2><p>{L("换个关键词或清除筛选再看看。", "Try another search or clear the filters.")}</p><button className="app-btn" type="button" onClick={resetFilters}>{L("清除筛选", "Clear filters")}</button></div>}
-              <div className="pc-list" data-testid="workflows">
+              <div className="pc-list au-cards" data-testid="workflows">
                 {filtered.map((w) => {
                   // (right-click, or ⋯: the same menu)
                   const items: MenuItem[] = [
@@ -412,7 +412,6 @@ export function WorkflowsPage({ hubId, rows, now, projects = [], open, onOpened,
                   return (
                   <div key={w.id} className={cn("au-row", !w.enabled && "is-off")} onContextMenu={(e) => { e.preventDefault(); menu.open(e, items); }}>
                     <button type="button" className="au-row-main" onClick={() => setOpenId(w.id)} title={L("打开：流程和每一次运行", "Open: its steps and every run")}>
-                      <span className="au-icon"><WorkflowIcon /></span>
                       <span className="au-row-text">
                         <span className="au-row-name">{w.title || w.name}</span>
                         <span className="au-row-what">
@@ -428,7 +427,7 @@ export function WorkflowsPage({ hubId, rows, now, projects = [], open, onOpened,
                             <>
                               <span>{L("最近：", "Last:")}</span><RunMark status={w.last_run.status} />
                               <span className={cn("wf-run-state", runTone(w.last_run.status))}>{runWords(w.last_run.status)}</span>
-                              {runSubject(w.last_run) && <span className="wf-row-subject">{runSubject(w.last_run)}</span>}
+                              {runSubject(w.last_run) && <span className="wf-row-subject" title={runSubject(w.last_run)}>{runSubject(w.last_run)}</span>}
                               <span>{timeAgo(w.last_run.created_at, now)}</span>
                             </>
                           ) : <span>{w.run_counts?.total ? L("最近记录暂不可用", "Latest run unavailable") : L("还没跑过", "Not run yet")}</span>}

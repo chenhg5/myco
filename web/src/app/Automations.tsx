@@ -214,7 +214,7 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage, onOpenRun }: 
             </div>
           </div>
           <SectionHead title={L("我的自动化", "Your automations")} count={list.length} />
-        <div className="pc-list" data-testid="automations">
+        <div className="pc-list au-cards" data-testid="automations">
           {list.map((a) => {
             const r = rowOf(a.to);
             const rowMenu = (x: Automation): MenuItem[] => [
@@ -225,14 +225,12 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage, onOpenRun }: 
               { label: L("删除", "Delete"), icon: Trash2, danger: true, onSelect: () => setRemoving(x) },
             ];
             const when = [a.schedule ? describe(a.schedule.cron) : "", a.webhook ? L("Webhook 调用时", "On webhook") : ""].filter(Boolean).join(L("，或", ", or "));
-            const Icon = a.schedule ? Clock : Webhook;
             return (
               <div key={a.id} className={cn("au-row", !a.enabled && "is-off")} onContextMenu={(e) => {
                 e.preventDefault();
                 menu.open(e, rowMenu(a));
               }}>
                 <button type="button" className="au-row-main" onClick={() => setOpenId(a.id)} title={L("打开：设置和每一次运行", "Open: its settings and every run")}>
-                  <span className={cn("au-icon", !a.schedule && "is-hook")}><Icon /></span>
                   <span className="au-row-text">
                     <span className="au-row-name">{a.name}</span>
                     <span className="au-row-what">
@@ -253,8 +251,8 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage, onOpenRun }: 
                         : a.next_run_at ? <span>{L(`下次 ${soonLabel(new Date(a.next_run_at), new Date(now))}`, `Next ${soonLabel(new Date(a.next_run_at), new Date(now))}`)}</span>
                           : a.webhook ? <span>{L("等外部调用", "Waiting for a call")}</span> : null}
                       {a.last_run && (
-                        <span className={cn("au-last", outcomeTone(a.last_run))}>
-                          <i aria-hidden />{L(`上次 ${timeAgo(a.last_run.at, now)} · `, `Last ${timeAgo(a.last_run.at, now)} · `)}{outcomeWords(a.last_run)}
+                        <span className={cn("au-last", outcomeTone(a.last_run))} title={outcomeWords(a.last_run)}>
+                          <i aria-hidden /><span className="au-last-text">{L(`上次 ${timeAgo(a.last_run.at, now)} · `, `Last ${timeAgo(a.last_run.at, now)} · `)}{outcomeWords(a.last_run)}</span>
                         </span>
                       )}
                     </span>

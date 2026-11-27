@@ -5741,7 +5741,12 @@ button.app-label:hover { filter: brightness(0.95); }
 .au-last { display: inline-flex; align-items: center; gap: 5px; }
 .au-last > i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
 .au-last.is-ok > i { background: var(--green); }
-.au-last.is-bad { color: var(--red); }
+/* A failed last run: the red dot says so; the words stay quiet (with
+   many failures a list of red sentences shouts). One line, cut; the whole
+   reason on hover. */
+.au-last.is-bad { color: var(--muted); }
+.au-last { min-width: 0; max-width: 100%; }
+.au-last-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .au-last.is-bad > i { background: var(--red); }
 
 /* An on/off switch. */
@@ -9669,8 +9674,9 @@ body.is-resizing {
 .wf-run-state { font-weight: 500; color: var(--fg-2); }
 .wf-run-state.is-ok { color: var(--green); }
 .wf-run-state.is-wait { color: var(--amber); }
-.wf-run-state.is-bad { color: var(--red); }
-.wf-run-why { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in srgb, var(--red) 75%, var(--muted)); }
+/* Failed: a small tinted chip; its reason beside it in plain grey. */
+.wf-run-state.is-bad { color: var(--red); background: var(--red-soft); padding: 0 6px; border-radius: 5px; font-size: 11px; line-height: 18px; }
+.wf-run-why { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 /* A run's (or a step's) state at a glance. */
 .wf-mark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%;
   background: var(--pill); color: var(--muted); }
@@ -10737,10 +10743,41 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .wf-catalog-search .app-input { width: 100%; padding-left: 32px; }
 .wf-catalog-tools > select { flex: 0 1 160px; width: auto; min-width: 0; }
 .wf-row-counts { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 3px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.wf-row-counts .is-bad { color: var(--red); }
+.wf-row-counts .is-bad { display: inline-flex; align-items: center; gap: 5px; color: var(--fg-2); }
+.wf-row-counts .is-bad::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
 @media (max-width: 900px) {
   .wf-catalog-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wf-catalog-stats .au-stat:last-child { grid-column: auto; }
   .wf-catalog-search { flex-basis: 100%; }
   .wf-catalog-tools > select { flex: 1; }
 }
+
+/* Automations and workflows as cards, several to a row on a wide window
+   (one column on a narrow one): name, what and when, the last run, then
+   运行 and ⋯ at the card's foot. No icon on the left: it said nothing
+   the words do not. */
+.pc-list.au-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+.pc-list.au-cards > .au-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+.pc-list.au-cards > .au-row:hover { background: var(--card); box-shadow: 0 0 0 1px var(--line), var(--pop-shadow); }
+.pc-list.au-cards .au-row-main { flex: 1; padding: 10px 10px 6px; }
+.pc-list.au-cards .au-row-text { gap: 5px; }
+.pc-list.au-cards .au-row-what > span:not(.au-row-to) { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pc-list.au-cards .wf-row-subject { max-width: 100%; }
+.pc-list.au-cards .wf-row-actions { justify-content: flex-end; margin: 0 6px 6px; }
+.pc-list.au-cards > .au-row.is-off { opacity: .8; }
+
