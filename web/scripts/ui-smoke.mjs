@@ -6532,6 +6532,54 @@ async function runMatrix(browser, size, scheme) {
       await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
+    // Full access, allowed on this computer from an agent's run settings:
+    // its runner picks the new limit up by itself (live_max_access), so Full
+    // can be chosen a moment later without reopening anything; an older
+    // runner says plainly to restart myco here, with the command.
+    await step("运行设置 · 允许完全权限", async () => {
+      const mock = `http://${HOST}:${mockPort()}`;
+      try {
+        await go(page, "成员", narrow);
+        const card = page.locator(".mb-card", { hasText: "MCP Claude" }).first();
+        await card.scrollIntoViewIfNeeded(); await card.click();
+        await page.locator(".ms").waitFor({ timeout: 10_000 });
+        await clickVisible(page, page.locator(".ms .ms-fold"));
+        const full = page.locator('.ms select[aria-label="权限"] option[value="full"]');
+        await full.waitFor({ state: "attached", timeout: 5_000 });
+        if (!(await full.isDisabled())) throw new Error("这台电脑还没允许时，「完全放开」不该能选");
+        await clickVisible(page, page.locator(".ms").getByRole("button", { name: "在这台电脑上允许" }));
+        await clickVisible(page, page.locator(".ms").getByRole("button", { name: "允许", exact: true }));
+        await page.locator(".ms [data-testid=full-access-pending]").waitFor({ timeout: 5_000 });
+        if (size.width === 1200) { await settle(page, 150); await shot(page, size, scheme, "member-full-access-pending"); }
+        // ...and then Full can be chosen, nothing reopened.
+        await page.waitForFunction(() => {
+          const o = document.querySelector('.ms select[aria-label="权限"] option[value="full"]');
+          return !!o && !o.disabled;
+        }, null, { timeout: 15_000 });
+        if (await page.locator(".ms [data-testid=full-access-pending], .ms [data-testid=full-access-restart]").count()) throw new Error("能选「完全放开」后，等待的提示应消失");
+        await settle(page, 150);
+        await shot(page, size, scheme, "member-full-access-allowed");
+        await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
+        // An older runner (no live_max_access): restart myco here, said plainly.
+        const pm = page.locator(".mb-card", { hasText: "PM (Codex)" }).first();
+        await pm.scrollIntoViewIfNeeded(); await pm.click();
+        await page.locator(".ms").waitFor({ timeout: 10_000 });
+        await clickVisible(page, page.locator(".ms .ms-fold"));
+        const restart = page.locator(".ms [data-testid=full-access-restart]");
+        await restart.waitFor({ timeout: 10_000 });
+        const said = compactText(await restart.innerText());
+        if (!said.includes("重启") || !said.includes("myco runner service restart")) throw new Error(`老版本的 runner 应写明要重启 myco，实际「${said}」`);
+        await restart.getByRole("button", { name: "重启 myco 后台" }).waitFor({ timeout: 5_000 });
+        await settle(page, 150);
+        await shot(page, size, scheme, "member-full-access-restart");
+        await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
+      } finally {
+        // (back as it was for the steps after this one)
+        await fetch(`${mock}/app/local/shell-access`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ allow: false }) });
+        await page.waitForTimeout(1_500);
+      }
+    });
+
     // An agent on another vendor with an API key: the models are that
     // vendor's, the line says where they came from and when, and its owner
     // can have them listed again.

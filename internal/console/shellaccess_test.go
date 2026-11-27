@@ -32,7 +32,9 @@ func TestShellAccess(t *testing.T) {
 	if m["shell_allowed"] != false || len(m["machines"].([]any)) != 1 || m["machines"].([]any)[0] != "test-mac" {
 		t.Fatalf("status before: %v", m)
 	}
-	if code, m, _ := r.do("POST", "/app/local/shell-access", map[string]bool{"allow": true}); code != 200 || m["shell_allowed"] != true {
+	// It says the limit agents now run under (runners read it again on
+	// every turn), so the app can show the result at once.
+	if code, m, _ := r.do("POST", "/app/local/shell-access", map[string]bool{"allow": true}); code != 200 || m["shell_allowed"] != true || m["max_access"] != "full" {
 		t.Fatalf("allow: %d %v", code, m)
 	}
 	got, _ := os.ReadFile(path)
@@ -44,7 +46,7 @@ func TestShellAccess(t *testing.T) {
 	if st, _ := os.Stat(path); runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 {
 		t.Errorf("machine.yaml mode %o, want 600 (it holds a token)", st.Mode().Perm())
 	}
-	if code, m, _ := r.do("POST", "/app/local/shell-access", map[string]bool{"allow": false}); code != 200 || m["shell_allowed"] != false {
+	if code, m, _ := r.do("POST", "/app/local/shell-access", map[string]bool{"allow": false}); code != 200 || m["shell_allowed"] != false || m["max_access"] != "workspace" {
 		t.Fatalf("turn off: %d %v", code, m)
 	}
 	got, _ = os.ReadFile(path)

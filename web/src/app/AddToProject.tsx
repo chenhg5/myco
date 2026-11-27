@@ -445,7 +445,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
       {onComputer && how === "new" && (
         picked ? (
           <NewAgentPane open={open && how === "new"} hubId={hubId} rows={rows} machine={picked} here={where === "here"} state={pickedInfo}
-            onStarted={(a) => void arrived(a)} onState={setNewState} />
+            onStarted={(a) => void arrived(a)} onState={setNewState} onReloadInfo={() => picked && loadInfo(picked, true)} />
         ) : (
           <div className="add-pane"><div className="app-empty-note">{L("这台电脑还没连上这个工作区，开不了新会话。点「连一台电脑」把它连上。", "This computer is not connected to this workspace, so it cannot start sessions. Connect it with Connect a computer.")}</div></div>
         )
@@ -849,7 +849,7 @@ const ACCESS_RANK: Record<string, number> = { readonly: 1, workspace: 2, full: 3
 /** Starts a new agent session on a computer: which AI, which folder. What
  *  the computer said about itself shapes it: its AIs, where folders may be,
  *  the access it allows. */
-function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onState }: {
+function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onState, onReloadInfo }: {
   open: boolean;
   hubId: string;
   rows: AgentRow[];
@@ -861,6 +861,8 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   /** whether it can start now, and whether it is starting: the dialog's
    *  footer carries the button */
   onState: (s: { ready: boolean; busy: boolean }) => void;
+  /** ask the computer again what it allows (after "Allow" here) */
+  onReloadInfo?: () => void;
 }) {
   const [cli, setCli] = useState<SpawnCli>("claude");
   const [dir, setDir] = useState("");
@@ -1045,6 +1047,12 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
                 : access === "readonly"
                   ? L("只看不改：能读文件、搜索，不改文件、不跑有副作用的命令。", "Looks, does not change: reads and searches, no edits, no commands with side effects.")
                   : L("能改这个文件夹里的文件；以后可以在对话里改。", "May change files in this folder; can be changed later in the conversation.")}</span>
+            {/* This computer: allow it here, and the computer is asked again,
+                so Full can be chosen at once (a new session reads the limit
+                when it starts). */}
+            {tooHigh && access === "full" && hub && (
+              <LocalShellAccess machine={machine} hub={hub} what="full" onlyLocal onChange={async () => { onReloadInfo?.(); }} />
+            )}
           </div>
         </div>
       </details>
