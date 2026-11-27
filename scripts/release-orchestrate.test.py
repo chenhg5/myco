@@ -82,6 +82,11 @@ class ReleaseTests(unittest.TestCase):
         api.pages=lambda *args:[{'name':'*','type':'branch'}]
         with self.assertRaises(o.ReleaseError): o.environment_policy(api)
 
+    def test_ready_marker_error_explains_repository_variable_scope(self):
+        with patch.dict(os.environ, {'RELEASE_ENVIRONMENT_READY': ''}):
+            with self.assertRaisesRegex(o.ReleaseError, 'Repository Actions variable.*Environment.*version job'):
+                o.environment_policy(Fake())
+
     def test_literal_titles_and_metadata_do_not_change_working_tree(self):
         cwd=os.getcwd()
         with tempfile.TemporaryDirectory() as tmp:

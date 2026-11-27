@@ -112,9 +112,12 @@ def environment_policy(api):
     allowed = {(r.get('name'), r.get('type')) for r in rules}
     if allowed != {(name, 'branch') for name in BRANCHES}:
         raise ReleaseError('release Environment allows unexpected/missing branches or tags')
-    # Owner sets this public variable only after moving secrets and removing repository duplicates.
+    # This marker is repository-scoped: the version job deliberately has no
+    # credentialed Environment, and cannot read Environment-only variables.
     if os.environ.get('RELEASE_ENVIRONMENT_READY') != POLICY:
-        raise ReleaseError('Glenn must finish release Environment setup before live dispatch')
+        raise ReleaseError(f'Repository Actions variable RELEASE_ENVIRONMENT_READY={POLICY} is required '
+                           '(Settings > Secrets and variables > Actions > Variables). '
+                           'Setting it only on the release Environment does not reach the version job.')
 
 
 def brief(previous, sha, version):
