@@ -269,7 +269,7 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				if err != nil {
 					return nil, err
 				}
-				if current.OwnerID != me.OwnerID || current.MachineID == "" || (me.MachineID != "" && current.MachineID != me.MachineID) {
+				if !processOwnerCurrent(current, me) {
 					return nil, fmt.Errorf("machine ownership changed")
 				}
 				agent, err := sh.processes.AgentFor(hub, me.OwnerID, ref)
@@ -543,4 +543,12 @@ func providerSenderOK(ctx context.Context, c *client.Client, sender, sealedBy st
 		return errors.New("it was not sealed by this computer's owner")
 	}
 	return nil
+}
+
+// A machine can be transferred independently of its nodes. Unknown ownership on
+// an older Hub must never authorize a destructive process operation.
+func processOwnerCurrent(current, expected *api.Agent) bool {
+	return current != nil && expected != nil && current.MachineOwnerID != nil &&
+		*current.MachineOwnerID == expected.OwnerID && current.OwnerID == expected.OwnerID &&
+		current.MachineID != "" && (expected.MachineID == "" || current.MachineID == expected.MachineID)
 }

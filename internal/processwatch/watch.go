@@ -404,7 +404,7 @@ func (m *Manager) Terminate(ctx context.Context, workspace, member, ref string) 
 			return domain.MachineProcess{}, err
 		}
 		o.ref = ""
-		return domain.MachineProcess{PID: p.PID, Name: cleanName(p.Name), Created: p.Birth}, nil
+		return domain.MachineProcess{PID: p.PID, Name: cleanName(o.process.Name), Created: p.Birth, Agent: o.scope.owner.Agent}, nil
 	}
 	return domain.MachineProcess{}, ErrIdentity
 }

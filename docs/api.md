@@ -1898,7 +1898,7 @@ operation, never a shell command. The machine runner checks the current machine
 and agent ownership, reference freshness, and OS process creation identity again.
 Unknown, expired, reused or unowned processes are refused. A successful response
 has `stopped_process: {name, pid, created, ...}`. Audit action
-`machine.process.stop` records only name, PID and creation identity in its detail,
+`machine.process.stop` records only name, PID, creation identity and the owning agent in its detail,
 plus the standard audit actor and machine target. It records no command line.
 Older runners refuse this special CLI instead of executing an unrelated command;
 older hubs reject the unknown report field, which new clients specifically omit
@@ -1914,3 +1914,9 @@ with setsid before their ancestry is observed cannot be reliably attributed by a
 process group alone. Local ownership registries contain metadata only, with
 owner-only permissions; unknown historical processes are never retroactively
 claimed or offered a terminate button.
+
+For a fresh execution-time ownership check, `GET /v1/me` includes optional
+`machine_owner_id` read from the bound machine's current record. A present empty
+string means unowned; absence (an older Hub or unreadable record) means unknown.
+The process-stop runner refuses unknown ownership or a machine owner different
+from the verified agent owner, including a machine transferred without its nodes.

@@ -5,7 +5,8 @@ serves the actual App through Vite on unused loopback ports, and closes its
 servers and browser afterward. It clears inherited myco, model-provider and mock
 configuration from the child mock's environment, does not attach a real OS
 backend, and blocks browser requests outside loopback. No screenshots are uploaded
-by this command. Use the separate apps checkout at `apps.lock.json`'s source commit (`APPS_TEST_ROOT`,
+by this command. `UI_SMOKE_EXECUTABLE` can select an already installed Chromium
+or Chrome binary, as with the UI smoke runner. Use the separate apps checkout at `apps.lock.json`'s source commit (`APPS_TEST_ROOT`,
 or `.cache/apps-source`). Prepare its verified release bundles with
 `python3 scripts/prepare-apps.py --apps-dir /path/to/apps/dist/official` first.
 See [host build instructions](../../../docs/building.md).

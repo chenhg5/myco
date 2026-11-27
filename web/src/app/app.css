@@ -10940,4 +10940,4 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .machine-health .app-row { display: flex; gap: 12px; justify-content: space-between; align-items: center; }
 .machine-health-process { min-width: 0; overflow-wrap: anywhere; }
 .machine-health-process div { color: var(--muted); font-size: 11.5px; }
-.machine-health-alert .pc-online { color: var(--red); }
+.machine-health-alert .pc-online { color: var(--amber); }

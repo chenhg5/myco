@@ -6554,6 +6554,16 @@ async function runMatrix(browser, size, scheme) {
       await page.getByRole("dialog", { name: "结束这个进程？" }).waitFor();
       await shot(page, size, scheme, "computer-process-confirm");
       await clickVisible(page, page.getByRole("dialog", { name: "结束这个进程？" }).getByRole("button", { name: "取消", exact: true }));
+      await suspect.getByRole("button", { name: "结束", exact: true }).click();
+      const stopping = page.waitForRequest(request => {
+        if (request.method() !== "POST" || !new URL(request.url()).pathname.endsWith("/machines/m_studio/spawn")) return false;
+        return request.postDataJSON()?.cli === "process-stop";
+      });
+      await page.getByRole("dialog", { name: "结束这个进程？" }).getByRole("button", { name: "结束进程", exact: true }).click();
+      const stoppedBody = (await stopping).postDataJSON();
+      if (Object.keys(stoppedBody).sort().join(",") !== "cli,process_ref" || stoppedBody.process_ref !== "demo-suspect") throw new Error("Process stop must use only a typed reference");
+      await page.getByRole("dialog", { name: "结束这个进程？" }).waitFor({ state: "hidden" });
+      await suspect.getByRole("button", { name: "结束", exact: true }).waitFor({ state: "detached" });
       await back();
       await clickVisible(page, page.locator(".pc-card", { hasText: "VPS 东京" }));
       // What it allows and its AIs are tabs of its page.

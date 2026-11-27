@@ -77,7 +77,7 @@ if (args.includes("--resume")) {
   report.errors = report.errors.filter((x) => !selected(x));
 }
 await mkdir(out, { recursive: true });
-const browser = await chromium.launch();
+const browser = await chromium.launch(process.env.UI_SMOKE_EXECUTABLE ? { executablePath: process.env.UI_SMOKE_EXECUTABLE } : {});
 process.on("beforeExit", () => {
   if (!report.complete) process.exitCode = 1;
 });

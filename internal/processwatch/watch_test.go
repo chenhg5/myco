@@ -166,12 +166,15 @@ func TestTerminationRevalidatesIdentityAndNeverSignalsUnknown(t *testing.T) {
 	if _, e := m.Terminate(context.Background(), owner.Workspace, owner.Member, reference); e != ErrIdentity || calls != 0 {
 		t.Fatal("reused PID was signalled", e, calls)
 	}
-	m.lookup = func(int) (Process, error) { return suspect.process, nil }
+	// Windows identity reads intentionally contain no executable name.
+	m.lookup = func(int) (Process, error) {
+		return Process{PID: suspect.process.PID, Birth: suspect.process.Birth}, nil
+	}
 	if _, e := m.Terminate(context.Background(), owner.Workspace, "another-owner", reference); e != ErrIdentity || calls != 0 {
 		t.Fatal("cross-owner signal", e)
 	}
-	if _, e := m.Terminate(context.Background(), owner.Workspace, owner.Member, reference); e != nil || calls != 1 {
-		t.Fatal("verified signal failed", e, calls)
+	if stopped, e := m.Terminate(context.Background(), owner.Workspace, owner.Member, reference); e != nil || calls != 1 || stopped.Name != suspect.process.Name || stopped.Agent != owner.Agent {
+		t.Fatal("verified signal metadata missing", e, calls, stopped.Name, stopped.Agent)
 	}
 	if _, e := m.Terminate(context.Background(), owner.Workspace, owner.Member, reference); e != ErrIdentity || calls != 1 {
 		t.Fatal("replayed reference signalled again", e, calls)

@@ -219,6 +219,8 @@ export interface ProjectDoc {
   binary?: boolean;
 }
 export interface Agent {
+  /** Current bound-machine owner, only from /v1/me; absent means unknown. */
+  machine_owner_id?: string;
   updating?: boolean;
   /** what it is watching for in the background (myco watch); absent on older hubs */
   watching?: number;

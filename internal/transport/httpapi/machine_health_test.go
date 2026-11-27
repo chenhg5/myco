@@ -45,6 +45,18 @@ func TestMachineHealthRuntimeContractWithoutListener(t *testing.T) {
 	if json.Unmarshal(registered.Body.Bytes(), &reg) != nil || reg.Token == "" {
 		t.Fatal("missing test credential")
 	}
+	// /me must distinguish a known unowned machine from an older Hub's unknown owner.
+	machine := call("PUT", "/v1/me/machine", reg.Token, map[string]any{"fingerprint": strings.Repeat("a", 64), "hostname": "test", "os": "test", "arch": "test"})
+	if machine.Code != 200 {
+		t.Fatal("report fixture machine", machine.Code)
+	}
+	me := call("GET", "/v1/me", reg.Token, nil)
+	var identity struct {
+		MachineOwnerID *string `json:"machine_owner_id"`
+	}
+	if json.Unmarshal(me.Body.Bytes(), &identity) != nil || identity.MachineOwnerID == nil || *identity.MachineOwnerID != reg.Agent.OwnerID {
+		t.Fatal("fresh machine owner missing")
+	}
 	health := map[string]any{"owner_id": reg.Agent.OwnerID, "at": "2026-01-01T00:00:00Z", "runner_instance": "runner", "complete": true, "alert": true, "load_ratio": .9, "load_metric": "load1_per_core", "cores": 8, "memory_total": 1000, "memory_available": 50, "processes": []any{map[string]any{"pid": 50, "name": "worker", "created": "birth", "cpu": 99, "memory": 10, "agent": "worker", "suspicious": true, "ref": "reference"}}}
 	reported := call("PUT", "/v1/me/runtime", reg.Token, map[string]any{"cli": "codex", "machine_health": health})
 	if reported.Code != 200 {

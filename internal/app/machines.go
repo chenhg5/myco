@@ -250,6 +250,15 @@ func (s *MachineService) SetRuntime(ctx context.Context, a *domain.Agent, rt dom
 		if health.OwnerID != current.Owner {
 			return domain.Errf(domain.CodePermissionDenied, "machine health owner changed; refresh the runner binding")
 		}
+		if current.MachineID != "" {
+			machine, err := s.machines.Get(ctx, current.MachineID)
+			if err != nil {
+				return err
+			}
+			if machine.Owner != health.OwnerID {
+				return domain.Errf(domain.CodePermissionDenied, "machine health owner changed; refresh the runner binding")
+			}
+		}
 	}
 	now := s.clock.Now()
 	if rt.Away == "updating" {

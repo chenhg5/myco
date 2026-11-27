@@ -49,3 +49,26 @@ func TestMachineHealthCompatibilityOnlyRetriesUnknownField(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeCompatibilityCombinesMainAndHealthFields(t *testing.T) {
+	c, err := New("https://test.invalid", "test-credential")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fields := []string{"account", "profile_ref", "runner_instance", "machine_health", "runner_slots", "models_from", "provider_host"}
+	calls := 0
+	c.http.Transport = healthRoundTripper(func(r *http.Request) (*http.Response, error) {
+		calls++
+		status, body := 200, `{}`
+		if calls <= len(fields) {
+			status = 400
+			b, _ := json.Marshal(map[string]string{"error": "invalid_argument", "message": "unknown field \"" + fields[calls-1] + "\""})
+			body = string(b)
+		}
+		return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+	})
+	err = c.ReportRuntime(context.Background(), api.Runtime{CLI: "codex", Account: "test@example.invalid", Quota: &api.Quota{ProfileRef: "profile"}, RunnerInstance: "runner", MachineHealth: &api.MachineHealth{}, RunnerSlots: &api.RunnerSlots{}, ModelsFrom: "cli", ProviderHost: "test.invalid"})
+	if err != nil || calls != 8 {
+		t.Fatalf("combined legacy fallback calls=%d error=%v", calls, err)
+	}
+}

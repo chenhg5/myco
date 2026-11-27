@@ -19,3 +19,12 @@ func TestMachineHealthRejectsUnsafeReports(t *testing.T) {
 		}
 	}
 }
+
+func TestMachineHealthRejectsExecutablePaths(t *testing.T) {
+	for _, name := range []string{"/private/worker", `C:\private\worker.exe`} {
+		h := MachineHealth{At: time.Now(), Processes: []MachineProcess{{PID: 20, Name: name, Created: "birth"}}}
+		if h.Validate() == nil {
+			t.Fatal("accepted executable path")
+		}
+	}
+}

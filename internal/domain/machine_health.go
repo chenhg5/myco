@@ -47,7 +47,7 @@ func (h MachineHealth) Validate() error {
 		return Errf(CodeInvalidArgument, "invalid machine load metric")
 	}
 	for _, p := range h.Processes {
-		if p.Name == "" || p.Created == "" || p.PID <= 1 || p.CPU < 0 || math.IsNaN(p.CPU) || math.IsInf(p.CPU, 0) || len(p.Name) > 100 || len(p.Created) > 128 || len(p.Agent) > 120 || len(p.Ref) > 128 {
+		if p.Name == "" || strings.ContainsAny(p.Name, `/\`) || p.Created == "" || p.PID <= 1 || p.CPU < 0 || math.IsNaN(p.CPU) || math.IsInf(p.CPU, 0) || len(p.Name) > 100 || len(p.Created) > 128 || len(p.Agent) > 120 || len(p.Ref) > 128 {
 			return Errf(CodeInvalidArgument, "invalid machine process")
 		}
 		for _, s := range []string{p.Name, p.Created, p.Agent, p.Ref} {

@@ -32,11 +32,14 @@ type Delivery struct {
 
 // Agent is the public view of a registered agent.
 type Agent struct {
-	Updating    bool        `json:"updating,omitempty"`
-	ID          string      `json:"id"`
-	Resume      *ResumeInfo `json:"resume,omitempty"`
-	Name        string      `json:"name"`
-	DisplayName string      `json:"display_name,omitempty"`
+	// MachineOwnerID is present only on /v1/me when the bound machine can be read.
+	// Nil means unknown (including older Hubs), while a pointer to empty means unowned.
+	MachineOwnerID *string     `json:"machine_owner_id,omitempty"`
+	Updating       bool        `json:"updating,omitempty"`
+	ID             string      `json:"id"`
+	Resume         *ResumeInfo `json:"resume,omitempty"`
+	Name           string      `json:"name"`
+	DisplayName    string      `json:"display_name,omitempty"`
 	// Avatar is the face people chose: "look:<parts>" (drawn by clients)
 	// or "pic:<hash>" (GET /v1/agents/{name}/avatar; the hash changes with
 	// the picture). Empty: draw the default one from the id.

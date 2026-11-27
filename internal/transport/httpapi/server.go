@@ -671,6 +671,11 @@ func (s *Server) getAgent(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	dto := s.agentDTO(r, a)
+	if s.machines != nil && a.MachineID != "" {
+		if machine, err := s.machines.Get(r.Context(), a.MachineID); err == nil {
+			dto.MachineOwnerID = &machine.Owner
+		}
+	}
 	if s.resume != nil {
 		if c, err := s.resume.Get(r.Context(), a.Name); err == nil {
 			info := s.resumeInfo(c)
@@ -1906,12 +1911,13 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		}
 		p := res.StoppedProcess
 		// Audit detail is intentionally limited to name, PID and creation identity;
-		// the audit actor supplies the fourth field (who requested it).
+		// plus the verified owning agent; the standard actor identifies the requester.
 		detail, _ := json.Marshal(struct {
 			Name    string `json:"name"`
 			PID     int    `json:"pid"`
 			Created string `json:"created"`
-		}{p.Name, p.PID, p.Created})
+			Agent   string `json:"agent"`
+		}{p.Name, p.PID, p.Created, p.Agent})
 		s.record(r, "machine.process.stop", r.PathValue("id"), string(detail))
 		writeJSON(w, http.StatusOK, res)
 	case in.CLI == api.InfoCLI:

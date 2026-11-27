@@ -108,4 +108,11 @@ func TestSingleAgentRunnerStillExposesMachinePressure(t *testing.T) {
 	if views[0].CanStopProcess {
 		t.Fatal("offered controls without a matching machine runner")
 	}
+	// Transferring only the machine must also revoke the former owner's reports.
+	if _, e = service.SetOwner(ctx, "computer", "new-owner"); e != nil {
+		t.Fatal(e)
+	}
+	if e = service.SetRuntime(ctx, a, a.Runtime); !domain.IsCode(e, domain.CodePermissionDenied) {
+		t.Fatal("former machine owner report accepted", e)
+	}
 }

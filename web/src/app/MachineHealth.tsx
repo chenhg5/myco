@@ -40,7 +40,7 @@ export function MachineHealthPanel({ hubId, machine, onChanged }: { hubId: strin
   };
   if (!h) return null;
   return <section className="app-list machine-health" data-testid="machine-health">
-    <div className="app-group-title"><span className={`dot ${state === "alert" ? "failed" : state === "unknown" ? "offline" : "idle"}`} /> {L("机器健康", "Machine health")} · {state === "unknown" ? L("采样不完整或已过期", "Sample incomplete or stale") : state === "alert" ? L("需要关注", "Needs attention") : L("正常", "Healthy")}</div>
+    <div className="app-group-title"><span className={`dot ${state === "alert" ? "pending" : state === "unknown" ? "offline" : "idle"}`} /> {L("机器健康", "Machine health")} · {state === "unknown" ? L("采样不完整或已过期", "Sample incomplete or stale") : state === "alert" ? L("需要关注", "Needs attention") : L("正常", "Healthy")}</div>
     <div className="app-kv"><span>{h.load_metric === "load1_per_core" ? L("负载 / 核数", "Load / cores") : "CPU"}</span><span>{state === "unknown" ? "—" : `${(h.load_ratio * 100).toFixed(0)}%`} · {h.cores} {L("核", "cores")}</span></div>
     <div className="app-kv"><span>{L("可用内存", "Available memory")}</span><span>{state === "unknown" || !h.memory_total ? "—" : `${(100 * h.memory_available / h.memory_total).toFixed(0)}%`}</span></div>
     {(h.processes || []).map((p) => <div className="app-row" key={`${p.pid}/${p.created}`}>
@@ -50,7 +50,7 @@ export function MachineHealthPanel({ hubId, machine, onChanged }: { hubId: strin
     <p className="app-note">{L("只告警，不自动结束进程。来源未知的进程计入整机负载，但不能在这里结束。", "Alerts never stop processes automatically. Unknown processes count toward machine load but cannot be ended here.")}</p>
     {error && !selected ? <ErrorText error={error} /> : null}
     <ConfirmDialog open={!!selected} onOpenChange={(open) => { if (!open && !busy) setSelected(null); }} title={L("结束这个进程？", "End this process?")} subject={selected && <span>{selected.name} · PID {selected.pid}</span>}
-      description={L("Runner 会重新验证进程身份；这个操作可能中断后台工作。", "The runner revalidates process identity. This may interrupt background work.")}
+      description={L("会再次核对进程归属；这个操作可能中断后台工作。", "Process ownership is checked again. This may interrupt background work.")}
       confirmLabel={L("结束进程", "End process")} onConfirm={() => void stop()} busy={busy} error={error ? <ErrorText error={error} /> : undefined} />
   </section>;
 }
