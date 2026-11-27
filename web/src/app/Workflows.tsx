@@ -336,7 +336,7 @@ export function WorkflowsPage({ hubId, rows, now, projects = [], open, onOpened,
   return (
     <div className="pc au wf">
       <PageHero title={L("工作流", "Workflows")}
-        subtitle={L("把固定的做法写成流程：每一步交给一个 agent、一台电脑，或者等你决定。工作区按顺序往下走，电脑关着也照常。", "A fixed way of working: each step goes to an agent, a computer, or waits for you. The workspace walks it in order, while your computers are off too.")}>
+        subtitle={L("查看运行情况，筛选流程，随时开始下一次。", "Track runs, find a workflow and start the next run.")}>
         {!unsupported && <button type="button" className="app-btn app-btn-primary" onClick={() => setChoosing(true)}><Plus />{L("新建工作流", "New workflow")}</button>}
       </PageHero>
       <ErrorText error={error} />
@@ -434,7 +434,7 @@ export function WorkflowsPage({ hubId, rows, now, projects = [], open, onOpened,
                           ) : <span>{w.run_counts?.total ? L("最近记录暂不可用", "Latest run unavailable") : L("还没跑过", "Not run yet")}</span>}
                         </span>
                         <span className="wf-row-counts" data-testid="workflow-counts">{w.run_counts ? <>
-                          <span>{L(`运行 ${w.run_counts.total.toLocaleString()} 次`, `${w.run_counts.total.toLocaleString()} runs`)}</span>
+                          <span>{L(`运行 ${w.run_counts.total.toLocaleString()} 次`, `${w.run_counts.total.toLocaleString()} ${w.run_counts.total === 1 ? "run" : "runs"}`)}</span>
                           <span>{L(`成功 ${w.run_counts.succeeded.toLocaleString()}`, `${w.run_counts.succeeded.toLocaleString()} succeeded`)}</span>
                           <span className={w.run_counts.failed ? "is-bad" : undefined}>{L(`失败 ${w.run_counts.failed.toLocaleString()}`, `${w.run_counts.failed.toLocaleString()} failed`)}</span>
                           {!!w.run_counts.cancelled && <span>{L(`取消 ${w.run_counts.cancelled.toLocaleString()}`, `${w.run_counts.cancelled.toLocaleString()} cancelled`)}</span>}

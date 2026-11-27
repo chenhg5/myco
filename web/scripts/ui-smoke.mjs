@@ -6390,7 +6390,7 @@ async function runMatrix(browser, size, scheme) {
             await preview.addInitScript(({ language, scheme }) => { localStorage.setItem("myco-lang", language); localStorage.setItem("myco-theme", scheme); }, { language, scheme });
             const capture = await preview.newPage();
             const titles = ["Release pipeline", "Checks to investigate", "New workflow"];
-            const translated = catalogRows.map((w, i) => ({ ...w, title: language === "en" ? titles[i] : w.title, description: language === "en" ? "Create, review and deliver with your agents." : "让 agent 协作完成编写、审查和交付。" }));
+            const translated = catalogRows.map((w, i) => ({ ...w, title: language === "en" ? titles[i] : w.title, description: language === "en" ? "Create, review and deliver with your agents." : "让 agent 协作完成编写、审查和交付。", last_run: w.last_run ? { ...w.last_run, inputs: { task: language === "en" ? "Export conversations from Settings" : "设置页加一个导出对话按钮" } } : undefined }));
             await capture.route(empty, (r) => r.fulfill({ json: { workflows: translated } }));
             await capture.route(/\/app\/hubs\/[^/]+\/workflow-decisions$/, (r) => r.fulfill({ json: { decisions: [] } }));
             const previewURL = new URL(page.url()); previewURL.searchParams.set("lang", language);
@@ -6418,7 +6418,7 @@ async function runMatrix(browser, size, scheme) {
       await list.locator(".au-row", { hasText: "写-审-改" }).waitFor();
       // A ready-made one (新建工作流 offers them): pick who does what, see it drawn, save it.
       if (await page.locator(".wf-row-last").count() < 1) throw new Error("每个工作流应写出最近一次运行");
-      if (!(await list.locator(".au-row", { hasText: "写-审-改" }).getByRole("button", { name: "运行" }).isVisible())) throw new Error("每行应有看得见的「运行」");
+      if (!(await list.locator(".au-row", { hasText: "写-审-改" }).getByRole("button", { name: "运行", exact: true }).isVisible())) throw new Error("每行应有看得见的「运行」");
       if (await page.locator(".pc > [data-testid=workflow-templates]").count()) throw new Error("有工作流时列表页不该再列一遍模板");
       await clickVisible(page, page.locator(".ph").getByRole("button", { name: "新建工作流" }));
       await page.locator("[data-testid=workflow-new]").waitFor({ timeout: 10_000 });
@@ -6445,7 +6445,7 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, det.locator("[data-testid=workflow-tabs]").getByRole("tab", { name: /运行记录/ }));
       await det.locator("[data-testid=workflow-no-runs]").waitFor({ timeout: 10_000 });
       // Run it: the form asks for what it takes; the run opens at once.
-      await clickVisible(page, det.locator(".pcd-head").getByRole("button", { name: "运行" }));
+      await clickVisible(page, det.locator(".pcd-head").getByRole("button", { name: "运行", exact: true }));
       const form = page.locator("[data-testid=workflow-start]");
       await form.waitFor({ timeout: 10_000 });
       if (!(await form.getByRole("button", { name: "开始运行" }).isDisabled())) throw new Error("没填要改什么时不该能开始");
