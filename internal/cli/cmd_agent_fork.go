@@ -47,7 +47,7 @@ Copies idle for 30 minutes retire automatically. Keep the returned request ID wh
 			defer cancel()
 			out, err := c.ForkAgents(ctx, in, e.in.Bool("dry-run"))
 			if err != nil {
-				return err
+				return forkBatchError(err, key, nil)
 			}
 			if e.in.Bool("dry-run") {
 				return e.dryRun(map[string]any{"action": "fork", "request_id": key, "forks": compactForks(out.Forks)})
@@ -58,7 +58,7 @@ Copies idle for 30 minutes retire automatically. Keep the returned request ID wh
 				}
 				reply, err := c.WaitReply(ctx, f.MessageID, e.in.Duration("timeout"))
 				if err != nil {
-					return err
+					return forkBatchError(err, key, out.Forks)
 				}
 				if reply == nil {
 					return &Error{Code: "timeout", Message: "copy registration is still pending", Suggestion: "retry with the same --idempotency-key " + key, Retryable: true, Exit: ExitTimeout, Input: map[string]any{"request_id": key, "forks": compactForks(out.Forks)}}
@@ -70,10 +70,11 @@ Copies idle for 30 minutes retire automatically. Keep the returned request ID wh
 				if res.Denied || res.Error != "" {
 					return &Error{Code: "fork_failed", Message: res.Error, Suggestion: "inspect the machine node, then retire the failed copy or retry the batch; key: " + key, Exit: ExitError, Input: map[string]any{"request_id": key, "forks": compactForks(out.Forks)}}
 				}
-				out.Forks[i], err = c.AgentFork(ctx, f.ID)
+				observed, err := c.AgentFork(ctx, f.ID)
 				if err != nil {
-					return err
+					return forkBatchError(err, key, out.Forks)
 				}
+				out.Forks[i] = observed
 				if out.Forks[i].State != "ready" {
 					return errorf("fork_failed", ExitError, "inspect the batch using the returned request ID", "machine did not confirm copy registration")
 				}
@@ -167,4 +168,13 @@ func compactForks(fs []*api.AgentFork) []map[string]any {
 		out = append(out, m)
 	}
 	return out
+}
+
+// A network failure can happen after the Hub commits a batch. Always keep the
+// same recovery key, including when it was generated rather than user supplied.
+func forkBatchError(err error, key string, forks []*api.AgentFork) error {
+	out := *toError(err, "agent fork")
+	out.Input = map[string]any{"request_id": key, "forks": compactForks(forks)}
+	out.Suggestion += "; retry with the same --idempotency-key " + key + " to recover this batch"
+	return &out
 }
