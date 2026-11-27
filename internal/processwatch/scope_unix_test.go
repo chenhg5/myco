@@ -54,3 +54,28 @@ func TestSuccessfulTurnKeepsChildUntilExplicitStop(t *testing.T) {
 		t.Fatal("child still running after explicit stop")
 	}
 }
+
+// If identity acquisition fails while the context is cancelled, Cmd.Wait must
+// still join the Cancel watcher without deadlocking on the manager mutex.
+func TestFailedStartDoesNotWaitUnderManagerLock(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "sleep 15")
+	manager := New("failed-start")
+	scope, err := manager.PrepareContext(ctx, cmd, Owner{Agent: "fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd.Cancel = scope.Cancel
+	manager.lookup = func(int) (Process, error) { cancel(); return Process{}, ErrIdentity }
+	done := make(chan error, 1)
+	go func() { done <- scope.Start() }()
+	select {
+	case err = <-done:
+		if err == nil {
+			t.Fatal("unverified start succeeded")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("failed start deadlocked with its cancellation watcher")
+	}
+}

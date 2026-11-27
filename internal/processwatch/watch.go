@@ -129,14 +129,22 @@ func (s *Scope) Start() error {
 	}
 	if err := s.native.started(s.command); err != nil {
 		_ = s.command.Process.Kill()
+		// Cmd.Wait joins its context watcher, which may be in Scope.Cancel.
+		// Do not hold the manager mutex while waiting for that watcher.
+		s.stopped = true
+		m.mu.Unlock()
 		_ = s.command.Wait()
+		m.mu.Lock()
 		s.native.close()
 		return err
 	}
-	p, err := readProcess(s.command.Process.Pid)
+	p, err := m.lookup(s.command.Process.Pid)
 	if err != nil {
 		_ = s.native.stop(s.command.Process.Pid, Grace)
+		s.stopped = true
+		m.mu.Unlock()
 		_ = s.command.Wait()
+		m.mu.Lock()
 		s.native.close()
 		return errors.New("cannot establish child process creation identity")
 	}
