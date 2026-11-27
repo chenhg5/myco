@@ -8620,42 +8620,118 @@ async function runMatrix(browser, size, scheme) {
       await go(page, "设置", narrow);
       // Hold a refresh that read the workspace list before the removal.
       // Its late overview must not restore that list and remount UsagePage.
-      let releaseOverview;
-      const held = new Promise((resolve) => { releaseOverview = resolve; });
-      let overviewRead;
-      const ready = new Promise((resolve) => { overviewRead = resolve; });
-      const slowOverview = async (r) => {
-        const response = await r.fetch();
-        overviewRead();
-        await held;
-        await r.fulfill({ response }).catch(() => undefined);
+      // Keep the fixture local to this case. The two signals deliberately mean
+      // different things: reaching the route is not yet an old response snapshot.
+      const attempts = [];
+      const withOldOverview = async (label, body) => {
+        const began = Date.now();
+        const state = { label, requests: 0, entered: 0, captured: 0, fetchFailed: 0, responseFailed: 0, fetchStatus: null, pending: 0, released: false, unrouted: false, cleanup: false, events: [] };
+        attempts.push(state);
+        const mark = (phase) => { state.events.push({ phase, ms: Date.now() - began }); state.events = state.events.slice(-16); };
+        const summary = () => JSON.stringify(state); // Counts/phases only; no URLs, headers or response data.
+        const bounded = async (promise, ms, phase) => {
+          let timer;
+          try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${phase}: ${summary()}`)), ms); })]); }
+          finally { clearTimeout(timer); }
+        };
+        let releaseOverview, captured, fetchFailed;
+        const held = new Promise(resolve => { releaseOverview = () => { state.released = true; resolve(); }; });
+        const ready = new Promise(resolve => { captured = resolve; });
+        const failedFetch = new Promise(resolve => { fetchFailed = resolve; });
+        let closed = false, primaryFailure = false;
+        const work = new Set();
+        const isOverview = request => new URL(request.url()).pathname === "/app/overview";
+        const onRequest = request => { if (isOverview(request)) { state.requests++; mark("request"); } };
+        const onFailed = request => { if (isOverview(request)) { state.responseFailed++; mark("request-failed"); } };
+        const slowOverview = route => {
+          const task = Promise.resolve().then(async () => {
+            state.entered++; state.pending++; mark("route-entered");
+            try {
+              if (closed) { await route.continue().catch(() => undefined); return; }
+              const response = await route.fetch({ timeout: 10_000 });
+              state.fetchStatus = response.status();
+              if (!response.ok()) throw new Error("Overview snapshot HTTP failure");
+              state.captured++; mark("old-response-captured"); captured();
+              await held;
+              await route.fulfill({ response }).catch(() => { state.responseFailed++; mark("fulfill-failed"); });
+            } catch {
+              state.fetchFailed++; mark("fetch-failed"); fetchFailed();
+            } finally { state.pending--; }
+          });
+          work.add(task);
+          void task.then(() => work.delete(task), () => work.delete(task));
+          return task;
+        };
+        try {
+          page.on("request", onRequest); page.on("requestfailed", onFailed);
+          await page.route("**/app/overview", slowOverview);
+          await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", ctrlKey: true, metaKey: true, bubbles: true })));
+          await bounded(Promise.race([ready, failedFetch.then(() => { throw new Error(`Old overview fetch failed: ${summary()}`); })]), 10_000, "Old overview capture not ready");
+          await body(releaseOverview);
+        } catch (error) { primaryFailure = true; throw error; }
+        finally {
+          closed = true; releaseOverview(); mark("release");
+          page.off("request", onRequest); page.off("requestfailed", onFailed);
+          let cleanupError;
+          // Drain released handlers before disabling interception; doing both
+          // concurrently can invalidate a still-pending route.fulfill(). Even
+          // when draining fails, always try to remove this fixture's route.
+          try { await bounded(Promise.allSettled([...work]), 1_500, "Overview handlers did not settle"); }
+          catch (error) { cleanupError = error; }
+          try {
+            await bounded(page.unroute("**/app/overview", slowOverview), 500, "Overview route removal timed out");
+            state.unrouted = true;
+          } catch (error) { cleanupError ??= error; }
+          state.cleanup = state.unrouted && !page.listeners("request").includes(onRequest) && !page.listeners("requestfailed").includes(onFailed) && state.pending === 0;
+          if (!state.cleanup) cleanupError ??= new Error(`Overview fixture cleanup incomplete: ${summary()}`);
+          if (cleanupError) mark("cleanup-failed");
+          log(`    overview-fixture ${summary()}`);
+          // Preserve the original preparation/assertion stack, even on timeout.
+          if (cleanupError && !primaryFailure) throw cleanupError;
+        }
       };
-      await page.route("**/app/overview", slowOverview);
-      await page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "r", ctrlKey: true, metaKey: true, bubbles: true })));
-      await Promise.race([ready, page.waitForTimeout(10_000).then(() => { throw new Error("工作区刷新没有开始"); })]);
-      const asked = [];
+      // Fail preparation with an actual captured response still held, then prove
+      // this Page has no old route/listener/work left before its normal attempt.
+      const injected = new Error("controlled overview preparation failure");
+      const injectedStack = injected.stack;
+      let injectionSeen = false;
+      try { await withOldOverview("cleanup-check", async () => { throw injected; }); }
+      catch (error) { if (error !== injected || error.stack !== injectedStack) throw error; injectionSeen = true; }
+      if (!injectionSeen) throw new Error("Preparation failure was swallowed");
+      const previous = attempts.at(-1);
+      if (!previous.cleanup || previous.pending !== 0 || !previous.released || previous.responseFailed !== 0) throw new Error("Preparation failure left an overview fixture behind");
+      const enteredBefore = previous.entered;
+      const freshRead = await page.evaluate(async () => {
+        const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 2_000);
+        try { return (await fetch("/app/overview", { signal: ctl.signal })).status; }
+        finally { clearTimeout(timer); }
+      });
+      if (freshRead !== 200 || previous.entered !== enteredBefore) throw new Error("Preparation failure polluted the next read on the same Page");
+      log("    overview-fixture cleanup-check: fresh same-Page read=200, old route not re-entered");
       let removed = "";
-      const onResponse = (r) => { if (r.status() === 404 && /\/app\/hubs\//.test(r.url())) asked.push(r.url()); };
-      page.on("response", onResponse);
-      try {
-        const rm = page.locator("[data-testid=settings-dialog]").getByRole("button", { name: /^移除/ }).first();
-        await clickVisible(page, rm);
-        const dlg = page.locator(".app-modal", { hasText: "只会从这个 App 里移除" });
-        await dlg.waitFor({ timeout: 5_000 });
-        removed = ((await dlg.innerText()).match(/移除 (.+?)？/) || [])[1] || "";
-        if (!removed) throw new Error("移除的确认框应写着要移除哪个工作区");
-        const t0 = Date.now();
-        await clickVisible(page, dlg.getByRole("button", { name: "移除工作区" }));
-        await dlg.waitFor({ state: "detached", timeout: 3_000 });
-        if (Date.now() - t0 > 2_000) throw new Error(`移除工作区不该等工作区回话：用了 ${Date.now() - t0}ms`);
-        releaseOverview();
-        await page.waitForTimeout(1_500);
-        if (asked.length) throw new Error(`移除后不该再问那个工作区：${asked[0]}`);
-      } finally {
-        releaseOverview();
-        page.off("response", onResponse);
-        await page.unroute("**/app/overview", slowOverview);
-      }
+      await withOldOverview("removal", async (releaseOverview) => {
+        const asked = [];
+        const onResponse = (r) => { if (r.status() === 404 && /\/app\/hubs\//.test(r.url())) asked.push(r.url()); };
+        try {
+          page.on("response", onResponse);
+          const rm = page.locator("[data-testid=settings-dialog]").getByRole("button", { name: /^移除/ }).first();
+          await clickVisible(page, rm);
+          const dlg = page.locator(".app-modal", { hasText: "只会从这个 App 里移除" });
+          await dlg.waitFor({ timeout: 5_000 });
+          removed = ((await dlg.innerText()).match(/移除 (.+?)？/) || [])[1] || "";
+          if (!removed) throw new Error("移除的确认框应写着要移除哪个工作区");
+          const t0 = Date.now();
+          await clickVisible(page, dlg.getByRole("button", { name: "移除工作区" }));
+          await dlg.waitFor({ state: "detached", timeout: 3_000 });
+          if (Date.now() - t0 > 2_000) throw new Error(`移除工作区不该等工作区回话：用了 ${Date.now() - t0}ms`);
+          releaseOverview();
+          await page.waitForTimeout(1_500);
+          if (asked.length) throw new Error(`移除后不该再问那个工作区：${asked[0]}`);
+        } finally {
+          releaseOverview();
+          page.off("response", onResponse);
+        }
+      });
       await closeSettings(page);
       await sidebar(page, true);
       const shownAfter = (await page.locator(".sp-switch .app-hub-name").first().innerText()).trim();
