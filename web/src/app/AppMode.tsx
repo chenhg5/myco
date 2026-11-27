@@ -1435,15 +1435,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 )}
               </>)}
             </div>}
-            {/* Something hidden (侧栏显示): never silently gone; a click
-                shows what and brings it back. */}
-            {navHidden.size > 0 && (
-              <button type="button" className="sp-nav-hidden-note" data-testid="nav-hidden-note"
-                onClick={() => { openSettingsSection("appearance"); setPage("settings"); }}
-                title={L(`已隐藏：${[...navHidden].map(navEntryLabel).join("、")}。点一下管理`, `Hidden: ${[...navHidden].map(navEntryLabel).join(", ")}. Click to manage`)}>
-                {L(`已隐藏 ${navHidden.size} 项：${[...navHidden].map(navEntryLabel).join("、")}`, `${navHidden.size} hidden: ${[...navHidden].map(navEntryLabel).join(", ")}`)}
-              </button>
-            )}
           </nav>
 
           <div className="app-sidebar-foot">

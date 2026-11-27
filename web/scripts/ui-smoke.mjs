@@ -4509,9 +4509,8 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-nav-workflows").click({ button: "right" });
       await page.locator(".conv-menu").getByRole("menuitem", { name: "在侧栏隐藏「工作流」" }).click();
       await page.locator(".sp-nav-workflows").waitFor({ state: "detached", timeout: 5_000 });
-      // Hidden is never silent: the sidebar says what, and a click opens the setting.
-      const note = page.locator("[data-testid=nav-hidden-note]");
-      if (!(await note.innerText()).includes("工作流")) throw new Error(`侧栏应写明隐藏了什么，实际「${await note.innerText()}」`);
+      // No note about it in the sidebar: what is hidden is managed in Settings.
+      if (await page.locator("[data-testid=nav-hidden-note]").count()) throw new Error("隐藏后侧栏不该再写「已隐藏」");
       // and back, from Settings
       await go(page, "设置", narrow);
       await clickVisible(page, page.locator(".app-settings-tab", { hasText: "外观" }));
