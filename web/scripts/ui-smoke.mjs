@@ -6282,8 +6282,7 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "启用" }));
       await row.locator(".au-row-status", { hasText: "已暂停" }).waitFor({ state: "detached", timeout: 10_000 });
       // Right-click: the same, and delete.
-      await row.click({ button: "right", position: { x: 120, y: 12 } });
-      await clickVisible(page, page.getByRole("menuitem", { name: "删除" }));
+      await menuPick(page, row, "删除");
       await clickVisible(page, page.locator(".app-modal.app-confirm").getByRole("button", { name: "删除" }));
       await row.waitFor({ state: "detached", timeout: 10_000 });
     });
@@ -6459,6 +6458,7 @@ async function runMatrix(browser, size, scheme) {
       await page.getByText("累计统计暂不可用", { exact: true }).waitFor({ timeout: 12_000 });
       const overview = await page.locator("[data-testid=workflow-overview]").innerText();
       if (!overview.includes("升级工作区") || !overview.includes("—")) throw new Error("旧工作区应明确累计统计未知");
+      await filters.getByLabel("工作流排序", { exact: true }).selectOption("recent");
       await page.unroute(empty);
       await liveRow.waitFor({ state: "detached", timeout: 12_000 });
       await list.locator(".au-row", { hasText: "写-审-改" }).waitFor();
