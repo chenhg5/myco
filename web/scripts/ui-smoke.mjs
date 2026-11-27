@@ -5270,7 +5270,7 @@ async function runMatrix(browser, size, scheme) {
       const text = await opts.innerText();
       if (!text.includes("跟随它那台电脑") || !text.includes("智谱 GLM")) throw new Error(`远程时应列出它那台电脑上的服务商，实际「${text}」`);
       const customOpt = dlg.locator("[data-testid=provider-custom-opt]");
-      if (!(await customOpt.locator("input").isDisabled()) || !(await customOpt.innerText()).includes("密钥不经过 hub")) throw new Error("没开端到端加密时，远程的自定义地址应置灰并说明");
+      if (!(await customOpt.locator("input").isDisabled()) || !(await customOpt.innerText()).includes("myco 版本太旧")) throw new Error("没开端到端加密、那台电脑的 runner 又太旧时，远程的自定义地址应置灰并说明");
       await settle(page, 200);
       await shot(page, size, scheme, "provider-remote");
       await clickVisible(page, opts.locator(".app-provider-opt", { hasText: "智谱 GLM" }));
@@ -5322,6 +5322,59 @@ async function runMatrix(browser, size, scheme) {
     // 模型供应商 (i115): kept in the workspace, keys sealed for the member's
     // own devices; added and tested in Settings, given to an agent from its
     // provider row, a new key pushed, and deleted with what that means.
+    await step("添加 agent · 用自己的 API key", async () => {
+      // The new-agent dialog says, up front, where the model comes from: a
+      // provider is added right there, picked, one of its models chosen,
+      // and the agent started with it (i119: encryption off, the hub keeps
+      // the key, as the dialog says).
+      const mock = `http://${HOST}:${mockPort()}`;
+      await fetch(`${mock}/app/hubs/hub_studio/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ e2e: false }) });
+      // none yet (a try before this one may have left one)
+      const clear = async () => {
+        const l = await (await fetch(`${mock}/app/hubs/hub_studio/providers`)).json();
+        for (const p of l.providers || []) await fetch(`${mock}/app/hubs/hub_studio/providers/${p.id}`, { method: "DELETE" });
+      };
+      await clear();
+      await go(page, "官网改版", narrow);
+      if (narrow) await clickVisible(page, page.locator(".sp-strip-face.is-add"));
+      else await clickVisible(page, page.locator(".sp-side .sp-side-add").first());
+      const dialog = page.locator(".app-modal-add");
+      await dialog.waitFor();
+      await clickVisible(page, dialog.getByRole("tab", { name: "VPS 东京" }));
+      await clickVisible(page, dialog.getByRole("tab", { name: "新开一个" }));
+      const source = dialog.locator("[data-testid=model-source]");
+      await source.waitFor({ timeout: 10_000 });
+      if (!(await source.innerText()).includes("有自己的 key（DeepSeek、Kimi、MiniMax、OpenCode Go……）")) throw new Error("还没有供应商时应说可以用自己的 key");
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-model-source");
+      await clickVisible(page, source.locator("[data-testid=model-source-add]"));
+      const form = source.locator("[data-testid=model-source-new]");
+      await form.locator("[data-testid=model-source-vendor]").selectOption("deepseek");
+      await form.locator("[data-testid=model-source-key]").fill("sk-deepseek-test-1234");
+      await clickVisible(page, form.locator("[data-testid=model-source-test]"));
+      await form.locator("[data-testid=model-source-tested]", { hasText: "读到 2 个模型" }).waitFor({ timeout: 5_000 });
+      if (!(await source.locator("[data-testid=model-source-custody]").innerText()).includes("Hub 管理员能看到")) throw new Error("应写清 key 由谁保管");
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-model-source-new");
+      await clickVisible(page, form.locator("[data-testid=model-source-save]"));
+      await form.waitFor({ state: "hidden", timeout: 10_000 });
+      const picked = source.locator(".app-provider-opt.picked", { hasText: "DeepSeek" });
+      await picked.waitFor({ timeout: 10_000 });
+      const pid = ((await picked.getAttribute("data-testid")) || "").slice("model-source-".length);
+      await source.locator("[data-testid=model-source-model] select").selectOption("deepseek-v4");
+      await dialog.locator(".app-field", { hasText: "在哪个文件夹干活" }).locator("input").fill("~/code/demo-team/deepseek");
+      await settle(page, 300);
+      await shot(page, size, scheme, "add-agent-model-source-picked");
+      await clickVisible(page, dialog.getByRole("button", { name: "开一个" }));
+      await dialog.locator(".add-arrived").first().waitFor({ timeout: 20_000 });
+      const sent = await (await fetch(`${mock}/app/mock/run-settings`)).json();
+      if (sent.spawn?.body?.provider !== pid || sent.spawn.body.model !== "deepseek-v4") throw new Error(`应带着供应商和模型开，实际 ${JSON.stringify(sent.spawn)}`);
+      await clickVisible(page, dialog.getByRole("button", { name: "好了" }));
+      await page.locator(".app-modal").waitFor({ state: "hidden" });
+      // (the settings step counts on none: gone again)
+      await clear();
+    });
+
     await step("设置 · 模型供应商", async () => {
       const mock = `http://${HOST}:${mockPort()}`;
       const setE2E = (on) => fetch(`${mock}/app/hubs/hub_studio/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ e2e: on }) });
@@ -5330,21 +5383,25 @@ async function runMatrix(browser, size, scheme) {
         await clickVisible(page, page.locator(".app-settings-tab", { hasText: "模型供应商" }));
         await page.locator("[data-testid=providers]").waitFor({ timeout: 10_000 });
       };
+      // Encryption off (i119): one line says the hub keeps keys, and
+      // adding works all the same.
       await setE2E(false);
       await openSection();
-      // Not usable yet: why, and the way there (no add button that does
-      // nothing).
-      await page.locator("[data-testid=providers-e2e-off]").waitFor({ timeout: 10_000 });
-      if (await page.locator("[data-testid=providers-add]").count()) throw new Error("没开端到端加密时不该有「新增」");
+      const kept = page.locator("[data-testid=providers-hub-kept]");
+      await kept.waitFor({ timeout: 10_000 });
+      if (!(await kept.innerText()).includes("Hub 管理员能看到")) throw new Error("没开加密时应写清 key 由 Hub 保管");
+      // Nothing yet: one card that says what it is for, and adds one.
+      await page.locator("[data-testid=providers-empty]").waitFor({ timeout: 10_000 });
+      if (await page.locator("[data-testid=providers-add]").isDisabled()) throw new Error("没开端到端加密时也应能新增");
+      if ((await page.locator("[data-testid=providers]").innerText()).includes("先打开端到端加密")) throw new Error("不该再拦着要先开加密");
       await settle(page, 200);
-      await shot(page, size, scheme, "settings-providers-e2e-off");
+      await shot(page, size, scheme, "settings-providers-hub-kept");
       await clickVisible(page, page.locator("[data-testid=providers-open-e2e]"));
       await page.locator(".app-settings-tab.active", { hasText: "工作区" }).first().waitFor({ timeout: 5_000 });
       await setE2E(true);
       await go(page, "成员", narrow);
       await openSection();
-      await page.locator("[data-testid=providers-e2e-off]").waitFor({ state: "hidden", timeout: 10_000 });
-      // Nothing yet: one card that says what it is for, and adds one.
+      await page.locator("[data-testid=providers-hub-kept]").waitFor({ state: "hidden", timeout: 10_000 });
       await page.locator("[data-testid=providers-empty]").waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "settings-providers-empty");

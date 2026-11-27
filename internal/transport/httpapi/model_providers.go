@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/myco-ai/myco/internal/api"
@@ -48,7 +50,7 @@ func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
 	}
 	out := api.ModelProviderList{E2E: s.modelProviders.E2E(r.Context()), Providers: []api.ModelProvider{}}
 	for _, p := range list {
-		out.Providers = append(out.Providers, modelProviderDTO(p))
+		out.Providers = append(out.Providers, s.modelProviderDTO(p))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -67,8 +69,8 @@ func (s *Server) createModelProvider(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	s.record(r, "provider.create", p.ID, "vendor="+p.Vendor)
-	writeJSON(w, http.StatusCreated, modelProviderDTO(p))
+	s.record(r, "provider.create", p.ID, "vendor="+p.Vendor+" custody="+custodyOf(p))
+	writeJSON(w, http.StatusCreated, s.modelProviderDTO(p))
 }
 
 func (s *Server) updateModelProvider(w http.ResponseWriter, r *http.Request) {
@@ -85,11 +87,11 @@ func (s *Server) updateModelProvider(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	if in.KeySealed != nil {
-		// (never the key: only that it changed, or was sealed again)
-		s.record(r, "provider.key", p.ID, "key_version="+strconv.Itoa(p.KeyVersion))
+	if in.KeySealed != nil || in.APIKey != nil {
+		// (never the key: only that it changed, was sealed again or moved)
+		s.record(r, "provider.key", p.ID, "key_version="+strconv.Itoa(p.KeyVersion)+" custody="+custodyOf(p))
 	}
-	writeJSON(w, http.StatusOK, modelProviderDTO(p))
+	writeJSON(w, http.StatusOK, s.modelProviderDTO(p))
 }
 
 func (s *Server) deleteModelProvider(w http.ResponseWriter, r *http.Request) {
@@ -105,12 +107,25 @@ func (s *Server) deleteModelProvider(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-func modelProviderDTO(p *domain.ModelProvider) api.ModelProvider {
-	return api.ModelProvider{
+// modelProviderDTO never carries a key the hub keeps: only its last four
+// characters, and whether it is lost.
+func (s *Server) modelProviderDTO(p *domain.ModelProvider) api.ModelProvider {
+	out := api.ModelProvider{
 		ID: p.ID, Name: p.Name, Vendor: p.Vendor, AnthropicBase: p.AnthropicBase, OpenAIBase: p.OpenAIBase, SmallModel: p.SmallModel,
 		Models: modelsDTO(domain.Runtime{Models: p.Models}.ModelList()), ModelsAt: timePtr(p.ModelsAt),
-		KeySealed: p.KeySealed, KeyVersion: p.KeyVersion, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+		KeySealed: p.KeySealed, KeyVersion: p.KeyVersion, Custody: custodyOf(p), CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
+	if p.HubHeld() {
+		out.KeySealed, out.KeyHint, out.KeyLost = "", p.KeyHint, s.modelProviders.KeyLost(p)
+	}
+	return out
+}
+
+func custodyOf(p *domain.ModelProvider) string {
+	if p.HubHeld() {
+		return domain.CustodyHub
+	}
+	return domain.CustodyE2E
 }
 
 // checkSpawnProvider: a new agent's provider sealed for the machine node
@@ -152,6 +167,17 @@ func (s *Server) checkSpawnProvider(w http.ResponseWriter, r *http.Request, in *
 			writeError(w, domain.Errf(domain.CodeInvalidArgument, "provider_ref.key_version must be 1 to %d", p.KeyVersion))
 			return false
 		}
+	}
+	if in.ProviderHub {
+		if in.ProviderEncrypted != nil || in.ProviderRef == nil || in.ProviderRef.ID == "" {
+			writeError(w, domain.Errf(domain.CodeInvalidArgument, "provider_hub goes with provider_ref, not provider_encrypted"))
+			return false
+		}
+		if s.e2e != nil && s.e2e.Enabled(r.Context()) {
+			writeError(w, domain.Errf(domain.CodeInvalidArgument, "this workspace has end-to-end encryption on: send the provider sealed for the machine"))
+			return false
+		}
+		return true
 	}
 	if in.ProviderEncrypted == nil {
 		return true
@@ -206,4 +232,40 @@ func (s *Server) markSpawnedProvider(r *http.Request, name domain.AgentName, ref
 func spawnedHere(a *domain.Agent, res api.SpawnResult, since time.Time, machineOwner string) bool {
 	return a != nil && string(a.Name) == res.Agent && !a.CreatedAt.Before(since) &&
 		res.SessionID != "" && a.Binding.SessionID == res.SessionID && a.Owner == machineOwner
+}
+
+// spawnGrant lets the machine node fetch the provider the hub keeps for the
+// session it is asked to start (i119): once, for this request alone, for
+// ten minutes at most. checkSpawnProvider has checked the person and the
+// provider is theirs.
+func (s *Server) spawnGrant(w http.ResponseWriter, r *http.Request, in *api.SpawnRequest) (string, bool) {
+	actor := s.actorOf(r)
+	p, err := s.modelProviders.Owned(r.Context(), actor.Member.ID, in.ProviderRef.ID)
+	if err != nil {
+		writeError(w, err)
+		return "", false
+	}
+	if !p.HubHeld() {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "this provider's key is sealed for your devices: send it sealed for the machine"))
+		return "", false
+	}
+	// it must make settings for this CLI and model
+	if _, _, err := s.modelProviders.Material(r.Context(), p.ID, actor.Member.ID, in.CLI, in.Model); err != nil {
+		writeError(w, err)
+		return "", false
+	}
+	node, err := s.machines.SpawnNode(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return "", false
+	}
+	if a, err := s.agents.Get(r.Context(), string(node)); err != nil || !slices.Contains(strings.Fields(a.Runtime.Features), "hub_provider") {
+		writeError(w, domain.Errf(domain.CodeUnsupported, "myco on this computer cannot take a provider the hub keeps").WithSuggestion("update myco there"))
+		return "", false
+	}
+	id := s.grants.add(&spawnGrant{node: node, provider: p.ID, owner: actor.Member.ID, from: app.ConsoleSenderPrefix + actor.Member.Name,
+		cli: in.CLI, model: in.Model}, time.Now())
+	in.ProviderGrant, in.ProviderRef = id, &api.ProviderRef{ID: p.ID, KeyVersion: p.KeyVersion}
+	s.record(r, "provider.grant", string(node), "provider="+p.ID+" key_version="+strconv.Itoa(p.KeyVersion))
+	return id, true
 }

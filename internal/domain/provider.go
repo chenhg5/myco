@@ -2,13 +2,17 @@ package domain
 
 import (
 	"context"
+	"strconv"
 	"time"
 )
 
 // ModelProvider is a model vendor a member uses with their own API key,
 // kept in the workspace so every computer they add an agent on can use it
-// (i115). The key is never in it: KeySealed is an end-to-end envelope only
-// the member's own devices can open, and the hub cannot.
+// (i115). Who keeps the key is its Custody: with end-to-end encryption on,
+// KeySealed is an envelope only the member's own devices can open, and the
+// hub cannot (CustodyE2E); with it off, the hub keeps it, encrypted with
+// the workspace's own key (KeyHub, i119), and its administrator could read
+// it (CustodyHub).
 type ModelProvider struct {
 	ID string `json:"id"`
 	// Owner is the member whose provider it is (their id).
@@ -30,10 +34,33 @@ type ModelProvider struct {
 	// KeySealed is the key, sealed for the owner's devices; KeyVersion
 	// goes up when the key changes (not when it is sealed again for a new
 	// set of devices).
-	KeySealed  string    `json:"key_sealed"`
-	KeyVersion int       `json:"key_version"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	KeySealed  string `json:"key_sealed"`
+	KeyVersion int    `json:"key_version"`
+	// Custody is CustodyE2E ("" too, from before i119) or CustodyHub.
+	Custody string `json:"custody,omitempty"`
+	// KeyHub is the key sealed with the workspace's key (CustodyHub only),
+	// bound to the provider, its owner and KeyVersion (HubKeyPurpose).
+	KeyHub string `json:"key_hub,omitempty"`
+	// KeyHint is the key's last four characters (CustodyHub only: with
+	// CustodyE2E the member's App shows them, the hub cannot).
+	KeyHint   string    `json:"key_hint,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Who keeps a model provider's key.
+const (
+	CustodyE2E = "e2e"
+	CustodyHub = "hub"
+)
+
+// HubHeld reports whether the hub keeps this provider's key.
+func (p *ModelProvider) HubHeld() bool { return p.Custody == CustodyHub }
+
+// HubKeyPurpose binds a key sealed by the hub to its provider, owner and
+// version: sealed for one, it does not open as another's.
+func HubKeyPurpose(providerID, owner string, version int) string {
+	return "model-provider-key|" + providerID + "|" + owner + "|" + strconv.Itoa(version)
 }
 
 // MaxModelProviders bounds one member's providers.
@@ -47,4 +74,7 @@ type ModelProviderRepository interface {
 	Create(ctx context.Context, p *ModelProvider) error
 	Update(ctx context.Context, p *ModelProvider) error
 	Delete(ctx context.Context, id string) error
+	// AnyHubHeld reports whether any provider's key is kept by the hub
+	// (then a missing workspace key is lost, not yet to be made).
+	AnyHubHeld(ctx context.Context) (bool, error)
 }

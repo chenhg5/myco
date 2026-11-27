@@ -27,6 +27,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/myco-ai/myco/internal/infra/hubkey"
 )
 
 // Format is the version of the archive layout.
@@ -78,6 +80,13 @@ func Create(ctx context.Context, w io.Writer, sources []Source, scope, version s
 			return nil, err
 		}
 		_ = os.Remove(snap)
+		// The hub's own key (i119), without which the keys it keeps for
+		// members cannot be opened: the backup is a secret with it.
+		if key := filepath.Join(filepath.Dir(s.DBPath), hubkey.FileName); fileExists(key) {
+			if err := m.add(tw, path.Join(s.Prefix, hubkey.FileName), key, now); err != nil {
+				return nil, err
+			}
+		}
 		if s.FilesDir == "" {
 			continue
 		}
@@ -391,8 +400,33 @@ func Restore(extracted, dataDir string, m *Manifest, now time.Time) (aside []str
 				return aside, err
 			}
 		}
+		// The hub's key comes back with the database it opens (one from a
+		// backup without it is left as it is).
+		if key := filepath.Join(src, hubkey.FileName); fileExists(key) {
+			cur := filepath.Join(dst, hubkey.FileName)
+			if fileExists(cur) {
+				if !moved {
+					if err := os.MkdirAll(keep, 0o700); err != nil {
+						return aside, err
+					}
+					aside, moved = append(aside, keep), true
+				}
+				if err := os.Rename(cur, filepath.Join(keep, hubkey.FileName)); err != nil {
+					return aside, err
+				}
+			}
+			if err := os.Rename(key, cur); err != nil {
+				return aside, err
+			}
+			_ = os.Chmod(cur, 0o600)
+		}
 	}
 	return aside, nil
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.Mode().IsRegular()
 }
 
 // Sources lists the hubs of a server whose main database is dbPath: the

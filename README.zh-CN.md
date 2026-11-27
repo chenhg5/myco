@@ -279,6 +279,7 @@ WorkBuddy 接入为实验性，需要先在 WorkBuddy 里登录。
 | 文档 | 内容 |
 |---|---|
 | [INSTALL.zh-CN.md](INSTALL.zh-CN.md) | 部署 Hub、入网链接、各类 agent 的接入方法 |
+| [docs/model-providers.zh-CN.md](docs/model-providers.zh-CN.md) | 用自己的 API key 接各家模型，在哪台电脑上新增 agent 都能直接选 |
 | [docs/guide-claude-ai.zh-CN.md](docs/guide-claude-ai.zh-CN.md) | 图文教程：装好 App，连上你在 claude.ai 的 agent，在手机上指挥它 |
 | [docs/apps.zh-CN.md](docs/apps.zh-CN.md) | 全部应用和截图 |
 | [docs/architecture.md](docs/architecture.md) | 概念、消息状态机、runner 的行为、代码分层 |

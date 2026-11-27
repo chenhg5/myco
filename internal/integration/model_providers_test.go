@@ -193,10 +193,13 @@ func TestModelProviderFromTheMacOntoAnAgentOnWSL(t *testing.T) {
 	defer lying.Close()
 	mac := newAppDevice(t, lying.URL, macPair.Token)
 
-	// Without end-to-end encryption: said so, nothing kept.
+	// Without end-to-end encryption the hub keeps the key (i119; its own
+	// test follows the rest of that way): here, put away again.
 	body := map[string]any{"name": "MiniMax", "vendor": "minimax", "anthropic_base": vendor.URL + "/anthropic", "api_key": key1}
-	if code, m, raw := mac.do("POST", "/app/hubs/"+mac.hub+"/providers", body); code == 201 || m["error"] != "e2e_required" || strings.Contains(string(raw), key1) {
+	if code, m, raw := mac.do("POST", "/app/hubs/"+mac.hub+"/providers", body); code != 201 || m["custody"] != "hub" || strings.Contains(string(raw), key1) {
 		t.Fatalf("without e2e: %d %s", code, raw)
+	} else if code, _, raw := mac.do("DELETE", "/app/hubs/"+mac.hub+"/providers/"+m["id"].(string), nil); code != 200 {
+		t.Fatalf("delete: %d %s", code, raw)
 	}
 	if _, err := admin.SetHubSettings(c, api.HubSettings{E2E: true}); err != nil {
 		t.Fatal(err)

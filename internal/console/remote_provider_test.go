@@ -50,9 +50,26 @@ func TestRemoteProviderAppSealsBeforeHub(t *testing.T) {
 	}
 	endpoint := "/app/hubs/" + hubID + "/agents/target/provider"
 	body := map[string]any{"manual": map[string]string{"base_url": "http://127.0.0.1:3425", "api_key": "app-private-provider-key", "model": "custom-model"}}
+	// Without end-to-end encryption the hub keeps it (i119), for a runner
+	// that can fetch it only.
 	code, m, raw := r.do("PUT", endpoint, body)
-	if code != 400 || m["error"] != "e2e_required" || strings.Contains(string(raw), "app-private-provider-key") {
+	if code != 501 || m["error"] != "unsupported" || strings.Contains(string(raw), "app-private-provider-key") {
+		t.Fatalf("no E2E, an older runner: %d %s", code, raw)
+	}
+	if err := target.ReportRuntime(ctx, api.Runtime{CLI: "claude", Features: []string{"remote_provider", "hub_provider"}, Providers: &options}); err != nil {
+		t.Fatal(err)
+	}
+	code, _, raw = r.do("PUT", endpoint, body)
+	if code != 200 || strings.Contains(string(raw), "app-private-provider-key") {
 		t.Fatalf("no E2E: %d %s", code, raw)
+	}
+	held, err := target.Me(ctx)
+	if err != nil || held.RunSettings.ProviderHub == nil || held.RunSettings.ProviderEncrypted != nil {
+		t.Fatalf("not kept by the hub: %v %+v", err, held.RunSettings)
+	}
+	got, err := target.ProviderMaterial(ctx, held.RunSettings.ProviderHub.ID, "")
+	if err != nil || got.APIKey != "app-private-provider-key" || got.Model != "custom-model" || got.From != "@console:provider-owner" {
+		t.Fatalf("the runner's settings: %v %+v", err, got)
 	}
 	if _, err := r.admin.SetHubSettings(ctx, api.HubSettings{E2E: true}); err != nil {
 		t.Fatal(err)
