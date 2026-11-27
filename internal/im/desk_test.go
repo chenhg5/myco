@@ -171,11 +171,18 @@ func TestDeskOwnersInstructions(t *testing.T) {
 
 	b.Handle(Inbound{ChatID: "oc_g", MessageID: "om_1", ThreadKey: "chat:oc_g", UserID: "ou_guest", UserName: "访客", Text: "导出怎么用？"})
 	eventually(t, "task", func() bool { return hub.nsent() == 1 })
+	// The desk keeps talking to the model after the task is sent: read what
+	// they saw under their locks.
+	m.mu.Lock()
 	sys := m.seen[0][0].Content
+	m.mu.Unlock()
 	if !strings.Contains(sys, "只回答产品使用问题") || !strings.Contains(sys, "对方不是你的主人") {
 		t.Fatalf("prompt %q", sys)
 	}
-	if body := hub.sent[0].Body; !strings.Contains(body, "只回答产品使用问题") || !strings.Contains(body, "不是主人") {
+	hub.mu.Lock()
+	body := hub.sent[0].Body
+	hub.mu.Unlock()
+	if !strings.Contains(body, "只回答产品使用问题") || !strings.Contains(body, "不是主人") {
 		t.Fatalf("a guest's task without the rules: %q", body)
 	}
 
