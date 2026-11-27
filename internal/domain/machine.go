@@ -206,7 +206,7 @@ type RunSettings struct {
 	// with end-to-end encryption off), until its runner has it.
 	ProviderHub *HubProvider `json:"provider_hub,omitempty"`
 	Model       string       `json:"model,omitempty"`
-	Effort            string             `json:"effort,omitempty"`
+	Effort      string       `json:"effort,omitempty"`
 	// MCPTools lets headless runs use configured MCP servers outside full access.
 	// Only the agent's owner may choose this; false preserves the old behavior.
 	MCPTools bool `json:"mcp_tools,omitempty"`

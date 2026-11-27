@@ -126,7 +126,7 @@ func (s *ModelProviderService) Create(ctx context.Context, member string, in api
 	}
 	now := s.clock.Now().UTC()
 	p := &domain.ModelProvider{ID: in.ID, Owner: member, Custody: custody, CreatedAt: now, UpdatedAt: now}
-	if err := s.apply(ctx, p, in); err != nil {
+	if err := s.apply(ctx, p, in, false); err != nil {
 		return nil, err
 	}
 	if err := s.repo.Create(ctx, p); err != nil {
@@ -200,8 +200,11 @@ func (s *ModelProviderService) Update(ctx context.Context, member, id string, in
 				WithSuggestion("read the provider again: another device may have changed it")
 		}
 	}
+	// A lost key entered again by its owner may make the workspace a new
+	// key: their own act, not the hub hiding the loss.
+	reentering := p.HubHeld() && custody == domain.CustodyHub && in.APIKey != nil && s.KeyLost(p)
 	p.Custody = custody
-	if err := s.apply(ctx, p, in); err != nil {
+	if err := s.apply(ctx, p, in, reentering); err != nil {
 		return nil, err
 	}
 	p.UpdatedAt = s.clock.Now().UTC()
@@ -388,7 +391,7 @@ func keyErr(err error) error {
 }
 
 // apply checks and sets what the request carries.
-func (s *ModelProviderService) apply(ctx context.Context, p *domain.ModelProvider, in api.ModelProviderRequest) error {
+func (s *ModelProviderService) apply(ctx context.Context, p *domain.ModelProvider, in api.ModelProviderRequest, reentering bool) error {
 	if in.Name != nil {
 		name := strings.TrimSpace(*in.Name)
 		if name == "" || len(name) > maxProviderName || strings.IndexFunc(name, unicode.IsControl) >= 0 {
@@ -454,6 +457,7 @@ func (s *ModelProviderService) apply(ctx context.Context, p *domain.ModelProvide
 		if err != nil {
 			return err
 		}
+		create = create || (reentering && !s.box.Present())
 		version := *in.KeyVersion
 		sealed, err := s.box.Seal(domain.HubKeyPurpose(p.ID, p.Owner, version), []byte(key), create)
 		if err != nil {

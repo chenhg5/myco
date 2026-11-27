@@ -43,9 +43,9 @@ type ModelProvider struct {
 	KeyHub string `json:"key_hub,omitempty"`
 	// KeyHint is the key's last four characters (CustodyHub only: with
 	// CustodyE2E the member's App shows them, the hub cannot).
-	KeyHint string `json:"key_hint,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	KeyHint   string    `json:"key_hint,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Who keeps a model provider's key.
