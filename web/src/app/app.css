@@ -10307,6 +10307,47 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
   border-radius: 10px;
   overflow: hidden;
 }
+/* Quiet chrome: what sits above the messages stays out of the reading.
+   The head is the name alone (no face, no line about it, no rule under
+   it); its buttons are faint like the way out at the top right and come
+   up when pointed at. The block of plan, goal and watches is plain text
+   on the page, not a card; its controls show on hover (or keyboard
+   focus). A workspace the App cannot reach is still said. */
+.app-shell.is-focus .conv-detail > .conv-head {
+  height: 44px;
+  border-bottom: 0;
+}
+.app-shell.is-focus .conv-head-faces { display: none; }
+.app-shell.is-focus .conv-head-titles h2 { font-size: 13px; font-weight: 500; color: var(--muted); }
+.app-shell.is-focus .conv-head-what { display: none; }
+.app-shell.is-focus .conv-head-titles p:not(:has(.app-stale)) { display: none; }
+.app-shell.is-focus .conv-head > .app-btn,
+.app-shell.is-focus .conv-head-actions > * {
+  opacity: .35;
+  transition: opacity .15s;
+}
+.app-shell.is-focus .conv-head:hover > .app-btn,
+.app-shell.is-focus .conv-head:hover .conv-head-actions > * { opacity: .7; }
+.app-shell.is-focus .conv-head > .app-btn:is(:hover, :focus-visible),
+.app-shell.is-focus .conv-head-actions > :is(:hover, :focus-visible, .is-on, [aria-expanded="true"]) { opacity: 1; }
+.app-shell.is-focus .conv-detail > .pin-bar { opacity: .55; transition: opacity .15s; }
+.app-shell.is-focus .conv-detail > .pin-bar:is(:hover, :focus-within) { opacity: 1; }
+.app-shell.is-focus .conv-detail > .conv-tops {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  border-bottom: 1px solid var(--line-2);
+}
+.app-shell.is-focus .conv-tops > * { border-bottom: 0 !important; }
+.app-shell.is-focus .conv-tops :is(.plan-bar-toggle, .watch-toggle) { color: var(--muted); }
+.app-shell.is-focus .conv-tops :is(.plan-bar-count, .watch-what) { color: var(--fg-2); font-weight: 400; }
+.app-shell.is-focus .conv-tops .plan-bar-track { opacity: .6; }
+.app-shell.is-focus .conv-tops :is(.plan-bar-chev, .plan-bar-close, .watch-chev, .watch-actions) {
+  opacity: 0;
+  transition: opacity .15s;
+}
+.app-shell.is-focus .conv-tops > :is(:hover, :focus-within, .is-open) :is(.plan-bar-chev, .plan-bar-close, .watch-chev, .watch-actions) { opacity: 1; }
 /* The search in the chat ends where the column does. */
 .app-shell.is-focus .conv-body > .conv-search {
   right: calc(var(--conv-pad) + (100% - var(--conv-pad) - var(--conv-pad-l) - min(calc(var(--conv-col) - var(--conv-pad) - var(--conv-pad-l)), calc(100% - var(--conv-pad) - var(--conv-pad-l)))) / 2);
