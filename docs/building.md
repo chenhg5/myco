@@ -82,6 +82,31 @@ service tests explicitly load the tiny fixtures in
 Go tests work in a fresh checkout without preparing a bundle or installing Node.
 After preparation, a Go test also checks embedded bytes against the lock.
 
+CI divides the Linux race suite into three package shards using the measured
+weights in `scripts/ci-race-weights.json`. Every worker runs `go list -race -json ./...` on
+the exact source, then `go test -race -count=1 -json` for its assigned packages.
+New packages and race-only build-tag files enter the plan automatically. A
+second plain `go list` rejects packages excluded by race build tags rather than
+silently omitting them. Packages
+without test files are explicitly reported as compile-only success. A skipped
+package with test files, a failed test or missing/duplicate terminal result fails
+the shard. Vet, Python regressions and the real-binary smoke still run once.
+
+The required `go` check is now an aggregate gate. It independently lists all
+packages again and requires complete, disjoint successful results from all three
+shards, bound to the source, toolchain, CI helper commit and workflow run.
+`go-race-<source>-<shard>` artifacts retain JSON events, the complete manifest
+and per-package outcomes for seven days; the gate summary lists every result.
+Failed/cancelled jobs or stale/incomplete artifacts cannot satisfy the gate.
+
+The CI helper is checked out from the workflow definition's immutable commit
+separately from the tested source. The release caller uses the same-repository
+relative workflow reference, so older frozen sources need not contain the new
+helper. The CI workflow's manual entry can check an exact frozen source without
+publishing a release; it defaults to the full UI matrix. Such a manual run does
+not masquerade as main-push proof. Package weights are scheduling hints only,
+not proof or a prediction obtained by adding overlapping package times.
+
 For real application/native bridge acceptance, use a separate apps checkout at
 the locked source commit, install its template dependencies and Chromium, then
 unpack the exact released apps (not a locally rebuilt substitute):
@@ -98,8 +123,21 @@ explicitly, or place the locked checkout at `.cache/apps-source`. They never rea
 retired main-repository app copies; incomplete resources fail with setup guidance.
 The host UI CI prepares its own exact pinned checkout and release artifacts.
 
-Install Playwright 1.57.0 with Chromium and ffmpeg as in the `app-contract` CI
-job. Without `APPS_TEST_ROOT`, only these optional cross-repository tests skip;
+The `app-contract` CI job compiles the same seven Go fixtures on Ubuntu 24.04,
+then executes the six integration/console fixtures with Node, Chromium and
+CJK fonts inside the same digest-pinned Playwright 1.57.0 image used by UI smoke.
+The real SSH parser fixture stays on the Ubuntu host with its installed sshd
+and Node; it does not need a browser. The job installs no apt packages and
+downloads no browser at runtime. The current fixture set does not
+invoke external ffmpeg. Each named fixture must execute and pass; missing or
+skipped cases fail the job. Source and app pins remain unchanged, and the helper
+comes from the immutable workflow commit for older frozen sources. Raw JSON
+outcomes and a seven-case result map are retained as `app-contract-results-*`
+artifacts for seven days.
+
+For local execution outside that image, install Playwright 1.57.0 and its
+Chromium/system dependencies yourself. Without `APPS_TEST_ROOT`, only these
+optional cross-repository tests skip;
 an explicitly supplied incomplete checkout fails. Application business, typing,
 localization and browser regression suites run in the apps repository's CI.
 

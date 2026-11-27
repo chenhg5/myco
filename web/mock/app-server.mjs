@@ -1272,6 +1272,12 @@ const heldForOther = makeMessage({
   status: "held", asking: "msg_grok_q", body: "给官网首页写三条 slogan 候选。",
   created_at: iso(3 * 3600), updated_at: iso(2 * 3600),
 });
+// Tasks the UI smoke ends itself (POST /app/mock/finish {id}), when it has
+// done what it does while they run ("单聊 · 排队依次发"): a slow runner
+// cannot let the mock's own clock end them first.
+const handFinished = new Set(["先列一下要改的页面", "第一条排队：改首页标题"]);
+const finishers = new Map();
+
 function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   const had = replyTimers.get(taskId);
   if (had && !restart) return;
@@ -1611,8 +1617,9 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
       created_at: iso(0), updated_at: iso(0),
     }));
   });
-  later(6000, () => {
+  const answer = () => {
     replyTimers.delete(taskId);
+    finishers.delete(taskId);
     const msgs = hub.threads[threadId];
     if (!msgs || msgs.find((m) => m.id === taskId)?.status === "failed") return; // stopped
     // Asked for an architecture diagram: a reply with more than words (a
@@ -1631,7 +1638,9 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
       task.updated_at = iso(0);
       releaseAfter(hub, threadId, taskId);
     }
-  });
+  };
+  if (handFinished.has(preview?.body || "")) finishers.set(taskId, answer);
+  else later(6000, answer);
 }
 
 // Messages sent with `after` wait (held) until that task ends, then go out
@@ -2144,6 +2153,14 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { path: `/Users/alice/Downloads/${b.name}` });
   }
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "last-export" && method === "GET") return send(res, 200, state.lastExport || {});
+  // /app/mock/finish — answers a task the UI smoke ends itself (handFinished).
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "finish" && method === "POST") {
+    const body = await readBody(req);
+    const done = finishers.get(body?.id);
+    if (!done) return fail(res, 404, "not_found", "no task waits to be finished");
+    done();
+    return send(res, 200, { ok: true });
+  }
 
   // /app/mock/run-join — the UI smoke "runs" the last shell-node command on a
   // computer: the folder it ran in shows up as a computer of the workspace.
@@ -3714,6 +3731,7 @@ const server = http.createServer(async (req, res) => {
       const view = (w, def) => ({ id: w.id, name: w.name, description: w.def.description, project: w.def.project, owner: "alice", version: w.version,
         enabled: w.enabled, steps: w.def.steps.length, created_at: w.created_at, updated_at: w.updated_at,
         active: wf.runs.filter((r) => r.workflow_id === w.id && (r.status === "running" || r.status === "waiting")).length,
+        run_counts: wf.runs.filter((r) => r.workflow_id === w.id).reduce((c, r) => { c.total++; c[r.status]++; return c; }, { total: 0, running: 0, waiting: 0, succeeded: 0, failed: 0, cancelled: 0 }),
         last_run: (() => { const r = wf.runs.find((x) => x.workflow_id === w.id); return r ? runView(r, false) : undefined; })(),
         ...(def ? { definition: w.def } : {}) });
       const runView = (r, full) => {

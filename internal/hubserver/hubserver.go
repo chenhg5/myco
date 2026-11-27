@@ -153,6 +153,7 @@ func Build(o Options) (*Hub, error) {
 	if err := pagePolicy.Validate(); err != nil {
 		return nil, err
 	}
+	poolStartedAt := time.Now().UTC()
 	db, err := sqlite.OpenTimed(o.DBPath, sqlite.Timing{Log: o.Log, Slow: o.SlowStatement, Perf: o.Perf.StatementsOrNil()})
 	if err != nil {
 		return nil, err
@@ -382,6 +383,15 @@ func Build(o Options) (*Hub, error) {
 	}
 	srv.SetTemplates(templateSvc)
 	srv.SetPerf(o.Perf)
+	// DBStats reads pool counters without waiting for a connection. The
+	// admin can inspect a saturated pool even while its queries are queued.
+	srv.SetDatabaseStats(func() api.DatabasePoolStats {
+		st := db.Stats()
+		return api.DatabasePoolStats{At: time.Now().UTC(), StartedAt: poolStartedAt,
+			MaxOpenConnections: st.MaxOpenConnections, OpenConnections: st.OpenConnections,
+			InUse: st.InUse, Idle: st.Idle, WaitCount: st.WaitCount,
+			WaitDurationMS: float64(st.WaitDuration) / float64(time.Millisecond)}
+	})
 	handovers := app.NewHandoverService(sqlite.NewHandoverRepo(db), agentsRepo, msgRepo, security.Tokens{}, ids, clock)
 	handovers.SetContext(projectRepo, sqlite.NewMachineRepo(db), messages)
 	srv.SetHandovers(handovers)

@@ -593,6 +593,7 @@ async function runMatrix(browser, size, scheme) {
       // but not failing the run; a second failure is the real thing.
       const where = String(first?.stack || "").split("\n").find((l) => l.includes("ui-smoke.mjs:"))?.trim().replace(/^at\s+/, "") || "";
       log(`    ⚠ 第一次失败，重新加载后再试一次：${String(first?.message || first).split("\n")[0]}${where ? `（${where.replace(/^.*\//, "")}）` : ""}`);
+      log(String(first?.stack || first));
       await page.screenshot({ path: path.join(OUT, `flaky-${size.width}x${size.height}-${scheme}-${no}.png`) }).catch(() => undefined);
       await page.keyboard.press("Escape").catch(() => undefined);
       await page.goto(`${r.base}/?lang=zh`, { waitUntil: "domcontentloaded" });
@@ -1878,6 +1879,21 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "project-member-handoffs");
       await clickVisible(page, note);
       await right.locator(".conv-head h2", { hasText: "PM" }).waitFor({ timeout: 10_000 });
+      // Their exchange, read-only: the last message's time (shown with the
+      // pointer on it) keeps clear of the note at the foot.
+      const lastMine = right.locator(".conv-timeline > .conv-msg.is-me:last-child");
+      if (await lastMine.count()) {
+        await lastMine.locator(".conv-bubble").first().hover();
+        await settle(page, 250);
+        const foot = await right.evaluate((el) => {
+          const meta = el.querySelector(".conv-timeline > .conv-msg.is-me:last-child .conv-msg-meta");
+          const below = el.querySelector(".conv-observe");
+          return meta && below ? Math.round(below.getBoundingClientRect().top - meta.getBoundingClientRect().bottom) : null;
+        });
+        if (foot !== null && foot < 8) throw new Error(`最后一条消息的时间行离下面太近：${foot}px`);
+        await shot(page, size, scheme, "project-exchange-foot");
+        await page.mouse.move(0, 0);
+      }
       await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
@@ -2098,6 +2114,19 @@ async function runMatrix(browser, size, scheme) {
       if (!/^不填就新建 ~\/code\/demo-team\//.test(await vpsFolder.getAttribute("placeholder") || "")) throw new Error("只允许一个文件夹的电脑，新文件夹应建在它里面");
       await clickVisible(page, dialog.locator(".ws-computer", { hasText: "Codex" }));
       await dialog.locator("[data-testid=remote-ai-missing] code", { hasText: "npm install -g @openai/codex" }).waitFor({ timeout: 5_000 });
+      // A long command (CodeBuddy's, say) wraps in the notice: the dialog
+      // never grows wider or scrolls sideways.
+      const fits = await dialog.evaluate((el) => {
+        const code = el.querySelector("[data-testid=remote-ai-missing] code");
+        const was = code.textContent;
+        code.textContent = 'npm install -g --prefix "$HOME/.local" @tencent-ai/codebuddy-code@latest --registry=https://registry.npmmirror.com';
+        const box = el.getBoundingClientRect();
+        const r = code.closest("[data-testid=remote-ai-missing]").getBoundingClientRect();
+        const out = { sideways: el.scrollWidth - el.clientWidth, right: Math.round(r.right - box.right) };
+        code.textContent = was;
+        return out;
+      });
+      if (fits.sideways > 1 || fits.right > 0) throw new Error(`长命令不该把弹框撑宽：横向多出 ${fits.sideways}px，提示超出 ${fits.right}px`);
       await vpsFolder.fill("~/elsewhere");
       await dialog.locator("[data-testid=allowed-dirs].is-bad").waitFor({ timeout: 5_000 });
       // This App reaches it: it can allow that folder there at once.
@@ -2354,6 +2383,25 @@ async function runMatrix(browser, size, scheme) {
       await memory.getByText("首页截图统一 2x").waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "project-notes");
+      // A dialog with no words under its title: what follows stands apart
+      // from the title (项目设置: its choices).
+      const settingsBtn = page.locator(".app-page").getByRole("button", { name: "项目设置" }).first();
+      if (await settingsBtn.count()) {
+        await clickVisible(page, settingsBtn);
+        const dlg = page.getByRole("dialog", { name: "项目设置" });
+        await dlg.waitFor({ timeout: 5_000 });
+        const gap = await dlg.evaluate((el) => {
+          const h = el.querySelector(":scope > h3");
+          let next = h?.nextElementSibling;
+          while (next && (next.classList.contains("app-sr-only") || getComputedStyle(next).position === "absolute")) next = next.nextElementSibling;
+          return h && next ? Math.round(next.getBoundingClientRect().top - h.getBoundingClientRect().bottom) : null;
+        });
+        if (gap === null || gap < 12) throw new Error(`弹框标题和下面的内容应隔开至少 12px，实际 ${gap}px`);
+        await settle(page, 200);
+        await shot(page, size, scheme, "project-settings-dialog");
+        await page.keyboard.press("Escape");
+        await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      }
       await navBackClick(page);
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
@@ -3092,23 +3140,55 @@ async function runMatrix(browser, size, scheme) {
     // An agent's own name in a message (cloud-7, review-cloud) reads as its
     // name for people and opens its chat; not in a path or in code.
     await step("单聊 · agent 名字变成链接", async () => {
+      // (and a short name people write: cloud-7 for cloud-7-claude-rmv6)
+      const routeURL = /\/app\/overview(\?|$)/;
+      await page.route(routeURL, async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        const list = (json.hubs || []).find((h) => h.id === "hub_studio")?.overview?.agents;
+        const model = list?.find((x) => x.agent?.kind === "agent");
+        if (list && model && !list.some((x) => x.agent.name === "cloud-7-claude-rmv6")) {
+          list.push({ ...model, agent: { ...model.agent, id: "ag_cloud7", name: "cloud-7-claude-rmv6", display_name: "移动端工程师", avatar: undefined } });
+        }
+        await route.fulfill({ response, json });
+      });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.locator(".app-shell").waitFor();
+      try {
       await openMember(page, narrow, "聊天", "Myco (Grok)");
       const anchor = await page.locator(".conv-detail .conv-msg[data-msg]").last().getAttribute("data-msg");
-      const note = await sendFromElsewhere("hub_studio", "grok-agent-7c2e", "请交给 review-cloud 看看，@pm-codex 也看一下。路径 ~/code/review-cloud/x 和 `review-cloud` 保持原样。", { type: "note", of: anchor });
+      const note = await sendFromElsewhere("hub_studio", "grok-agent-7c2e", "请交给 review-cloud 看看，@pm-codex 也看一下，再转给 cloud-7。路径 ~/code/review-cloud/x 和 `review-cloud` 保持原样。", { type: "note", of: anchor });
       const bubble = page.locator(`.conv-detail [data-msg="${note.id}"]`);
       await bubble.waitFor({ timeout: 15_000 });
       const links = bubble.locator("a.md-agent");
       await links.first().waitFor({ timeout: 10_000 });
       const got = await links.evaluateAll((els) => els.map((a) => [a.textContent, a.getAttribute("title")]));
-      if (JSON.stringify(got) !== JSON.stringify([["Review (Codex 云端)", "review-cloud"], ["PM (Codex)", "pm-codex"]])) throw new Error(`正文里的 agent 名字应换成它的名字并做成链接，实际 ${JSON.stringify(got)}`);
+      if (JSON.stringify(got) !== JSON.stringify([["Review (Codex 云端)", "review-cloud"], ["PM (Codex)", "pm-codex"], ["移动端工程师", "cloud-7-claude-rmv6"]])) throw new Error(`正文里的 agent 名字应换成它的名字并做成链接，实际 ${JSON.stringify(got)}`);
       const text = await bubble.innerText();
       if (!text.includes("~/code/review-cloud/x")) throw new Error(`路径里的名字不该替换，实际「${text}」`);
       if ((await bubble.locator("code").innerText()) !== "review-cloud") throw new Error("代码里的名字不该替换");
       if (text.includes("@pm-codex") || text.includes("@PM")) throw new Error(`@名字应整个换成链接，实际「${text}」`);
+      // (the last message, yours: its time, shown with the pointer on it,
+      // keeps clear of what is below)
+      if (await page.locator(`.conv-timeline > .conv-msg.is-me:last-child[data-msg="${note.id}"]`).count()) {
+        await bubble.locator(".conv-bubble").first().hover();
+        await settle(page, 250);
+        const foot = await bubble.evaluate((el) => {
+          const meta = el.querySelector(".conv-msg-meta");
+          const below = el.closest(".conv-detail")?.querySelector(".conv-compose, .conv-observe");
+          return meta && below ? Math.round(below.getBoundingClientRect().top - meta.getBoundingClientRect().bottom) : null;
+        });
+        if (foot !== null && foot < 8) throw new Error(`最后一条消息的时间行离下面太近：${foot}px`);
+      }
       await settle(page, 200);
       await shot(page, size, scheme, "chat-agent-name-links");
       await links.first().click();
       await page.locator(".conv-detail .conv-head", { hasText: "Review (Codex 云端)" }).first().waitFor({ timeout: 15_000 });
+      } finally {
+        await page.unroute(routeURL);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.locator(".app-shell").waitFor();
+      }
     });
 
     await step("单聊 · 发文件", async () => {
@@ -4606,7 +4686,16 @@ async function runMatrix(browser, size, scheme) {
       const t = "先列一下要改的页面";
       await box.fill(t);
       await box.press("Enter");
-      await page.locator(".conv-msg.is-me", { hasText: t }).last().waitFor({ timeout: 20_000 });
+      const first = page.locator(".conv-msg.is-me", { hasText: t }).last();
+      await first.waitFor({ timeout: 20_000 });
+      // (this task and the first one queued run until the step ends them
+      // (POST /app/mock/finish): on a slow runner the mock's own six seconds
+      // ran out before the third ⌘↩, which then sent instead of queuing)
+      const finish = async (text) => {
+        const id = await page.locator(".conv-detail .conv-msg.is-me[data-msg]", { hasText: text }).last().getAttribute("data-msg");
+        const r = await fetch(`http://${HOST}:${mockPort()}/app/mock/finish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) });
+        if (!r.ok) throw new Error(`没能让「${text}」那一轮结束：HTTP ${r.status}`);
+      };
       // ⌘↩ queues only while that one is at work (the box then offers to
       // queue the next one); before the agent takes it up, it would just
       // send. Wait for that, not for a fixed time.
@@ -4624,9 +4713,13 @@ async function runMatrix(browser, size, scheme) {
       await page.waitForTimeout(1500);
       if (await page.locator(".conv-msg.is-me", { hasText: a }).count()) throw new Error("撤回第一条后，后面的不该提前发出");
       // The round ends: only the first goes; the second still waits.
+      await finish(t);
       await page.locator(".conv-msg.is-me", { hasText: a }).last().waitFor({ timeout: 30_000 });
+      await page.waitForFunction(() => document.querySelectorAll(".conv-detail .conv-queue-row").length === 1, null, { timeout: 10_000 }).catch(() => undefined);
       if (await page.locator(".conv-msg.is-me", { hasText: b }).count()) throw new Error("排的第二条应等第一条做完再发，不能同时发出");
       if ((await rows.count()) !== 1) throw new Error(`第一条发出后应还剩一条在排队，实际 ${await rows.count()} 条`);
+      await page.locator(".conv-detail .conv-msg.is-me[data-msg]", { hasText: a }).last().waitFor({ timeout: 10_000 });
+      await finish(a);
       await page.locator(".conv-msg.is-me", { hasText: b }).last().waitFor({ timeout: 30_000 });
       const placed = await page.evaluate(({ t, a, b }) => {
         const els = [...document.querySelectorAll(".conv-detail .conv-msg")];
@@ -6301,9 +6394,92 @@ async function runMatrix(browser, size, scheme) {
       if (!narrow && !(await badge.count())) throw new Error("工作流导航上应标出有几个决定在等你");
       await settle(page, 300);
       await shot(page, size, scheme, "workflows");
+      // The catalog keeps live runs visible even when a newer run completed,
+      // including after disabling the workflow. Counts are not a recent sample.
+      let catalogRows;
+      await page.route(empty, async (route) => {
+        if (route.request().method() !== "GET") return route.continue();
+        const response = await route.fetch();
+        const json = await response.json();
+        if (!catalogRows) {
+          const base = json.workflows[0];
+          const counts = { total: 1200, running: 1, waiting: 1, succeeded: 1100, failed: 90, cancelled: 8 };
+          const make = (id, title, enabled, active, run_counts, status, project) => ({ ...base, id, title, name: id, enabled, active, run_counts, project, last_run: status ? { ...base.last_run, status } : undefined });
+          catalogRows = [
+            make("wf_live_demo", "运行中的发布流程", false, 2, counts, "succeeded", "demo"),
+            make("wf_failed_demo", "失败的检查流程", true, 0, { ...counts, total: 1, running: 0, waiting: 0, succeeded: 0, failed: 1, cancelled: 0 }, "failed", "demo"),
+            make("wf_new_demo", "还没运行的流程", true, 0, { total: 0, running: 0, waiting: 0, succeeded: 0, failed: 0, cancelled: 0 }, undefined),
+          ];
+        }
+        await route.fulfill({ json: { workflows: catalogRows } });
+      });
+      const liveRow = list.locator(".au-row", { hasText: "运行中的发布流程" });
+      await liveRow.waitFor({ timeout: 12_000 });
+      if (!(await liveRow.locator("[data-testid=workflow-active]").innerText()).includes("2 次进行中")) throw new Error("较早且已停用的运行仍应显示进行中");
+      const tally = await liveRow.locator("[data-testid=workflow-counts]").innerText();
+      if (!tally.includes("1,200") || !tally.includes("1,100") || !tally.includes("90") || !tally.includes("8")) throw new Error("累计次数不能只数最近一页运行");
+      const filters = page.locator("[data-testid=workflow-filters]");
+      const chips = page.getByRole("group", { name: "工作流状态", exact: true });
+      await chips.getByRole("button", { name: /^进行中/ }).click();
+      if (await list.locator(".au-row").count() !== 1) throw new Error("进行中筛选应保留已停用但仍有活动运行的工作流");
+      await chips.getByRole("button", { name: /^等决定/ }).click();
+      if (await list.locator(".au-row").count() !== 1) throw new Error("等待决定计数应独立于最近成功记录");
+      await chips.getByRole("button", { name: /^最近失败/ }).click();
+      await list.locator(".au-row", { hasText: "失败的检查流程" }).waitFor();
+      await chips.getByRole("button", { name: /^未运行/ }).click();
+      await list.locator(".au-row", { hasText: "还没运行的流程" }).waitFor();
+      await chips.getByRole("button", { name: /^已停用/ }).click();
+      await liveRow.waitFor();
+      await chips.getByRole("button", { name: /^全部/ }).click();
+      await filters.getByRole("searchbox").fill("失败的检查");
+      if (await list.locator(".au-row").count() !== 1) throw new Error("工作流搜索应按名称过滤");
+      await filters.getByRole("searchbox").fill("");
+      await filters.getByLabel("工作流项目", { exact: true }).selectOption("!none");
+      await list.locator(".au-row", { hasText: "还没运行的流程" }).waitFor();
+      if (await list.locator(".au-row").count() !== 1) throw new Error("无项目筛选不应混入项目工作流");
+      await filters.getByLabel("工作流项目", { exact: true }).selectOption("");
+      await filters.getByLabel("工作流排序", { exact: true }).selectOption("active");
+      if (!(await list.locator(".au-row").first().innerText()).includes("运行中的发布流程")) throw new Error("进行中优先排序");
+      await shot(page, size, scheme, "workflow-catalog");
+      // Export this user-visible change in both languages at 2x, using a
+      // separate mock-only context so the suite's navigation stays untouched.
+      if (size.width === 1200) {
+        for (const language of ["zh", "en"]) {
+          const preview = await browser.newContext({ viewport: size, colorScheme: scheme, deviceScaleFactor: 2, storageState: await context.storageState() });
+          try {
+            await preview.addInitScript(({ language, scheme }) => { localStorage.setItem("myco-lang", language); localStorage.setItem("myco-theme", scheme); }, { language, scheme });
+            const capture = await preview.newPage();
+            const titles = ["Release pipeline", "Checks to investigate", "New workflow"];
+            const translated = catalogRows.map((w, i) => ({ ...w, title: language === "en" ? titles[i] : w.title, description: language === "en" ? "Create, review and deliver with your agents." : "让 agent 协作完成编写、审查和交付。", last_run: w.last_run ? { ...w.last_run, inputs: { task: language === "en" ? "Export conversations from Settings" : "设置页加一个导出对话按钮" } } : undefined }));
+            await capture.route(empty, (r) => r.fulfill({ json: { workflows: translated } }));
+            await capture.route(/\/app\/hubs\/[^/]+\/workflow-decisions$/, (r) => r.fulfill({ json: { decisions: [] } }));
+            const previewURL = new URL(page.url()); previewURL.searchParams.set("lang", language);
+            await capture.goto(previewURL.href);
+            await capture.locator(".app-shell").waitFor();
+            await go(capture, "工作流", false);
+            await capture.locator("[data-testid=workflow-counts]").first().waitFor();
+            await capture.getByRole("searchbox", { name: language === "en" ? "Search workflows" : "搜索工作流" }).waitFor();
+            await shot(capture, size, scheme, `workflow-catalog-${language}`);
+          } finally { await preview.close(); }
+        }
+      }
+
+      await filters.getByRole("searchbox").fill("no-such-workflow");
+      await page.locator("[data-testid=workflows-no-results]").waitFor();
+      await page.getByRole("button", { name: "清除筛选", exact: true }).click();
+      await liveRow.waitFor();
+      // Older Hubs have no counters. Never turn missing data into zero runs.
+      catalogRows = [{ ...catalogRows[0], run_counts: undefined }];
+      await page.getByText("累计统计暂不可用", { exact: true }).waitFor({ timeout: 12_000 });
+      const overview = await page.locator("[data-testid=workflow-overview]").innerText();
+      if (!overview.includes("升级工作区") || !overview.includes("—")) throw new Error("旧工作区应明确累计统计未知");
+      await filters.getByLabel("工作流排序", { exact: true }).selectOption("recent");
+      await page.unroute(empty);
+      await liveRow.waitFor({ state: "detached", timeout: 12_000 });
+      await list.locator(".au-row", { hasText: "写-审-改" }).waitFor();
       // A ready-made one (新建工作流 offers them): pick who does what, see it drawn, save it.
       if (await page.locator(".wf-row-last").count() < 1) throw new Error("每个工作流应写出最近一次运行");
-      if (!(await list.locator(".au-row", { hasText: "写-审-改" }).getByRole("button", { name: "运行" }).isVisible())) throw new Error("每行应有看得见的「运行」");
+      if (!(await list.locator(".au-row", { hasText: "写-审-改" }).getByRole("button", { name: "运行", exact: true }).isVisible())) throw new Error("每行应有看得见的「运行」");
       if (await page.locator(".pc > [data-testid=workflow-templates]").count()) throw new Error("有工作流时列表页不该再列一遍模板");
       await clickVisible(page, page.locator(".ph").getByRole("button", { name: "新建工作流" }));
       await page.locator("[data-testid=workflow-new]").waitFor({ timeout: 10_000 });
@@ -6330,7 +6506,7 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, det.locator("[data-testid=workflow-tabs]").getByRole("tab", { name: /运行记录/ }));
       await det.locator("[data-testid=workflow-no-runs]").waitFor({ timeout: 10_000 });
       // Run it: the form asks for what it takes; the run opens at once.
-      await clickVisible(page, det.locator(".pcd-head").getByRole("button", { name: "运行" }));
+      await clickVisible(page, det.locator(".pcd-head").getByRole("button", { name: "运行", exact: true }));
       const form = page.locator("[data-testid=workflow-start]");
       await form.waitFor({ timeout: 10_000 });
       if (!(await form.getByRole("button", { name: "开始运行" }).isDisabled())) throw new Error("没填要改什么时不该能开始");
@@ -6349,8 +6525,7 @@ async function runMatrix(browser, size, scheme) {
       await navBackClick(page);
       const row = list.locator(".au-row", { hasText: name });
       await row.waitFor({ timeout: 10_000 });
-      await row.click({ button: "right", position: { x: 120, y: 12 } });
-      await clickVisible(page, page.getByRole("menuitem", { name: "删除" }));
+      await menuPick(page, row, "删除");
       await clickVisible(page, page.locator(".app-modal.app-confirm").getByRole("button", { name: "删除" }));
       await row.waitFor({ state: "detached", timeout: 10_000 });
       // Have an agent write one: it goes to that agent as a task.
@@ -6782,7 +6957,9 @@ async function runMatrix(browser, size, scheme) {
       // The header's line, the pinned row's and the box you write in end at
       // the same place.
       const cbox = await page.locator(".conv-detail:visible .conv-compose-box").first().boundingBox();
-      for (const sel of [".conv-head", ".pin-bar"]) {
+      for (const sel of [".conv-head", ".pin-bar", ".conv-tops"]) {
+        // (the top block: when the chat has a plan, a goal or a watch)
+        if (sel === ".conv-tops" && !(await page.locator(`.conv-detail:visible > ${sel}`).count())) continue;
         const b = await page.locator(`.conv-detail:visible > ${sel}`).first().boundingBox();
         if (!b || !cbox || Math.abs(b.x - cbox.x) > 2 || Math.abs(b.x + b.width - cbox.x - cbox.width) > 2) {
           throw new Error(`专注模式的 ${sel} 应和输入框对齐（${b?.x}–${b && b.x + b.width}，输入框 ${cbox?.x}–${cbox && cbox.x + cbox.width}）`);

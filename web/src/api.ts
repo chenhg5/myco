@@ -426,8 +426,9 @@ export interface WorkflowDef {
 }
 export interface Workflow {
   id: string; name: string; title?: string; tags?: string[]; group?: string; description?: string; project?: string; owner?: string; version: number; enabled: boolean;
-  steps: number; active: number; last_run?: WorkflowRun; definition?: WorkflowDef; created_at: string; updated_at: string;
+  steps: number; active: number; run_counts?: WorkflowRunCounts; last_run?: WorkflowRun; definition?: WorkflowDef; created_at: string; updated_at: string;
 }
+export interface WorkflowRunCounts { total: number; running: number; waiting: number; succeeded: number; failed: number; cancelled: number }
 export type RunStatus = "running" | "waiting" | "succeeded" | "failed" | "cancelled";
 export type StepStatus = "running" | "waiting" | "done" | "failed" | "cancelled";
 export interface RunStep {
@@ -676,3 +677,5 @@ export interface BrowserReplayResult {
  steps: {node:string;state:"ok"|"failed"|"skipped";ms:number;error?:string}[];
  output: Record<string, unknown>;url:string;tabs:{id:string;url:string;title:string;active:boolean}[];
 }
+
+export type { PerfReport, PerfStat, DatabasePoolStats } from "@/lib/perf";

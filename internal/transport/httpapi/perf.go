@@ -14,6 +14,10 @@ import (
 // SetPerf gives GET /v1/admin/perf what it reports (nil: not available).
 func (s *Server) SetPerf(p *perf.Timings) { s.perf = p }
 
+// SetDatabaseStats installs a nonblocking snapshot of this workspace's
+// primary pool. It must not acquire a database connection.
+func (s *Server) SetDatabaseStats(f func() api.DatabasePoolStats) { s.databaseStats = f }
+
 // routePattern: the pattern that matched, with its method.
 func routePattern(r *http.Request) string {
 	if r.Pattern == "" || strings.Contains(r.Pattern, " ") {
@@ -49,6 +53,10 @@ func (s *Server) adminPerf(w http.ResponseWriter, r *http.Request) {
 	window := time.Duration(minutes) * time.Minute
 	out := api.PerfReport{Minutes: minutes, Requests: perfStats(s.perf.Requests.Report(window, limit)),
 		Statements: perfStats(s.perf.Statements.Report(window, limit))}
+	if s.databaseStats != nil {
+		stats := s.databaseStats()
+		out.Database = &stats
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 

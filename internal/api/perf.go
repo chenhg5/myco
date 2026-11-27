@@ -1,5 +1,7 @@
 package api
 
+import "time"
+
 // PerfReport answers GET /v1/admin/perf: how long the hub's requests and
 // database statements took over the last Minutes, slowest first (by p95).
 // Only names and numbers: route patterns and statement names, no ids,
@@ -8,6 +10,8 @@ type PerfReport struct {
 	Minutes    int        `json:"minutes"`
 	Requests   []PerfStat `json:"requests"`
 	Statements []PerfStat `json:"statements"`
+	// Database is the current workspace's primary database pool, when available.
+	Database *DatabasePoolStats `json:"database,omitempty"`
 }
 
 // PerfStat is one route's or one statement's numbers. Durations are in
@@ -25,4 +29,19 @@ type PerfStat struct {
 	// Rows a statement read or changed: on average and at most.
 	AvgRows int64 `json:"avg_rows,omitempty"`
 	MaxRows int64 `json:"max_rows,omitempty"`
+}
+
+// DatabasePoolStats is a live pool snapshot. Wait counters are cumulative
+// since StartedAt, independent of PerfReport.Minutes. Pending waits have
+// incremented WaitCount but add their duration only when they finish.
+// No database paths, workspace names or connection strings are exposed.
+type DatabasePoolStats struct {
+	At                 time.Time `json:"at"`
+	StartedAt          time.Time `json:"started_at"`
+	MaxOpenConnections int       `json:"max_open_connections"`
+	OpenConnections    int       `json:"open_connections"`
+	InUse              int       `json:"in_use"`
+	Idle               int       `json:"idle"`
+	WaitCount          int64     `json:"wait_count"`
+	WaitDurationMS     float64   `json:"wait_duration_ms"`
 }

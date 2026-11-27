@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"text/tabwriter"
+	"time"
 
 	"github.com/myco-ai/myco/internal/api"
 	. "github.com/myco-ai/myco/internal/cli/cmdkit"
@@ -17,7 +18,10 @@ func hubPerfCommand() *Command {
 "GET /v1/threads/{id}") and each database statement (by name: the repository method that ran it,
 its verb and table, and a short hash of its text) took. This shows the last --minutes, slowest first
 by p95: count, p50, p95, maximum and total time, and for statements the rows they read or changed.
-Long polls and streams, which wait on purpose, are left out. Percentiles are estimates (at most 25%
+Long polls and streams, which wait on purpose, are left out.
+The current workspace's database pool snapshot shows connection use and
+wait counters since the pool opened (not just --minutes). Compare two
+snapshots to measure pool waiting separately from statement execution. Percentiles are estimates (at most 25%
 above the true value, never above the maximum). Names only: no ids, parameters or message text.
 
 The hub's owner only (the admin token, MYCO_ADMIN_TOKEN or --admin-token-file). The hub also logs a
@@ -70,6 +74,12 @@ func printPerf(w io.Writer, r *api.PerfReport) {
 			fmt.Fprintln(tw, line+" "+s.Name)
 		}
 		tw.Flush()
+	}
+
+	if d := r.Database; d != nil {
+		fmt.Fprintf(w, "Database pool (current workspace; cumulative since %s, sampled %s)\n", d.StartedAt.Format(time.RFC3339), d.At.Format(time.RFC3339))
+		fmt.Fprintf(w, "  connections: open %d / max %d, in use %d, idle %d\n", d.OpenConnections, d.MaxOpenConnections, d.InUse, d.Idle)
+		fmt.Fprintf(w, "  connection waits: %d, completed wait time: %.3f ms\n\n", d.WaitCount, d.WaitDurationMS)
 	}
 	section("Requests", r.Requests, false)
 	fmt.Fprintln(w)

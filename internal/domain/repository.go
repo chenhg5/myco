@@ -15,6 +15,8 @@ type AgentRepository interface {
 	List(ctx context.Context) ([]*Agent, error)
 	Delete(ctx context.Context, name AgentName) error
 	Touch(ctx context.Context, name AgentName, at time.Time) error
+	// TouchIfOlder coalesces concurrent activity writes based on stored time.
+	TouchIfOlder(ctx context.Context, name AgentName, at, cutoff time.Time) error
 	// FindBySession returns the agent bound to (harness, sessionID).
 	FindBySession(ctx context.Context, harness, sessionID string) (*Agent, error)
 	// SetMachine and SetRuntime record what the agent's runner reports.

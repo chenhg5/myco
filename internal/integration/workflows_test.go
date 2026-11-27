@@ -47,6 +47,13 @@ func TestWorkflowAcrossHubClientAndCLI(t *testing.T) {
 	if err := json.Unmarshal([]byte(cli.must(c, "workflow", "apply", "--file", file)), &applied); err != nil || !applied.Created {
 		t.Fatalf("apply: %+v %v", applied, err)
 	}
+	var initial api.WorkflowList
+	if err := json.Unmarshal([]byte(cli.must(c, "workflow", "list")), &initial); err != nil {
+		t.Fatal(err)
+	}
+	if len(initial.Workflows) != 1 || initial.Workflows[0].RunCounts == nil || initial.Workflows[0].RunCounts.Total != 0 {
+		t.Fatalf("new workflow must report known zero counts: %+v", initial)
+	}
 	if code, _, _ := cli.run(c, "workflow", "run", "start", "--name", "写-审-改"); code == 0 {
 		t.Fatal("started without its required input")
 	}
@@ -97,6 +104,19 @@ func TestWorkflowAcrossHubClientAndCLI(t *testing.T) {
 	}
 	if out := cli.must(c, "workflow", "list"); !strings.Contains(out, `"name": "写-审-改"`) {
 		t.Fatalf("list: %s", out)
+	}
+
+	// The list carries exact, additive counters without loading the stats route.
+	var catalog api.WorkflowList
+	if err := json.Unmarshal([]byte(cli.must(c, "workflow", "list")), &catalog); err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog.Workflows) != 1 || catalog.Workflows[0].RunCounts == nil {
+		t.Fatalf("catalog counters missing: %+v", catalog)
+	}
+	counts := catalog.Workflows[0].RunCounts
+	if counts.Total != 1 || counts.Succeeded != 1 || counts.Running != 0 || counts.Waiting != 0 || counts.Failed != 0 || counts.Cancelled != 0 {
+		t.Fatalf("catalog counts: %+v", counts)
 	}
 
 	// What it did and how it went: metrics, a step's log, scores (the

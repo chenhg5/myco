@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -18,6 +19,7 @@ import (
 )
 
 type wfEnv struct {
+	repo   *sqlite.WorkflowRepo
 	t      *testing.T
 	ctx    context.Context
 	clock  *fakeClock
@@ -42,13 +44,14 @@ func newWF(t *testing.T, names ...string) *wfEnv {
 	ar, mr := sqlite.NewAgentRepo(db), sqlite.NewMessageRepo(db)
 	msgs := app.NewMessageService(ar, mr, notify.NewMemory(), security.IDs{}, clock, app.DefaultMessagePolicy())
 	reg := app.NewAgentService(ar, security.Tokens{}, security.IDs{}, clock, time.Minute, nil)
-	svc := app.NewWorkflowService(sqlite.NewWorkflowRepo(db), msgs, mr, security.IDs{}, clock, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	repo := sqlite.NewWorkflowRepo(db)
+	svc := app.NewWorkflowService(repo, msgs, mr, security.IDs{}, clock, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	aut := app.NewAutomationService(sqlite.NewAutomationRepo(db), msgs, mr, security.Tokens{}, security.IDs{}, clock, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	aut.SetWorkflows(svc)
 	files, traces := sqlite.NewFileRepo(db), sqlite.NewTraceRepo(db)
 	msgs.SetFiles(files)
 	svc.SetTraces(traces)
-	e := &wfEnv{t: t, ctx: context.Background(), clock: clock, svc: svc, msgs: msgs, agents: map[string]*domain.Agent{},
+	e := &wfEnv{repo: repo, t: t, ctx: context.Background(), clock: clock, svc: svc, msgs: msgs, agents: map[string]*domain.Agent{},
 		alice: app.Caller{Name: "alice", MemberID: "mem_1"}, aut: aut, reg: reg, files: files, traces: traces}
 	for _, n := range names {
 		in := app.RegisterInput{Name: n}
@@ -695,5 +698,63 @@ func TestWorkflowObservability(t *testing.T) {
 	failed, err := e.svc.RunsWhere(e.ctx, e.alice, "写-审-改", domain.RunFilter{Status: domain.FlowFailed})
 	if err != nil || len(failed) != 1 || failed[0].ID != run2.ID {
 		t.Fatalf("failed runs: %v %v", failed, err)
+	}
+}
+
+// Listing must count every run, including old versions and active runs beyond
+// the run-list page size, while still applying workflow ownership first.
+func TestWorkflowListRunCounts(t *testing.T) {
+	e := newWF(t, "coder")
+	w := e.apply(`{"name":"catalog","steps":[{"id":"s","agent":"coder","prompt":"p"}]}`)
+	e.apply(`{"name":"empty","steps":[{"id":"s","agent":"coder","prompt":"p"}]}`)
+	e.apply(`{"name":"catalog","steps":[{"id":"s","agent":"coder","prompt":"updated"}]}`)
+	for i := 0; i < 210; i++ {
+		status := domain.FlowRunning
+		switch i {
+		case 205:
+			status = domain.FlowWaiting
+		case 206:
+			status = domain.FlowSucceeded
+		case 207:
+			status = domain.FlowFailed
+		case 208:
+			status = domain.FlowCancelled
+		case 209:
+			status = domain.FlowSucceeded
+		}
+		at := e.clock.Now().Add(time.Duration(i) * time.Second)
+		version := 1
+		if i > 104 {
+			version = 2
+		}
+		r := &domain.WorkflowRun{ID: fmt.Sprintf("run_catalog_%d", i), WorkflowID: w.ID, Name: w.Name, Version: version, Status: status, Owner: w.Owner, OwnerID: w.OwnerID, CreatedAt: at, UpdatedAt: at}
+		if err := e.repo.CreateRun(e.ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.svc.SetEnabled(e.ctx, e.alice, w.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	list, err := e.svc.List(e.ctx, e.alice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("workflows: %d", len(list))
+	}
+	for _, o := range list {
+		if o.Workflow.Name == "empty" {
+			if o.RunCounts == nil || len(o.RunCounts) != 0 || o.Active != 0 {
+				t.Fatalf("empty counts: %+v", o)
+			}
+			continue
+		}
+		if o.Active != 206 || o.RunCounts[domain.FlowSucceeded] != 2 || o.RunCounts[domain.FlowFailed] != 1 || o.RunCounts[domain.FlowCancelled] != 1 || o.RunCounts[domain.FlowWaiting] != 1 || o.LastRun.Status != domain.FlowSucceeded {
+			t.Fatalf("counts: active=%d states=%v latest=%s", o.Active, o.RunCounts, o.LastRun.Status)
+		}
+	}
+	other, err := e.svc.List(e.ctx, app.Caller{Name: "bob", MemberID: "mem_2"})
+	if err != nil || len(other) != 0 {
+		t.Fatalf("private workflows leaked: %d %v", len(other), err)
 	}
 }

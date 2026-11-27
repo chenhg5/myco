@@ -30,9 +30,10 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
-	perf    *perf.Timings
-	goals   *app.GoalService
-	watches *app.WatchService
+	databaseStats func() api.DatabasePoolStats
+	perf          *perf.Timings
+	goals         *app.GoalService
+	watches       *app.WatchService
 
 	projectInvites *app.ProjectInvitationService
 	projectAutos   *app.ProjectAutomationService
