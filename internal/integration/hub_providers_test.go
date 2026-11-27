@@ -216,6 +216,26 @@ func TestAModelProviderTheHubKeepsWithEncryptionOff(t *testing.T) {
 		t.Fatalf("not acknowledged: %+v", a.RunSettings)
 	}
 
+	// A computer may start many agents with it in a minute: each spawn's
+	// grant is its own limit (L2). Refusals are held to a few a minute.
+	for i := 0; i < 7; i++ {
+		code, _, raw := win.do("POST", "/app/hubs/"+win.hub+"/machines/"+mid+"/spawn", map[string]any{
+			"cli": "claude", "dir": filepath.Join(home, "proj"), "name": "burst" + string(rune('a'+i)), "provider": pid})
+		if code != 200 {
+			t.Fatalf("spawn %d in a minute: %d %s", i+1, code, raw)
+		}
+	}
+	nodeClient := h.client(nodeCfg.Token)
+	refused := 0
+	for i := 0; i < 8; i++ {
+		if _, err := nodeClient.ProviderMaterial(c, "", "pgr_made_up"); err != nil && strings.Contains(err.Error(), "too many") {
+			refused++
+		}
+	}
+	if refused == 0 {
+		t.Fatal("made-up grants were not held to a few a minute")
+	}
+
 	// Encryption on: the Mac seals the key for Glenn's devices, and the hub
 	// drops its copy (the same key: version 2 still).
 	if _, err := admin.SetHubSettings(c, api.HubSettings{E2E: true}); err != nil {
@@ -329,5 +349,48 @@ func TestAKeyTheHubLostIsSaidAndNotMadeAgain(t *testing.T) {
 	}
 	if _, err := h.client(pair.Token).CreateModelProvider(c, api.ModelProviderRequest{ID: "prv_lostkey00003", Name: &name, Vendor: &vendor, AnthropicBase: &base, APIKey: &other}); err != nil {
 		t.Fatalf("a new one after: %v", err)
+	}
+}
+
+// L3 and L1 (i119 review): with the hub keeping the key, a new address,
+// vendor or small model is a new key version too (agents are offered it,
+// as with a sealed key); a name alone is not. And a short key shows none
+// of itself.
+func TestAHubKeptProvidersNewAddressIsANewVersion(t *testing.T) {
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	inv, err := h.admin().InviteMember(c, api.InviteRequest{Name: "glenn", Role: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pair, err := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "glenn-mac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	glenn := h.client(pair.Token)
+	name, vendor, base, key := "MiniMax", "custom", "https://api.example.test/anthropic", "mm-version-key-0123456789"
+	p, err := glenn.CreateModelProvider(c, api.ModelProviderRequest{ID: "prv_version00001", Name: &name, Vendor: &vendor, AnthropicBase: &base, APIKey: &key})
+	if err != nil || p.KeyVersion != 1 {
+		t.Fatalf("add: %v %+v", err, p)
+	}
+	renamed := "MiniMax (work)"
+	if p, err = glenn.UpdateModelProvider(c, p.ID, api.ModelProviderRequest{Name: &renamed}); err != nil || p.KeyVersion != 1 {
+		t.Fatalf("a new name is no new version: %v %+v", err, p)
+	}
+	moved := "https://api2.example.test/anthropic"
+	if p, err = glenn.UpdateModelProvider(c, p.ID, api.ModelProviderRequest{AnthropicBase: &moved}); err != nil || p.KeyVersion != 2 || p.AnthropicBase != moved {
+		t.Fatalf("a new address is a new version: %v %+v", err, p)
+	}
+	small := "mini-1"
+	if p, err = glenn.UpdateModelProvider(c, p.ID, api.ModelProviderRequest{SmallModel: &small}); err != nil || p.KeyVersion != 3 {
+		t.Fatalf("a new small model is a new version: %v %+v", err, p)
+	}
+	if k, err := glenn.ModelProviderKey(c, p.ID); err != nil || k.APIKey != key || k.KeyVersion != 3 {
+		t.Fatalf("the key after: %v %+v", err, k)
+	}
+	short := "abcd1234"
+	q, err := glenn.CreateModelProvider(c, api.ModelProviderRequest{ID: "prv_version00002", Name: &name, Vendor: &vendor, AnthropicBase: &base, APIKey: &short})
+	if err != nil || q.KeyHint != "" {
+		t.Fatalf("a short key's hint: %v %+v", err, q)
 	}
 }

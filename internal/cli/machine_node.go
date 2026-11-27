@@ -342,22 +342,7 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				return vars, ps, nil
 			},
 			HubProvider: func(ctx context.Context, cli, sender, grant string) (map[string]string, *harness.ProviderSettings, error) {
-				got, err := c.ProviderMaterial(ctx, "", grant)
-				if err != nil {
-					return nil, nil, errors.New("it could not be fetched from the hub")
-				}
-				// Set by this computer's owner, sent by them or by the hub
-				// for them: as for a sealed one.
-				if err := providerSenderOK(ctx, c, sender, got.From); err != nil {
-					return nil, nil, err
-				}
-				man := provider.Manual{BaseURL: got.BaseURL, APIKey: got.APIKey, Model: got.Model, WireAPI: got.WireAPI, SmallModel: got.SmallModel}
-				if man.Validate(cli) != nil {
-					return nil, nil, errors.New("its settings are not valid for " + cli)
-				}
-				vars := man.Variables(cli)
-				ps, _, _ := providerFromVars(cli, vars)
-				return vars, ps, nil
+				return hubProvider(ctx, c, cli, sender, grant)
 			},
 			ProviderFor: func(cli string) *harness.ProviderSettings {
 				cfg, err := config.Load(config.ProfilePath(e.defaultPath, me.Name))
@@ -476,6 +461,31 @@ func spawnedEnvFile(defaultPath, agent, machineFile string, vars map[string]stri
 		return "", errors.New("cannot save the new agent's provider settings")
 	}
 	return file, nil
+}
+
+// hubProvider fetches, with a spawn's grant, the provider the hub keeps for
+// the new agent (i119). Only a request the hub sent carries a grant: one
+// from anyone else is refused before the grant is used (it would be spent,
+// and the request denied, for nothing). The settings are then taken only
+// when this computer's owner set them, as a sealed one.
+func hubProvider(ctx context.Context, c *client.Client, cli, sender, grant string) (map[string]string, *harness.ProviderSettings, error) {
+	if sender != machinenode.AdminSender {
+		return nil, nil, errors.New("a provider the hub keeps comes only with a request the hub sent")
+	}
+	got, err := c.ProviderMaterial(ctx, "", grant)
+	if err != nil {
+		return nil, nil, errors.New("it could not be fetched from the hub")
+	}
+	if err := providerSenderOK(ctx, c, sender, got.From); err != nil {
+		return nil, nil, err
+	}
+	man := provider.Manual{BaseURL: got.BaseURL, APIKey: got.APIKey, Model: got.Model, WireAPI: got.WireAPI, SmallModel: got.SmallModel}
+	if man.Validate(cli) != nil {
+		return nil, nil, errors.New("its settings are not valid for " + cli)
+	}
+	vars := man.Variables(cli)
+	ps, _, _ := providerFromVars(cli, vars)
+	return vars, ps, nil
 }
 
 // providerSenderOK: a provider sealed for this computer is taken only from

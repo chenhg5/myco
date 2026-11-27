@@ -1783,8 +1783,16 @@ they cannot be opened): the owner entering a lost provider's key again does.
   records the agent's provider as for a sealed one.
 
 Every answer is recorded (`provider.material`, `provider.key.read`: who, which
-provider, which version, never the key), refusals too; each caller may read
-six a minute; nothing is cached or logged. Other members, other agents, the
+provider, which version, never the key), refusals too. Each caller is held to
+six a minute for reads by request id, owners' key reads and refusals; a grant
+is its own limit (one spawn, once), so a computer may start many agents in a
+minute. A node checks that a spawn request came from the hub before it uses
+the request's grant. Nothing is cached or logged.
+
+A new vendor, address or small model is a new `key_version` with the hub
+keeping the key as well (the key is sealed again for it), so agents with the
+old settings are offered the new ones; a new name is not. `key_hint` is
+empty for a key shorter than twelve characters. Other members, other agents, the
 administrator token and device tokens of no member get nothing.
 
 **Turning encryption on or off.** On: the owner's App, at its next look at the
