@@ -62,6 +62,8 @@ myco im set --name feishu-coder --prompt-file rules.txt   # its own instructions
 
 **Instructions.** Each bot can have its owner's own instructions for the front desk, separate from voice chats: in the App, **Instructions** next to the bot; or `--prompt-file` above. They matter most when people other than the owner talk to the bot: how to talk to them, what it may answer, what it must not do. The front desk is told whether the person is the owner, and the instructions win over its defaults. Tasks it hands over for anyone other than the owner carry the instructions too, so the agent keeps to them as well. They are stored in the bot's config file on that computer (at most 8000 characters).
 
+Instructions guide the model; they are not a permission boundary. Someone talking to the bot may persuade the model past them. Who can talk to the bot at all is decided by `myco im allow`; what must never be touched has to be limited by the agent's own permissions and its project's settings.
+
 Then:
 
 - **Direct chat:** each message is a task, or an addition to the task at work.

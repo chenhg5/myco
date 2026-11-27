@@ -12,6 +12,8 @@ Each agent can have its own Feishu, Lark and Slack bots: one bot per agent, the 
 
 **Instructions.** Each bot can have its own instructions for the front desk, separate from voice chats: in the "Chat apps" row, click **Instructions** next to the bot and write how it should talk, what it may answer and what it must not do. This matters most when people other than you talk to it (customers, for example). Work handed over for anyone other than the owner carries the instructions too, so the agent keeps to them as well.
 
+Note: instructions guide the model; they are not a permission boundary, and someone may talk the model past them. Who can talk to the bot at all is set under "Who can use it" below; what must never be touched has to be limited by the agent's own permissions and its project's settings.
+
 ![Instructions](shot:member-chat-apps-prompt)
 
 ## Bind a Feishu bot to an agent
