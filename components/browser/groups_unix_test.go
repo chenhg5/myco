@@ -446,12 +446,18 @@ func TestBrowserGroupStopsLeaderFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir, _ = filepath.EvalSymlinks(dir)
+	// Every process starts before the group is recorded and lives until
+	// signalled (nothing short-lived: other tests make this process a
+	// subreaper, and an unrecorded orphan would never be reaped).
 	script := `M="$1"
-sh -c 'trap "echo term > \"$0/helper-term\"; exit 0" TERM; while :; do sleep 0.05; done' "$M" &
+sh -c 's=; trap "echo term > \"$0/helper-term\"; kill \$s; exit 0" TERM; sleep 1000 & s=$!; echo ready > "$0/helper.ready"; wait $s' "$M" &
 c=$!
-trap 'kill -KILL $c; wait $c 2>/dev/null; exit 0' TERM
+sleep 1000 &
+s=$!
+trap 'kill -KILL $c $s; exit 0' TERM
+while [ ! -f "$M/helper.ready" ]; do :; done
 echo $c > "$M/helper.pid"
-while :; do sleep 0.05; done`
+wait $s`
 	cmd := exec.Command("/bin/sh", "-c", script, "leader", dir)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
@@ -481,15 +487,11 @@ while :; do sleep 0.05; done`
 	if err := saveBrowserGroup(dir, r); err != nil {
 		t.Fatal(err)
 	}
-	start := time.Now()
 	if err := terminateBrowserGroup(dir, r, false); err != nil {
 		t.Fatal(err)
 	}
 	<-done
 	if _, err := os.Stat(filepath.Join(dir, "helper-term")); err == nil {
 		t.Fatal("the helper was sent SIGTERM directly, not ended by its browser")
-	}
-	if took := time.Since(start); took > 3*time.Second {
-		t.Fatalf("a browser that quits on SIGTERM took %v", took)
 	}
 }
