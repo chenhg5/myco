@@ -9,6 +9,9 @@ import { usageFixture } from "./usage.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { showcase } from "./showcase.mjs";
 
+// Mock-only one-time receipts and the bindings restored between UI cases.
+const handoverLinks = new Map();
+const handoverAgents = new Map();
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
 // MOCK_OS_URL: a real App backend for myco.os (see /app/os below).
 const OS_URL = (process.env.MOCK_OS_URL || "").replace(/\/$/, "");
@@ -2129,6 +2132,26 @@ const server = http.createServer(async (req, res) => {
   const method = req.method || "GET";
   console.error(`${method} ${url.pathname}`);
 
+  // The public one-time exchange used by `myco join` in another session.
+  // These tokens and credentials are mock-only; never call a real hub here.
+  if (parts.length === 2 && parts[0] === "v1" && parts[1] === "takeover" && method === "POST") {
+    const body = (await readBody(req)) || {};
+    const ticket = handoverLinks.get(body.token);
+    if (!ticket) return fail(res, 404, "not_found", "takeover command is invalid or already used");
+    const binding = body.binding;
+    if (!binding?.harness || !binding?.session_id) return fail(res, 400, "invalid_argument", "binding harness and session_id are required");
+    const { handover, agent } = ticket;
+    if (!handoverAgents.has(agent)) handoverAgents.set(agent, JSON.parse(JSON.stringify({ binding: agent.binding, runtime: agent.runtime, machine_id: agent.machine_id })));
+    handoverLinks.delete(body.token);
+    agent.binding = { ...binding };
+    agent.runtime = { cli: binding.harness };
+    delete agent.machine_id;
+    handover.to = { binding: { ...binding }, runtime: { ...agent.runtime } };
+    handover.state = "done";
+    handover.done_at = iso();
+    return send(res, 200, { agent, token: "mock-only-agent-credential", handover, brief: "Mock handover note" });
+  }
+
   if (method === "OPTIONS") { res.writeHead(204); res.end(); return; }
   // MOCK_DELAY=ms: answers about a hub take this long (a hub far away).
   if (process.env.MOCK_DELAY && parts[1] === "hubs" && parts.length > 3) {
@@ -2291,6 +2314,14 @@ const server = http.createServer(async (req, res) => {
   // and theme from the seeded ones.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "handovers" && parts.length === 3 && method === "POST") {
     state.handovers = {};
+    handoverLinks.clear();
+    for (const [agent, before] of handoverAgents) {
+      agent.binding = before.binding;
+      agent.runtime = before.runtime;
+      if (before.machine_id) agent.machine_id = before.machine_id;
+      else delete agent.machine_id;
+    }
+    handoverAgents.clear();
     return send(res, 200, { ok: true });
   }
 
@@ -4206,8 +4237,8 @@ const server = http.createServer(async (req, res) => {
     // 「换一个来接着做」 (hubs after v0.19.22; the others answer 404). pm-codex
     // was taken over from a claude.ai session two days ago: the line in its
     // chat, and 「换回这个」 in its profile. A command waits for whoever runs it
-    // (nobody does here); a computer path answers after a moment, with the
-    // new session's first words. The agent itself is left as it is.
+    // and can be redeemed through the public mock route; a computer path returns
+    // the new session's first words.
     if (parts.length === 6 && parts[3] === "agents" && ["handovers", "handover-link", "handover"].includes(parts[5])) {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       if (hub.id !== "hub_studio") return fail(res, 404, "not_found", "no such route");
@@ -4225,7 +4256,9 @@ const server = http.createServer(async (req, res) => {
       if (parts[5] === "handover-link") {
         const h = { id, agent: name, at: iso(), by: "alice", note: body.note || "", from, to: { binding: {} }, state: "waiting", open_tasks: [], back: body.back || "", expires_at: iso(-86_400) };
         list.unshift(h);
-        const url = `${hub.url.replace(/^http:/, "https:")}/h/myco_takeover_9f3k2demo${id.slice(4)}`;
+        const token = `myco_takeover_mock_${id.slice(4)}`;
+        handoverLinks.set(token, { hub, handover: h, agent });
+        const url = `${hub.url.replace(/^http:/, "https:")}/h/${token}`;
         return send(res, 201, { handover: h, url, command: `curl -fsSL '${url}' | sh`, command_ps1: `irm '${url}?format=ps1' | iex` });
       }
       const m = (hub.machines || []).find((x) => x.id === body.machine || x.name === body.machine);

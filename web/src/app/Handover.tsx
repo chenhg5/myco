@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import type { Handover, HandoverLink, HandoverResult, HandoverSide } from "@/api";
 import { appApi, isOldHub } from "@/appapi";
@@ -53,8 +53,11 @@ export function handoverItem(row: AgentRow | undefined): { label: string; onSele
 
 // Handovers by agent, as last read (a conversation and the profile share them).
 const cache = new Map<string, { list: Handover[]; at: number }>();
+// Non-secret IDs only: closing the command dialog must not lose its receipt.
+const commandHandovers = new Map<string, string>();
 const FRESH_MS = 30_000;
 const keyOf = (hubId: string, name: string) => `${hubId}\u0000${name}`;
+const commandKeyOf = (hubId: string, name: string, back?: string) => `${keyOf(hubId, name)}\u0000${back || ""}`;
 
 /** An agent's handovers (newest first); [] on hubs without them. */
 export function useHandovers(hubId: string | undefined, name: string | undefined, enabled = true): Handover[] {
@@ -210,6 +213,9 @@ export function HandoverDialog({ target, rows, onClose, onDone, onOpenProfile }:
   const [link, setLink] = useState<HandoverLink | null>(null);
   const [os, setOs] = useState<"sh" | "ps">("sh");
   const [arrived, setArrived] = useState<Handover | null>(null);
+  const [commandId, setCommandId] = useState<string>();
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   // A fresh start each time it opens.
   useEffect(() => {
@@ -223,21 +229,40 @@ export function HandoverDialog({ target, rows, onClose, onDone, onOpenProfile }:
     setDir(own ? a.binding.workdir || "" : "");
     setNote("");
     setBusy(null); setError(null); setResult(null); setLink(null); setArrived(null);
+    setCommandId(commandHandovers.get(commandKeyOf(target.hubId, target.name, back?.id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.hubId, target?.name, back?.id]);
 
-  // The command path: wait for whoever runs it.
+  // Parent clocks recreate callbacks every second. Depend on the receipt,
+  // not callback/target identity, so a 3-second poll can actually fire.
+  const hubId = target?.hubId;
+  const agentName = target?.name;
   useEffect(() => {
-    if (!link || arrived || !target) return;
-    const id = link.handover.id;
-    const t = window.setInterval(() => {
-      appApi.handovers(target.hubId, target.name).then((r) => {
-        const h = r.handovers.find((x) => x.id === id);
-        if (h?.state === "done") { setArrived(h); changed(target.hubId, target.name); onDone(); }
-      }).catch(() => {});
-    }, 3000);
-    return () => window.clearInterval(t);
-  }, [link, arrived, target, onDone]);
+    if (!commandId || arrived || !hubId || !agentName) return;
+    let off = false;
+    let loading = false;
+    const load = async () => {
+      if (off || loading) return;
+      loading = true;
+      try {
+        const r = await appApi.handovers(hubId, agentName);
+        if (off) return;
+        const h = (r.handovers || []).find((x) => x.id === commandId);
+        if (h?.state === "done") {
+          off = true;
+          setArrived(h);
+          changed(hubId, agentName);
+          onDoneRef.current();
+        }
+      } catch {
+        // A transient failure is not a completed handover. Retry the same
+        // list route supported by older handover-capable hubs.
+      } finally { loading = false; }
+    };
+    void load();
+    const t = window.setInterval(() => void load(), 3000);
+    return () => { off = true; window.clearInterval(t); };
+  }, [commandId, arrived, hubId, agentName]);
 
   if (!target || !row || !a || !hub) return null;
   const name = nodeName(a, hub);
@@ -263,7 +288,10 @@ export function HandoverDialog({ target, rows, onClose, onDone, onOpenProfile }:
         changed(hub.id, a.name);
         onDone();
       } else {
-        setLink(await appApi.handoverLink(hub.id, a.name, { ...(note.trim() ? { note: note.trim() } : {}), ...(back ? { back: back.id } : {}) }));
+        const made = await appApi.handoverLink(hub.id, a.name, { ...(note.trim() ? { note: note.trim() } : {}), ...(back ? { back: back.id } : {}) });
+        commandHandovers.set(commandKeyOf(hub.id, a.name, back?.id), made.handover.id);
+        setCommandId(made.handover.id);
+        setLink(made);
         changed(hub.id, a.name);
       }
     } catch (e) {
@@ -300,7 +328,13 @@ export function HandoverDialog({ target, rows, onClose, onDone, onOpenProfile }:
               <div className="ho-reply">{result.spawn.reply}</div>
             </div>
           )}
-          <div className="app-modal-actions"><button type="button" className="app-btn app-btn-primary" onClick={onClose}>{L("完成", "Done")}</button></div>
+          <div className="app-modal-actions">
+            {arrived && <button type="button" className="app-btn" onClick={() => {
+              commandHandovers.delete(commandKeyOf(hub.id, a.name, back?.id));
+              setCommandId(undefined); setArrived(null); setLink(null); setError(null);
+            }}>{L("再换一个会话", "Hand over again")}</button>}
+            <button type="button" className="app-btn app-btn-primary" onClick={onClose}>{L("完成", "Done")}</button>
+          </div>
         </div>
       ) : (
         <div className="ho-body">
