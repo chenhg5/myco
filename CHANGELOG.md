@@ -4,6 +4,22 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.5
+
+- CLI: `myco hub perf` now also reports the workspace's database pool — connections in use and idle, and the wait count and wait time accumulated since the pool opened (not just the requested minutes) — so time spent waiting for a connection is visible apart from statement time.
+- Hub: when many requests refresh the same agent at once, only one writes its last-seen time per interval instead of all of them, so busy agents mean fewer database writes.
+- App: a long command in a dialog's notice now wraps instead of widening the dialog and cutting off its left edge, and dialogs never scroll sideways; in focus mode the plan, goal and watches block spans the column again, as a rounded card.
+- App: a dialog whose title has only a screen-reader description now keeps the same gap before its content as a described title, and when your message is the last one it keeps room beneath it, so the time and buttons shown on hover no longer touch the box or the note below.
+- App: the Workflows page shows an overview of runs across all workflows and versions (in progress, including those waiting for your decision, succeeded and failed, with cancelled kept apart), lets you search by name, description or project and filter by project and status, and each row shows what is running now even when the workflow is off or its last run finished; older workspaces show a dash for unavailable totals.
+
+**中文**
+
+- 命令行：`myco hub perf` 现在还会显示工作区的数据库连接池——在用和空闲的连接数，以及自连接池打开以来累计的等待次数和等待时间（不只是 --minutes 窗口内），从而能把等连接的耗时和语句执行耗时分开看。
+- Hub：多个请求同时刷新同一个 agent 时，每个刷新间隔只有一次写入最后活跃时间，不再每个请求都写，忙碌 agent 带来的数据库写入因此更少。
+- 桌面应用：对话框提示里的长命令现在会换行，不再把对话框撑宽、切掉左边；对话框也不再横向滚动。专注模式里计划、目标、监视这一块重新占满整列，显示为圆角卡片。
+- 桌面应用：标题下只有读屏用说明（没有可见文字）的对话框，现在和有一句说明时保持同样的间距；你的消息是最后一条时，下方也留出了空间，悬停出现的时间和按钮不再压到输入框或下方的只读说明。
+- 桌面应用：工作流页面顶部汇总所有工作流、所有版本的运行次数（进行中，含等你决定的、成功、失败，取消另列），可按名称、说明或项目搜索，并按项目和状态筛选；每行单独显示当前正在跑的运行，即使流程已停用或最近一次已完成也不隐藏，旧工作区缺少统计时显示「—」而不是零。
+
 ## v0.23.4
 
 - App: a short name people write for an agent (cloud-7 for cloud-7-claude-rmv6) now links like the full name, showing the agent's name and opening its chat, when the prefix is cut at a dash, contains a digit, belongs to that one agent and is no other agent's name.
