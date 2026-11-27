@@ -709,9 +709,26 @@ type ProfileRequest struct {
 	// AllowFrom replaces who may send tasks/notes (admin only; [] = anyone,
 	// refused for exec nodes). The agent's token is not changed.
 	AllowFrom *[]string `json:"allow_from,omitempty"`
+	// AllowAdd and AllowRemove atomically edit the current list. They cannot
+	// be combined with AllowFrom, or contain the same name in both lists.
+	AllowAdd    *[]string `json:"allow_add,omitempty"`
+	AllowRemove *[]string `json:"allow_remove,omitempty"`
 	// AcceptExecRisk confirms that an exec node with an empty allow_from
 	// should run commands from every agent (stored as "*").
 	AcceptExecRisk bool `json:"accept_exec_risk,omitempty"`
+}
+
+// ProfileResponse preserves the Agent response shape for older clients.
+type ProfileResponse struct {
+	Agent
+	AllowFromChange *AllowFromChange `json:"allow_from_change,omitempty"`
+}
+
+// AllowFromChange is the actual difference applied to the stored list.
+type AllowFromChange struct {
+	Added     []string `json:"added"`
+	Removed   []string `json:"removed"`
+	Unchanged []string `json:"unchanged"`
 }
 
 // Alias is a re-pointable address for an agent.

@@ -112,7 +112,11 @@ func NewAuditRepo(db *sql.DB) *AuditRepo { return &AuditRepo{db: db} }
 var _ domain.AuditRepository = (*AuditRepo)(nil)
 
 func (r *AuditRepo) Append(ctx context.Context, e *domain.AuditEntry) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO audit_log (id, at, actor, actor_name, actor_kind, action, target, detail) VALUES (?,?,?,?,?,?,?,?)`,
+	return appendAudit(ctx, r.db, e)
+}
+
+func appendAudit(ctx context.Context, q sqlExecer, e *domain.AuditEntry) error {
+	_, err := q.ExecContext(ctx, `INSERT INTO audit_log (id, at, actor, actor_name, actor_kind, action, target, detail) VALUES (?,?,?,?,?,?,?,?)`,
 		e.ID, ms(e.At), e.Actor, e.ActorName, e.ActorKind, e.Action, e.Target, e.Detail)
 	return internal(err)
 }

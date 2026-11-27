@@ -6525,6 +6525,56 @@ async function runMatrix(browser, size, scheme) {
       await closeRun();
     });
 
+    await step("终端 · 派任务权限增量", async () => {
+      const endpoint = `http://${HOST}:${mockPort()}/app/hubs/hub_studio/agents/demo-shell/allow_from`;
+      const edit = async (body) => {
+        const response = await fetch(endpoint, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!response.ok) throw new Error(`sender edit failed: HTTP ${response.status}`);
+        return response.json();
+      };
+      const overview = await (await fetch(`http://${HOST}:${mockPort()}/app/overview`)).json();
+      const original = overview.hubs.find((h) => h.id === "hub_studio").overview.agents.find((a) => a.agent.name === "demo-shell").agent.allow_from;
+      try {
+        await edit({ allow_from: ["pm-codex", "release-console"] });
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.locator(".app-shell").waitFor();
+        await go(page, "电脑", narrow);
+        await clickVisible(page, page.locator(".pc-card", { hasText: "Studio Mac" }));
+        const terminal = page.locator(".pc-term").filter({ has: page.locator(".pc-row-name", { hasText: /^~$/ }) });
+        await clickVisible(page, terminal.getByRole("button", { name: "设置", exact: true }));
+        const settings = page.locator("[data-testid=computer-settings]");
+        const choice = settings.locator(".pcs-agent:not(.is-on)").first();
+        const picked = await choice.innerText();
+        await clickVisible(page, choice);
+        // The editor must preserve a sender added after it was opened.
+        await edit({ allow_add: ["concurrent-reviewer"] });
+        const response = page.waitForResponse((r) => r.url().endsWith("/agents/demo-shell/allow_from") && r.request().method() === "PUT");
+        await clickVisible(page, settings.getByRole("button", { name: "保存", exact: true }));
+        const saved = await response;
+        const payload = saved.request().postDataJSON();
+        if (payload.allow_from || payload.allow_add?.length !== 1 || payload.allow_remove?.length) throw new Error("editor addition must use an incremental request");
+        const result = await saved.json();
+        for (const n of ["pm-codex", "release-console", "concurrent-reviewer"]) if (!result.allow_from.includes(n)) throw new Error(`addition removed ${n}`);
+        await settings.getByText("已保存", { exact: true }).waitFor();
+        const added = payload.allow_add[0];
+        await clickVisible(page, settings.locator(".pcs-agent", { hasText: picked.trim() }).first());
+        await clickVisible(page, settings.getByRole("button", { name: "保存", exact: true }));
+        const confirm = page.locator(".app-modal.app-confirm");
+        await confirm.getByText("移除这些派任务权限？", { exact: true }).waitFor();
+        if (!(await confirm.innerText()).includes(added)) throw new Error("removal confirmation must name the sender");
+        await shot(page, size, scheme, "sender-permissions-remove");
+        const removed = page.waitForResponse((r) => r.url().endsWith("/agents/demo-shell/allow_from") && r.request().method() === "PUT");
+        await clickVisible(page, confirm.getByRole("button", { name: "保存", exact: true }));
+        const after = await (await removed).json();
+        if (after.allow_from.includes(added) || !after.allow_from.includes("release-console") || !after.allow_from.includes("concurrent-reviewer")) throw new Error("removal must keep unrelated senders");
+        await settings.getByRole("button", { name: "好", exact: true }).waitFor();
+        await clickVisible(page, settings.getByRole("button", { name: "好", exact: true }));
+      } finally {
+        await edit({ allow_from: original });
+        await page.keyboard.press("Escape").catch(() => undefined);
+      }
+    });
+
     await step("电脑", async () => {
       await go(page, "电脑", narrow);
       // A card each: what it is, whether it is on, what runs there.
@@ -6634,6 +6684,8 @@ async function runMatrix(browser, size, scheme) {
       if (isWsl) await set.locator(".pcs-project").first().waitFor({ timeout: 10_000 });
       await clickVisible(page, set.locator(".pcs-agent").last());
       await clickVisible(page, set.getByRole("button", { name: "保存" }));
+      const permissionConfirm = page.locator(".app-modal.app-confirm");
+      if (await permissionConfirm.waitFor({ timeout: 800 }).then(() => true, () => false)) await clickVisible(page, permissionConfirm.getByRole("button", { name: "保存", exact: true }));
       await set.getByText("已保存").waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-settings");

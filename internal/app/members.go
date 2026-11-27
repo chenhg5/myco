@@ -316,6 +316,14 @@ func (s *AuditService) Record(ctx context.Context, by Actor, action, target, det
 	}
 }
 
+// Entry prepares an audit entry for an operation that persists it atomically.
+func (s *AuditService) Entry(by Actor, action, target string) *domain.AuditEntry {
+	if s == nil {
+		return nil
+	}
+	return &domain.AuditEntry{ID: s.ids.New("aud"), At: s.clock.Now(), Actor: by.MemberID(), ActorName: by.Name(), ActorKind: by.Kind(), Action: action, Target: target}
+}
+
 // List reads the audit log, newest first.
 func (s *AuditService) List(ctx context.Context, f domain.AuditFilter) ([]*domain.AuditEntry, error) {
 	return s.repo.List(ctx, f)

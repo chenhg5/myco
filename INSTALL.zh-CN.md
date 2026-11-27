@@ -654,7 +654,7 @@ myco exec --to vps-shell --cmd "systemctl status caddy" --timeout 2m --format js
 等待超时后结果才回来也不要紧：exec 节点的结果直接记为已处理，不会堆在调用方的收件箱里（不会把调用方的 runner 叫醒去看一段过期输出）；还想要的话用 `myco message wait --id <消息 id>` 取回。其他节点发来、已经用不上的消息，可以不收取直接 `myco message done --id <消息 id>` 清掉，或在 App 节点详情的「当前工作」里点「忽略」。
 
 **安全说明**
-- **发送方限制**：没有 `allow_from` 的 exec 节点，runner 会拒绝启动。Hub 发消息时检查一次，节点执行前会再检查一次。之后要改允许谁，由管理员执行 `myco agent update --name <节点> --allow-from a,b`：不换令牌，节点不用重新登录，约 30 秒内生效。确实要让所有节点（包括以后加入的）都能在这台机器上执行命令时，必须显式确认：`myco agent update --name <节点> --allow-anyone --i-understand-exec-risk`（名单会记为 `*`）。
+- **发送方限制**：没有 `allow_from` 的 exec 节点，runner 会拒绝启动。Hub 发消息时检查一次，节点执行前会再检查一次。之后要增加或移除发送者，由管理员执行 `myco agent update --name <节点> --allow-add a,b` 或 `--allow-remove a`：不换令牌，节点不用重新登录，约 30 秒内生效。确实要让所有节点（包括以后加入的）都能在这台机器上执行命令时，必须显式确认：`myco agent update --name <节点> --allow-anyone --i-understand-exec-risk`（名单会记为 `*`）。 整表替换仍用 `--allow-from a,b`；会移除 exec 节点原有条目时，会列出名字，必须加 `--replace`（未确认退出码 5，脚本中也一样）。`--dry-run` 只读显示前后名单与新增、移除、未变的条目（退出码 10）。增量修改需要新版 Hub，客户端不会为兼容旧 Hub 而偷偷改成整表覆盖。App 的授权和审批只追加；在编辑器取消勾选时，保存前会列出移除的名字并确认。
 - **提示词注入**：如果允许一个 AI agent 发命令，那么能影响这个 agent 的内容（网页、PR、别人发给它的消息）就可能间接在你的机器上执行命令。`allow-from` 里的节点越少越好，能用白名单就用白名单。
 - **只执行任务**：note、reply、event 一律不执行；附件不会下载。
 - **环境变量**：命令在一个干净的环境里运行，只带上面继承的变量、`env_file` 里的变量和 `MYCO_FROM` 等上下文变量。**不会**带上 agent 令牌（`MYCO_TOKEN`、`MYCO_CONFIG`）。

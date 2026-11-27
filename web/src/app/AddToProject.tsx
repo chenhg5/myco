@@ -37,7 +37,7 @@ export async function shareWorkspaces(hubId: string, project: Project, rows: Age
   await Promise.all(spaces.map((r) => {
     const now = (r.st.agent.allow_from || []).filter((x) => x !== "*" && !isNobody(x));
     if (now.includes(agent)) return null;
-    return appApi.updateAllowFrom(hubId, r.st.agent.name, [...now, agent]).catch(() => null);
+    return appApi.addAllowedSenders(hubId, r.st.agent.name, [agent]);
   }));
 }
 
@@ -1230,7 +1230,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
       const now = (r.st.agent.allow_from || []).filter((x) => !isNobody(x));
       if (now.length && !now.includes("*")) {
         const next = [...new Set([...now, ...users])];
-        if (next.length !== now.length) await appApi.updateAllowFrom(hubId, r.st.agent.name, next).catch(() => undefined);
+        if (next.length !== now.length) await appApi.addAllowedSenders(hubId, r.st.agent.name, users.filter((n) => !now.includes(n)));
       }
       onAdded();
       onClose();

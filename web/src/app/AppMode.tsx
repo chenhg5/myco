@@ -28,7 +28,7 @@ import { Prepare, preparePending, setPreparePending } from "@/app/Prepare";
 import { Checklist, startOnboarding, type ChecklistStep } from "@/app/Onboard";
 import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/ProjectSpace";
 import { dragAgent } from "@/app/Panes";
-import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, isNobody } from "@/app/AddToProject";
+import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog } from "@/app/AddToProject";
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { useSimpleMode } from "@/app/simpleMode";
@@ -48,6 +48,7 @@ import { NoticesPanel } from "@/app/NoticesPanel";
 import type { Notice } from "@/api";
 import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
+import { ErrorText } from "@/app/dialogs";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { setSystemDictation } from "@/app/Dictate";
@@ -185,6 +186,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // What the hubs showed last (also from before a restart) until they answer.
   const [ov, setOv] = useState<AppOverview | null>(() => recall<AppOverview>("overview") ?? null);
   const [error, setError] = useState<unknown>(null);
+  const [permissionError, setPermissionError] = useState<unknown>(null);
   const [prefsError, setPrefsError] = useState(preferencesProblem);
   useEffect(() => {
     const changed = () => setPrefsError(preferencesProblem());
@@ -538,6 +540,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // A project's computers are for every agent in it: one that joined by
   // itself (myco join --project) is let in here. Each pair is tried once.
   const shared = useRef(new Set<string>());
+  useEffect(() => { setPermissionError(null); }, [hubId]);
   useEffect(() => {
     for (const x of projects || []) {
       if (x.p.archived) continue;
@@ -551,7 +554,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         if (!missing.length) continue;
         missing.forEach((a) => shared.current.add(`${x.hubId}\u0000${w.st.agent.name}\u0000${a}`));
         // A computer added before any agent was locked to nobody: they take its place.
-        void appApi.updateAllowFrom(x.hubId, w.st.agent.name, [...allow.filter((n) => !isNobody(n)), ...missing]).catch(() => undefined);
+        void appApi.addAllowedSenders(x.hubId, w.st.agent.name, missing).catch(setPermissionError);
       }
     }
   }, [projects, allRows]);
@@ -1480,6 +1483,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
           <PageToggle />
         </header>
 
+        {permissionError !== null && <div className="app-banner-wrap"><ErrorText error={permissionError} /></div>}
         {prefsError && <div className="app-banner-wrap"><div className="app-error-row" role="alert"><span className="err">{L("本机设置暂时无法读取或保存，请重试。", "Local settings could not be read or saved. Please retry.")}</span><button type="button" className="app-btn app-btn-small" onClick={() => void flushPreferences().catch(() => undefined)}>{L("重试", "Retry")}</button></div></div>}
         {error !== null && (
           <div className="app-banner-wrap">

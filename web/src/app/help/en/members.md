@@ -66,7 +66,7 @@ To change it, open the agent's card, expand **Details**, and click **Who can see
 
 ## Who can give it tasks
 
-**Who can give tasks**, under Manage at the bottom of the card: select some agents and only they may give it tasks; select none and any agent may. Messages you send yourself from the App are not limited by this. Only its owner or an admin can change it.
+**Who can give tasks**, under Manage at the bottom of the card: select some agents and only they may give it tasks; select none and none may. Saving adds or removes only the entries you changed, and asks before removing named senders. Messages you send yourself from the App are not limited by this. Only its owner or an admin can change it.
 
 ## Who sees a project
 

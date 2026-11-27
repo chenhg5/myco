@@ -5269,9 +5269,22 @@ const server = http.createServer(async (req, res) => {
       }
       if (parts.length === 6 && parts[5] === "allow_from" && method === "PUT") {
         const body = await readBody(req);
-        if (!Array.isArray(body?.allow_from)) return fail(res, 400, "invalid_request", "allow_from 必须是字符串数组");
-        agent.allow_from = body.allow_from.map(String);
-        return send(res, 200, agent);
+        if (process.env.MOCK_OLD_HUB && (body.allow_add || body.allow_remove)) return fail(res, 400, "upgrade_required", "Upgrade the Hub to edit sender permissions incrementally");
+        const before = [...agent.allow_from];
+        const add = body.allow_add || [], remove = body.allow_remove || [];
+        if (body.allow_from && (body.allow_add || body.allow_remove) || add.some((n) => remove.includes(n))) return fail(res, 400, "invalid_argument", "conflicting permission edits");
+        if (body.allow_from) agent.allow_from = [...new Set(body.allow_from)];
+        else if (body.allow_add || body.allow_remove) {
+          if (!before.length || before.includes("*")) {
+            if (remove.length) return fail(res, 400, "invalid_argument", "replace unrestricted permissions explicitly");
+          } else {
+            const next = [...new Set([...before.filter((n) => !remove.includes(n)), ...add])];
+            if (!next.length) return fail(res, 400, "invalid_argument", "cannot remove the final sender");
+            agent.allow_from = next;
+          }
+        } else return fail(res, 400, "invalid_argument", "permission edit required");
+        const allow_from_change = { added: agent.allow_from.filter((n) => !before.includes(n)), removed: before.filter((n) => !agent.allow_from.includes(n)), unchanged: before.filter((n) => agent.allow_from.includes(n)) };
+        return send(res, 200, { ...agent, allow_from_change });
       }
       if (parts.length === 6 && parts[5] === "kick" && method === "POST") {
         agent.online = false;

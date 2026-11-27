@@ -1043,9 +1043,10 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name stri
 	if !decode(w, r, &req) {
 		return
 	}
-	if req.AllowFrom != nil && !admin {
+	edit := domain.AllowFromEdit{Replace: req.AllowFrom, Add: req.AllowAdd, Remove: req.AllowRemove}
+	if edit.Present() && !admin {
 		writeError(w, domain.Errf(domain.CodePermissionDenied, "only the hub admin can change allow_from").
-			WithSuggestion("ask the admin to run: myco agent update --name %s --allow-from <agents>", name))
+			WithSuggestion("ask the admin to run: myco agent update --name %s --allow-add <agents>", name))
 		return
 	}
 	was, ok := s.cardBefore(w, r, name)
@@ -1057,18 +1058,23 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name stri
 		writeError(w, err)
 		return
 	}
-	a, err := s.agents.UpdateProfile(r.Context(), name, req.DisplayName, req.Description, req.AllowFrom, req.AcceptExecRisk, av)
+	var audit *domain.AuditEntry
+	if edit.Present() {
+		audit = s.audit.Entry(s.actorOf(r), "agent.update", name)
+	}
+	a, diff, err := s.agents.ChangeProfile(r.Context(), name, req.DisplayName, req.Description, edit, req.AcceptExecRisk, av, audit)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	s.recordEdit(r, by, was, a)
-	if admin && req.AllowFrom != nil {
-		s.record(r, "agent.update", string(a.Name), "allow_from: "+orNone(strings.Join(*req.AllowFrom, ", ")))
-	}
 	dto := s.agentDTO(r, a)
 	s.enrich(r.Context(), &dto)
-	writeJSON(w, http.StatusOK, dto)
+	out := api.ProfileResponse{Agent: dto}
+	if diff != nil {
+		out.AllowFromChange = &api.AllowFromChange{Added: diff.Added, Removed: diff.Removed, Unchanged: diff.Unchanged}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // avatarOf reads a profile's avatar: a drawn face's word, or a picture sent

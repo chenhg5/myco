@@ -968,6 +968,10 @@ export const appApi = {
     request<void>("PUT", `app/hubs/${enc(hubId)}/aliases/${enc(alias)}`, { target }),
   removeAlias: (hubId: string, alias: string) =>
     request<void>("DELETE", `app/hubs/${enc(hubId)}/aliases/${enc(alias)}`),
+  changeAllowFrom: (hubId: string, name: string, change: import("@/lib/allow-from").AllowFromEdit) =>
+    request<Agent & { allow_from_change?: import("@/lib/allow-from").AllowFromChange }>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/allow_from`, change),
+  addAllowedSenders: (hubId: string, name: string, names: string[]) =>
+    appApi.changeAllowFrom(hubId, name, { allow_add: names }),
   updateAllowFrom: (hubId: string, name: string, allowFrom: string[]) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/allow_from`, { allow_from: allowFrom }),
   kick: (hubId: string, name: string) =>

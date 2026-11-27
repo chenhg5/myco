@@ -8,6 +8,7 @@ import (
 	"github.com/myco-ai/myco/internal/api"
 	. "github.com/myco-ai/myco/internal/cli/cmdkit"
 	"github.com/myco-ai/myco/internal/client"
+	"github.com/myco-ai/myco/internal/domain"
 )
 
 // agentAliasCommands manages re-pointable role addresses.
@@ -146,12 +147,16 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 		Examples: []string{
 			`myco agent update --display-name "Mac Claude (loops)"`,
 			`myco agent update --name codex-loops-01a1a9c3 --display-name "Codex reviewer" --description "reviews PRs"`,
-			"myco agent update --name demo-shell --allow-from cloud-1,cloud-sample-app   # admin; the token is unchanged",
+			"myco agent update --name demo-shell --allow-add cloud-sample-app   # preserve existing senders",
+			"myco agent update --name demo-shell --allow-from cloud-1 --replace   # replace the whole list",
 		},
 		Flags: []Flag{
 			{Name: "display-name", Kind: String, Help: "Human-friendly name, up to 80 bytes"},
 			{Name: "description", Kind: String, Help: "What this agent does"},
-			{Name: "allow-from", Kind: List, Help: "Admin: replace who may send tasks/notes to it (exec nodes take effect within ~30s)"},
+			{Name: "allow-from", Kind: List, Help: "Admin: replace all senders; exec removals require --replace (takes effect within ~30s)"},
+			{Name: "allow-add", Kind: List, Help: "Admin: add senders without removing existing entries (requires a current Hub)"},
+			{Name: "allow-remove", Kind: List, Help: "Admin: remove only these senders (requires a current Hub)"},
+			{Name: "replace", Kind: Bool, Help: "Confirm --allow-from may remove existing exec-node senders"},
 			{Name: "allow-anyone", Kind: Bool, Help: "Admin: let any agent send to it (exec nodes also need --i-understand-exec-risk)"},
 			{Name: "i-understand-exec-risk", Kind: Bool, Help: "With --allow-anyone on an exec node: every agent, including future ones, may run shell commands there"},
 			{Name: "name", Kind: String, Help: "Another agent (needs the admin token); default: yourself"},
@@ -168,7 +173,8 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 				req.Description = &v
 			}
 			name := e.in.String("name")
-			if e.in.IsSet("allow-from") || e.in.Bool("allow-anyone") {
+			permissions := e.in.IsSet("allow-from") || e.in.Bool("allow-anyone") || e.in.IsSet("allow-add") || e.in.IsSet("allow-remove")
+			if permissions {
 				// allow_from is a person's call, even on yourself
 			} else {
 				name = e.otherAgent()
@@ -184,13 +190,27 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 				req.AllowFrom = &v
 				req.AcceptExecRisk = e.in.Bool("i-understand-exec-risk")
 			}
-			if req.AllowFrom != nil && name == "" {
+			if e.in.IsSet("allow-add") {
+				v := e.in.List("allow-add")
+				req.AllowAdd = &v
+			}
+			if e.in.IsSet("allow-remove") {
+				v := e.in.List("allow-remove")
+				req.AllowRemove = &v
+			}
+			if req.AllowFrom != nil && (req.AllowAdd != nil || req.AllowRemove != nil) {
+				return errorf("invalid_usage", ExitUsage, "use replacement or incremental flags", "--allow-from/--allow-anyone cannot be combined with --allow-add/--allow-remove")
+			}
+			if e.in.Bool("replace") && !e.in.IsSet("allow-from") {
+				return errorf("invalid_usage", ExitUsage, "use --replace only with --allow-from", "--replace requires --allow-from")
+			}
+			if permissions && name == "" {
 				return errorf("invalid_usage", ExitUsage, "add --name <agent> (changing allow-from needs the admin token)", "--allow-from changes another agent")
 			}
-			if req.DisplayName == nil && req.Description == nil && req.AllowFrom == nil {
+			if req.DisplayName == nil && req.Description == nil && !permissions {
 				return errorf("invalid_usage", ExitUsage, "pass --display-name, --description or --allow-from", "nothing to update")
 			}
-			if e.in.Bool("dry-run") {
+			if e.in.Bool("dry-run") && !permissions {
 				return e.dryRun(map[string]any{"action": "update_profile", "agent": orDefault(name, e.cfg.Agent), "profile": req})
 			}
 			var (
@@ -198,7 +218,7 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 				err error
 			)
 			switch {
-			case name != "" && req.AllowFrom == nil:
+			case name != "" && !permissions:
 				c, err = e.cardClient() // a coordinator may change the card
 			case name != "":
 				c, err = e.adminClient()
@@ -208,7 +228,33 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 			if err != nil {
 				return err
 			}
-			a, err := c.UpdateProfile(e.in.Ctx, name, req)
+			if permissions {
+				before, err := c.GetAgent(e.in.Ctx, name)
+				if err != nil {
+					return err
+				}
+				names := make([]domain.AgentName, len(before.AllowFrom))
+				for i, n := range before.AllowFrom {
+					names[i] = domain.AgentName(n)
+				}
+				preview := &domain.Agent{AllowFrom: names, Binding: domain.Binding{Harness: before.Binding.Harness}}
+				diff, err := (domain.AllowFromEdit{Replace: req.AllowFrom, Add: req.AllowAdd, Remove: req.AllowRemove}).Apply(preview, req.AcceptExecRisk)
+				if err != nil {
+					return errorf("invalid_argument", ExitUsage, "check sender names and permissions; exec --allow-anyone also needs --i-understand-exec-risk", "%s", err.Error())
+				}
+				if e.in.Bool("dry-run") {
+					return e.dryRun(map[string]any{"action": "update_profile", "agent": name, "profile": req, "before": before.AllowFrom, "after": preview.AllowFrom, "added": diff.Added, "removed": diff.Removed, "unchanged": diff.Unchanged})
+				}
+				if e.in.IsSet("allow-from") && before.Binding.Harness == "exec" && len(diff.Removed) != 0 && !e.in.Bool("replace") {
+					return errorf("allow_replace_required", ExitConflict, "to add senders use --allow-add; to replace the entire list repeat with --replace", "replacement would remove exec-node senders: %s", strings.Join(diff.Removed, ", "))
+				}
+				if e.in.IsSet("allow-from") && before.Binding.Harness == "exec" && !e.in.Bool("replace") {
+					// A sender may have been added after the preview. Without
+					// replacement consent, use an atomic append to preserve it.
+					req.AllowAdd, req.AllowFrom = req.AllowFrom, nil
+				}
+			}
+			a, err := c.UpdateProfileWithChanges(e.in.Ctx, name, req)
 			if err != nil {
 				return err
 			}
@@ -219,6 +265,9 @@ dashboard. Pass an empty value (--display-name "") to clear it. To give an agent
 					allow = "anyone"
 				case "*":
 					allow = "anyone (explicitly; exec risk accepted)"
+				}
+				if a.AllowFromChange != nil {
+					fmt.Fprintf(w, "Added: %s; removed: %s\n", strings.Join(a.AllowFromChange.Added, ", "), strings.Join(a.AllowFromChange.Removed, ", "))
 				}
 				fmt.Fprintf(w, "%s: display name %q, description %q, accepts messages from %s\n", a.Name, a.DisplayName, a.Description, allow)
 			})

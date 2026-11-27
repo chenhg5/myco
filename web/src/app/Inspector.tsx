@@ -1,3 +1,5 @@
+import { senderEdit, removedSenders } from "@/lib/allow-from";
+import { isNobody, nobody } from "@/app/AddToProject";
 import { runnerUpdating } from "@/lib/runner-state";
 import { useEffect, useState } from "react";
 import { useCached } from "@/lib/memo";
@@ -112,7 +114,15 @@ function historyLines(e: AuditEntry): string[] {
   switch (e.action) {
     case "agent.visibility": return [L(`可见范围改为「${e.detail === "private" ? "仅自己" : "团队可见"}」`, `Visibility set to ${e.detail === "private" ? "only its owner" : "everyone on the hub"}`)];
     case "agent.owner": return [L(`转交：${e.detail || ""}`, `Given: ${e.detail || ""}`)];
-    case "agent.update": return [e.detail?.startsWith("allow_from: ") ? L(`允许谁派任务：${e.detail.slice(12)}`, `Who can give tasks: ${e.detail.slice(12)}`) : (e.detail || L("修改", "Changed"))];
+    case "agent.update": {
+      try {
+        const d = JSON.parse(e.detail || "") as { added?: string[]; removed?: string[] };
+        if (Array.isArray(d.added) && Array.isArray(d.removed)) return [
+          L(`允许谁派任务：新增 ${d.added.join(", ") || "无"}；移除 ${d.removed.join(", ") || "无"}`, `Who can give tasks: added ${d.added.join(", ") || "none"}; removed ${d.removed.join(", ") || "none"}`),
+        ];
+      } catch { /* Older Hubs store a human-readable list. */ }
+      return [e.detail?.startsWith("allow_from: ") ? L(`允许谁派任务：${e.detail.slice(12)}`, `Who can give tasks: ${e.detail.slice(12)}`) : (e.detail || L("修改", "Changed"))];
+    }
     case "agent.coordinator": return [e.detail === "on" ? L("设为协调者", "Made a coordinator") : L("不再是协调者", "No longer a coordinator")];
     case "agent.kick": return [L("踢下线", "Disconnected")];
     case "agent.register": return [L("注册", "Registered")];
@@ -929,6 +939,8 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
   const [allowFrom, setAllowFrom] = useState<string[]>([]);
+  const [allowBefore, setAllowBefore] = useState<string[]>([]);
+  const [confirmAllow, setConfirmAllow] = useState(false);
   const [skillDrafts, setSkillDrafts] = useState<SkillDraft[]>([]);
   const [visChoice, setVisChoice] = useState<"team" | "private">("team");
   const [joinChoice, setJoinChoice] = useState("");
@@ -942,6 +954,8 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
     setDisplayName(ag?.display_name || "");
     setDescription(ag?.description || "");
     setAllowFrom(ag?.allow_from || []);
+    setAllowBefore(ag?.allow_from || []);
+    setConfirmAllow(false);
     // Only reset when a different agent is opened, not on every 5s poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row?.hub.id, ag?.id]);
@@ -1041,7 +1055,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   const joinable = hubProjects.filter((p) => !p.archived && !p.members.some((m) => m.name === ag.name));
   const roleIn = (p: Project) => p.members.find((m) => m.name === ag.name)?.role;
 
-  const openAction = (a: Exclude<Action, null>) => { setError(null); setAction(a); };
+  const openAction = (a: Exclude<Action, null>) => { setError(null); if (a === "allow") { setAllowFrom(ag.allow_from); setAllowBefore(ag.allow_from); setConfirmAllow(false); } setAction(a); };
   const closeAction = () => { if (!busy) { setAction(null); setError(null); } };
 
   const run = async (fn: () => Promise<unknown>, after: "close-action" | "close-panel" | "stay") => {
@@ -1073,17 +1087,18 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
     () => appApi.setSkills(hubId, ag.name, skillDrafts.filter((d) => d.name.trim()).map(fromDraft)),
     "close-action",
   );
-  // "*" (any node) is set by join links; picking nodes replaces it. A shell
-  // node always names who may run commands, so clearing keeps "*" there.
+  // Unrestricted access must be narrowed explicitly. Restricted lists are
+  // edited relative to their original snapshot so new senders survive.
   const anyNode = allowFrom.includes("*");
+  const removals = removedSenders(allowBefore, allowFrom);
+  const commitAllowFrom = () => void run(async () => {
+    await appApi.changeAllowFrom(hubId, ag.name, senderEdit(allowBefore, allowFrom.filter((n) => !isNobody(n)), nobody()));
+    setConfirmAllow(false);
+  }, "close-action");
   const saveAllowFrom = () => {
-    // Still open to any node: nothing to change ("*" is only set with the
-    // CLI's explicit --allow-anyone, never by name).
-    if (anyNode || (allowFrom.length === 0 && ag.allow_from.includes("*"))) {
-      closeAction();
-      return;
-    }
-    void run(() => appApi.updateAllowFrom(hubId, ag.name, allowFrom), "close-action");
+    if (anyNode || (allowFrom.length === allowBefore.length && allowFrom.every((n) => allowBefore.includes(n)))) { closeAction(); return; }
+    if (removals.length) setConfirmAllow(true);
+    else commitAllowFrom();
   };
 
   const current = row.st.current || [];
@@ -1717,24 +1732,24 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
       </Modal>
 
       <Modal
-        open={action === "allow"}
+        open={action === "allow" && !confirmAllow}
         onOpenChange={(o) => !o && closeAction()}
         title={L("允许谁派任务", "Who can give tasks")}
-        description={L("只有选中的 agent 可以给它派任务；一个都不选，就是任何 agent 都可以。你在 App 里发的消息不受这个限制。", "Only the selected nodes can give it tasks; with none selected, any node can. Messages you send from the app are not limited by this.")}
+        description={L("只有选中的 agent 可以给它派任务；一个都不选，就没有 agent 可以。你在 App 里发的消息不受这个限制。", "Only the selected agents can give it tasks; with none selected, none can. Messages you send from the app are not limited by this.")}
         wide className="allow-dlg"
       >
         {(() => {
-          const n = allowFrom.filter((x) => x !== "*").length;
+          const n = allowFrom.filter((x) => x !== "*" && !isNobody(x)).length;
           return (
             <div className={cn("allow-now", n > 0 && "is-limited")} data-testid="allow-now">
-              {n === 0 ? L("现在：任何 agent 都可以给它派任务", "Now: any node can give it tasks") : L(`现在：只有选中的 ${n} 个可以`, `Now: only the ${n} selected`)}
+              {anyNode ? L("现在：任何 agent 都可以给它派任务", "Now: any agent can give it tasks") : n === 0 ? L("现在：没有 agent 可以给它派任务", "Now: no agent can give it tasks") : L(`现在：只有选中的 ${n} 个可以`, `Now: only the ${n} selected`)}
             </div>
           );
         })()}
         <NodePicker
           nodes={(row.hub.overview?.agents || []).map((x) => x.agent)
             .filter((x) => x.name !== ag.name && agentKind(x) !== "machine")}
-          value={allowFrom.filter((n) => n !== "*")}
+          value={allowFrom.filter((n) => n !== "*" && !isNobody(n))}
           onChange={setAllowFrom}
           emptyPlaceholder={L("搜索 agent", "Search agents")}
           disabled={busy}
@@ -1746,6 +1761,11 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
         </div>
       </Modal>
 
+      <ConfirmDialog open={confirmAllow} onOpenChange={setConfirmAllow}
+        title={L("移除这些派任务权限？", "Remove these sender permissions?")}
+        description={removals.map((n) => n === "*" ? L("任何 agent", "Any agent") : n).join(", ")}
+        confirmLabel={L("保存", "Save")} onConfirm={commitAllowFrom} busy={busy}
+        error={error ? <ErrorText error={error} /> : undefined} />
       <ConfirmDialog
         open={action === "kick"}
         onOpenChange={(o) => !o && closeAction()}

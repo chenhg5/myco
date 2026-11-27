@@ -431,12 +431,28 @@ func (c *Client) SetSkills(ctx context.Context, name string, skills []api.Skill)
 }
 
 func (c *Client) UpdateProfile(ctx context.Context, name string, req api.ProfileRequest) (*api.Agent, error) {
+	out, err := c.UpdateProfileWithChanges(ctx, name, req)
+	if err != nil {
+		return nil, err
+	}
+	return &out.Agent, nil
+}
+
+// UpdateProfileWithChanges never falls back to a read/replace when an older
+// Hub rejects delta fields: that fallback could erase concurrent permissions.
+func (c *Client) UpdateProfileWithChanges(ctx context.Context, name string, req api.ProfileRequest) (*api.ProfileResponse, error) {
 	path := "/v1/me/profile"
 	if name != "" {
 		path = "/v1/agents/" + esc(name) + "/profile"
 	}
-	var out api.Agent
-	return &out, c.do(ctx, http.MethodPut, path, nil, req, &out)
+	var out api.ProfileResponse
+	err := c.do(ctx, http.MethodPut, path, nil, req, &out)
+	var ce *Error
+	if (req.AllowAdd != nil || req.AllowRemove != nil) && errors.As(err, &ce) && ce.Code == "invalid_argument" &&
+		(strings.Contains(ce.Message, `unknown field "allow_add"`) || strings.Contains(ce.Message, `unknown field "allow_remove"`)) {
+		return nil, &Error{Status: ce.Status, Code: "upgrade_required", Message: "this Hub does not support incremental sender permissions", Suggestion: "upgrade the Hub, then retry; no permissions were replaced"}
+	}
+	return &out, err
 }
 
 // ListAliases lists aliases.
