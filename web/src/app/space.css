@@ -3819,6 +3819,10 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
 .ui-clean .conv-head-what { display: none; }
 /* a project's head too: its name; the goal shows on hover */
 .ui-clean .sp-head-titles p { display: none; }
+/* (one line needs less height: the heads of a project and of a chat are
+   lower, and stay the same height as each other) */
+.ui-clean .app-shell,
+.ui-clean .app-portal { --pane-head-h: 44px; }
 .ui-clean .conv-head-titles p:not(:has(.app-stale)) { display: none; }
 .ui-clean .sp-member > .pa {
   width: 10px !important;

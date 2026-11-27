@@ -5004,10 +5004,11 @@ async function runMatrix(browser, size, scheme) {
       if (look.mushrooms) throw new Error("清爽模式下不该有走路的小蘑菇");
       const projectHead = await page.evaluate(() => {
         const p = document.querySelector(".sp-home .sp-head-titles p");
-        return { line: !!p && p.getClientRects().length > 0, tip: document.querySelector(".sp-home .sp-head-titles h2")?.getAttribute("title") || "" };
+        return { line: !!p && p.getClientRects().length > 0, tip: document.querySelector(".sp-home .sp-head-titles h2")?.getAttribute("title") || "", h: document.querySelector(".sp-home .sp-head")?.getBoundingClientRect().height || 0 };
       });
       if (projectHead.line) throw new Error("清爽模式下项目标题只留一行名字，不显示目标");
       if (!projectHead.tip) throw new Error("清爽模式下项目的目标应在名字的悬停提示里");
+      if (projectHead.h > 48) throw new Error(`清爽模式下标题只有一行，应更矮，实际高 ${projectHead.h}px`);
       await settle(page, 300);
       await shot(page, size, scheme, "clean-mode");
       // A chat's head is one line: the name; what it is with on hover.
@@ -5016,6 +5017,8 @@ async function runMatrix(browser, size, scheme) {
       await head.locator("h2", { hasText: "Release" }).waitFor({ timeout: 10_000 });
       if (await head.locator(".conv-head-titles p").isVisible()) throw new Error("清爽模式下会话标题只留一行名字，不显示描述");
       if (!(await head.locator("h2").getAttribute("title"))) throw new Error("清爽模式下描述应在名字的悬停提示里");
+      const headH = (await head.boundingBox())?.height || 0;
+      if (headH > 48) throw new Error(`清爽模式下会话标题应更矮，实际高 ${headH}px`);
       await shot(page, size, scheme, "clean-mode-chat");
       await style("标准");
       if (await page.evaluate(() => document.documentElement.classList.contains("ui-clean"))) throw new Error("换回标准，装饰应回来");
