@@ -351,6 +351,9 @@ jobs:
     # App-owned unit/browser suites remain in myco-ai/apps.
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      PLAYWRIGHT: "1.57.0"
+      PLAYWRIGHT_IMAGE: "mcr.microsoft.com/playwright:v1.57.0-noble@sha256:3bed4b1a12f2338642f3d8cba28e291deef3c66bd4a964bbeb3e57bbff511dbd"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -371,15 +374,38 @@ jobs:
           ref: ${{ steps.apps.outputs.commit }}
           path: .cache/apps-source
           persist-credentials: false
-      - name: Dependencies for native/Hub contract fixtures
+      # Keep orchestration in the workflow commit, even for older frozen sources.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .contract-tools
+          sparse-checkout: |
+            scripts/ci-contracts.py
+            scripts/ci-contracts.test.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Pull the pinned browser runtime
+        run: docker pull -q "$PLAYWRIGHT_IMAGE"
+      - name: Dependencies for native/Hub contract fixtures (npm only)
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: |
           npm --prefix .cache/apps-source/templates ci
-          npm install -g playwright@1.57.0
-          playwright install --with-deps chromium
-          sudo apt-get install -y fonts-noto-cjk ffmpeg
+          npm install --global --prefix "$RUNNER_TEMP/contract-node" --no-audit --no-fund "playwright@$PLAYWRIGHT"
+          python3 .contract-tools/scripts/ci-contracts.test.py
       - name: Prepare exact released app bundles
         run: python3 scripts/prepare-apps.py --apps-dir .cache/apps-source/dist/official
       - name: Real Hub, native adapters and application contracts
         env:
           APPS_TEST_ROOT: ${{ github.workspace }}/.cache/apps-source
-        run: go test -count=1 ./internal/integration ./internal/console ./internal/sshcap -run 'Test(AgentActionsSDK|PageExportApplications|WhiteboardSharedExport|PaletteAgentToPage|ShoppingComparisonAgentToPage|DatabaseNativeBridgeAndProductionUI|RealSSHOverviewTemplateParser)$'
+        run: |
+          python3 .contract-tools/scripts/ci-contracts.py --image "$PLAYWRIGHT_IMAGE" \
+            --playwright-prefix "$RUNNER_TEMP/contract-node" --out "$RUNNER_TEMP/app-contract-results"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app-contract-results-${{ inputs.source_sha || github.sha }}
+          path: ${{ runner.temp }}/app-contract-results/*.json*
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: ignore
