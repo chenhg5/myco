@@ -2494,6 +2494,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // itself answers: then it is shown once, as the message it now is.
   const pendingLanded = !!pending && !!pending.body && [...older, ...(messages || [])].some((m) =>
     isMe(m.from, row?.hub) && (m.body || "").trim().startsWith(pending.body.trim()) && new Date(m.created_at).getTime() >= (pending.at || 0) - 5_000);
+  // The line under the name: what this chat is with.
+  const headWhat = observed
+    ? L("它们之间的对话，你只能看", "Their conversation; you can only read it")
+    : shellMode ? (agent ? whereOf({ hub: row!.hub, st: row!.st }) : "") : [role, agent?.description].filter(Boolean).join(" · ") || L("和你的一对一", "Just you and it");
   return (
     <VersionsContext.Provider value={versions}>
     <PagePinsContext.Provider value={pagePins}>
@@ -2520,12 +2524,13 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           })}
         </span>
         <div className="conv-head-titles">
-          <h2>{observed ? parties.map(nameOf).join(" 和 ") : agentName}</h2>
+          <h2 title={headWhat || undefined}>{observed ? parties.map(nameOf).join(" 和 ") : agentName}</h2>
+          {/* 清爽 keeps the head to one line: the description goes (it
+              stays on hover over the name); a hub it cannot reach still
+              says so. */}
           <p>
-            {observed
-              ? L("它们之间的对话，你只能看", "Their conversation; you can only read it")
-              : shellMode ? (agent ? whereOf({ hub: row!.hub, st: row!.st }) : "") : [role, agent?.description].filter(Boolean).join(" · ") || L("和你的一对一", "Just you and it")}
-            {row?.hub.stale && <> · <span className="app-stale" title={row.hub.stale.error || undefined}>{L(`连不上 · 显示的是 ${timeAgo(row.hub.stale.at, now)}的内容`, `Can't reach it · showing ${timeAgo(row.hub.stale.at, now)}`)}</span></>}
+            <span className="conv-head-what">{headWhat}</span>
+            {row?.hub.stale && <><span className="conv-head-what"> · </span><span className="app-stale" title={row.hub.stale.error || undefined}>{L(`连不上 · 显示的是 ${timeAgo(row.hub.stale.at, now)}的内容`, `Can't reach it · showing ${timeAgo(row.hub.stale.at, now)}`)}</span></>}
           </p>
         </div>
         {/* No running state here (已完成, 在干活…): the foot of the chat
