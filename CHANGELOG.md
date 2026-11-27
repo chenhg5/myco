@@ -4,25 +4,60 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
-## v0.23.8
+## v0.23.9
 
 Brief release notes, generated from commit titles. Formal notes will follow.
-- App: ` Hide offline computers in the Add agent dialog ` (ac8d612d)
-- App: ` App: adding a model provider picks the vendor from a select ` (cf6cf4ce)
-- App: ` App: the mic and Send stay inside a narrow box you write in ` (781789e2)
-- App: ` Observe delayed first-character rendering in latency diagnostics ` (7b904063)
-- App, Runner, CLI, Hub: ` Measure message startup and first-text delivery stages ` (b892ba85)
+- App: ` App: a chat's head opens its profile; its open work is settled in the chat ` (a1d7e274)
+- App: ` App: a workflow step's failure is said once, with a touch of red ` (bbabe3c3)
+- App: ` App: a workflow card's row has no tag or failure; the card says it ` (2a683e59)
+- App: ` App: a workflow card's time row no longer lies over what follows it ` (9eda3eea)
+- App: ` App: a workflow card's time and buttons at its right, on hover ` (baa04a54)
+- App: ` App: workflow messages are the workspace's; a failed task is a quiet line ` (8f4d086f)
+- App: ` App: a workflow's steps in a chat read as themselves, quietly ` (c72b27e0)
+- App: ` App: a workflow's end, in a chat, is a card with a way to its run ` (3359b678)
+- Hub: ` Replace stalled shared hub transports after bounded no-response timeouts ` (3aad16cf)
+- App, CLI, Hub: ` Allow lists: add and remove senders instead of silently replacing the list ` (c2bf5082)
+- Runner, CLI, Hub: ` Allow exec node owners to run commands from their console ` (f01abd4b)
+- CLI: ` Publish machine health without racing runtime discovery ` (5b57ff22)
+
+2 additional production commits are listed in the comparison below.
 
 **中文**
 
 简要说明，直接列出提交原标题；正式说明稍后补充。
-- 桌面应用：` Hide offline computers in the Add agent dialog ` (ac8d612d)
-- 桌面应用：` App: adding a model provider picks the vendor from a select ` (cf6cf4ce)
-- 桌面应用：` App: the mic and Send stay inside a narrow box you write in ` (781789e2)
-- 桌面应用：` Observe delayed first-character rendering in latency diagnostics ` (7b904063)
-- 桌面应用、任务执行器、命令行、Hub：` Measure message startup and first-text delivery stages ` (b892ba85)
+- 桌面应用：` App: a chat's head opens its profile; its open work is settled in the chat ` (a1d7e274)
+- 桌面应用：` App: a workflow step's failure is said once, with a touch of red ` (bbabe3c3)
+- 桌面应用：` App: a workflow card's row has no tag or failure; the card says it ` (2a683e59)
+- 桌面应用：` App: a workflow card's time row no longer lies over what follows it ` (9eda3eea)
+- 桌面应用：` App: a workflow card's time and buttons at its right, on hover ` (baa04a54)
+- 桌面应用：` App: workflow messages are the workspace's; a failed task is a quiet line ` (8f4d086f)
+- 桌面应用：` App: a workflow's steps in a chat read as themselves, quietly ` (c72b27e0)
+- 桌面应用：` App: a workflow's end, in a chat, is a card with a way to its run ` (3359b678)
+- Hub：` Replace stalled shared hub transports after bounded no-response timeouts ` (3aad16cf)
+- 桌面应用、命令行、Hub：` Allow lists: add and remove senders instead of silently replacing the list ` (c2bf5082)
+- 任务执行器、命令行、Hub：` Allow exec node owners to run commands from their console ` (f01abd4b)
+- 命令行：` Publish machine health without racing runtime discovery ` (5b57ff22)
 
-https://github.com/myco-ai/myco/compare/06f778050761ab1cf9f59c6a4ffb30e94f40b228...09b238382f1f5c63c3cab4c297d9ab6ffd085428
+另有 2 条生产提交，见下方完整比较。
+
+https://github.com/myco-ai/myco/compare/09b238382f1f5c63c3cab4c297d9ab6ffd085428...a1d7e27440a5abd4415cafc884d9e403d51b4dce
+
+## v0.23.8
+
+
+- App: hide offline remote computers in the Add agent dialog.
+- App: simplify model-provider setup with a vendor dropdown, a custom-address option and MiniMax's region selector beside the vendor.
+- App: keep the microphone and Send controls inside narrow chat composers, even with long model names.
+- App: make first-character latency diagnostics detect text revealed after the initial trace update.
+- CLI: add runner startup timing logs to help diagnose delays before tasks begin.
+
+**中文**
+
+- 桌面应用：添加 agent 时不再列出离线的其他电脑。
+- 桌面应用：添加模型供应商改用下拉选择，包含自定义地址入口，MiniMax 地区选择放在供应商旁边。
+- 桌面应用：修复聊天输入框较窄、模型名称较长时，麦克风和发送按钮被挤出输入框的问题。
+- 桌面应用：首字延迟诊断可捕捉执行记录初次更新后才逐渐显示的文字。
+- 命令行：增加任务执行器启动阶段的耗时日志，帮助定位任务开始前的延迟。
 
 ## v0.23.7
 
