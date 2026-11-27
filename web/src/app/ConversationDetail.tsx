@@ -1609,6 +1609,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const send = async (mode: "now" | "next" = "now") => {
     const typed = draft.trim();
     if (shellMode && (typed === "clear" || typed === "cls")) { clearScreen(); return; }
+    // Pressed while the one before is still on its way (a slow workspace):
+    // not dropped; it goes once that one is through, if the box still says
+    // the same (sendLater).
+    if (sending && (typed || att.any) && !att.busy && !busy) { setSendLater({ mode, text: typed }); return; }
     if ((!typed && !att.any) || att.busy || sending || busy) return;
     const body = att.body(typed);
     const attachments = att.ids.length ? att.ids : undefined;
@@ -1718,6 +1722,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       setSending(false);
     }
   };
+  // A send pressed while another was on its way: made once that one is
+  // through, if what is in the box is still what was pressed on.
+  const [sendLater, setSendLater] = useState<{ mode: "now" | "next"; text: string } | null>(null);
+  useEffect(() => {
+    if (sending || !sendLater) return;
+    setSendLater(null);
+    if (draft.trim() === sendLater.text) void send(sendLater.mode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sending, sendLater]);
+  // While a message is on its way into the queue (or waits to go), the
+  // queue's rows are not changed: taking one out needs all of them on the
+  // hub, or one still on its way would be let go behind it.
+  const queueSettling = sending || !!sendLater;
   /** A message of yours with this text, sent since then, if the hub has it. */
   const landed = async (body: string, since: number): Promise<Message | null> => {
     await new Promise((r) => setTimeout(r, 1500));
@@ -2837,11 +2854,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                   <span className="conv-queue-label">{L("排队中：", "Queued: ")}</span>
                   {item.body.split("\n")[0].trim() || L("（附件）", "(files)")}
                 </span>
-                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key || item.sending}
+                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key || item.sending || queueSettling}
                   onClick={(e) => { e.stopPropagation(); void editQueueItem(item); }}>
                   {L("编辑", "Edit")}
                 </button>
-                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key || item.sending}
+                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key || item.sending || queueSettling}
                   onClick={(e) => { e.stopPropagation(); void withdrawQueueItem(item); }}>
                   {L("撤回", "Withdraw")}
                 </button>

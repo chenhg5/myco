@@ -4606,7 +4606,16 @@ async function runMatrix(browser, size, scheme) {
       const t = "先列一下要改的页面";
       await box.fill(t);
       await box.press("Enter");
-      await page.locator(".conv-msg.is-me", { hasText: t }).last().waitFor({ timeout: 20_000 });
+      const first = page.locator(".conv-msg.is-me", { hasText: t }).last();
+      await first.waitFor({ timeout: 20_000 });
+      // (this task and the first one queued run until the step ends them
+      // (POST /app/mock/finish): on a slow runner the mock's own six seconds
+      // ran out before the third ⌘↩, which then sent instead of queuing)
+      const finish = async (text) => {
+        const id = await page.locator(".conv-detail .conv-msg.is-me[data-msg]", { hasText: text }).last().getAttribute("data-msg");
+        const r = await fetch(`http://${HOST}:${mockPort()}/app/mock/finish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) });
+        if (!r.ok) throw new Error(`没能让「${text}」那一轮结束：HTTP ${r.status}`);
+      };
       // ⌘↩ queues only while that one is at work (the box then offers to
       // queue the next one); before the agent takes it up, it would just
       // send. Wait for that, not for a fixed time.
@@ -4624,9 +4633,13 @@ async function runMatrix(browser, size, scheme) {
       await page.waitForTimeout(1500);
       if (await page.locator(".conv-msg.is-me", { hasText: a }).count()) throw new Error("撤回第一条后，后面的不该提前发出");
       // The round ends: only the first goes; the second still waits.
+      await finish(t);
       await page.locator(".conv-msg.is-me", { hasText: a }).last().waitFor({ timeout: 30_000 });
+      await page.waitForFunction(() => document.querySelectorAll(".conv-detail .conv-queue-row").length === 1, null, { timeout: 10_000 }).catch(() => undefined);
       if (await page.locator(".conv-msg.is-me", { hasText: b }).count()) throw new Error("排的第二条应等第一条做完再发，不能同时发出");
       if ((await rows.count()) !== 1) throw new Error(`第一条发出后应还剩一条在排队，实际 ${await rows.count()} 条`);
+      await page.locator(".conv-detail .conv-msg.is-me[data-msg]", { hasText: a }).last().waitFor({ timeout: 10_000 });
+      await finish(a);
       await page.locator(".conv-msg.is-me", { hasText: b }).last().waitFor({ timeout: 30_000 });
       const placed = await page.evaluate(({ t, a, b }) => {
         const els = [...document.querySelectorAll(".conv-detail .conv-msg")];
