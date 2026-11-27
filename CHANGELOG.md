@@ -4,6 +4,26 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.7
+
+- App and CLI: each chat-app bot can have its own instructions for the front desk, separate from voice chats — how it should talk, what it may answer and what it must not do — written under Instructions next to the bot, or read from a file with `myco im set --prompt-file` (an empty file clears them); at most 8000 characters, and work handed over for anyone other than the owner carries them too. They guide the model without being a permission boundary — someone may talk the model past them.
+- App: a MiniMax model provider now has a MiniMax region setting — international or China — and uses that region's endpoints, and lists MiniMax-M3 and MiniMax-M3.1-Flash instead of MiniMax-M2; its connection test result also says whether the models it found came from the provider or from myco's built-in catalog.
+- App: the new-agent dialog is tidier — the field that names the agent now says 它的名字 (it can be left blank, e.g. 后端小助手) and comes before the folder, and the model source is a short list of choices instead of two tall cards.
+- App: the new-agent dialog's 用哪个 AI now shows Claude Code, Codex, Gemini CLI and Cursor first, plus any AI this computer has installed and the one already picked; the rest are behind 更多 · N.
+- App and CLI: an agent's runtime report now carries a private account email reported locally — an identity hint, not authentication — and the App shows it next to the agent's machine name.
+- App: the handover dialog now notices within a few seconds once the command is used — before, its 3-second check was torn down every second and never asked the hub, so it kept saying it was waiting — and closing and reopening it finds the same handover (only its id is kept, not the command).
+- App: a queued message's Edit and Withdraw buttons stay clickable while it is still on its way to the hub — before, the row greyed them out and a disabled button swallowed the first click — so one click waits for the message to reach the hub, then edits or withdraws that one.
+
+**中文**
+
+- 桌面应用与命令行：每个聊天软件机器人可以有自己的接待设定，和语音聊天分开——怎么说话、能答什么、不能做什么——在机器人旁边的「Instructions」里写，或用 `myco im set --prompt-file` 从文件读入（空文件即清除）；最多 8000 字符，主人以外的人交下去的活也会带上它。它只是给模型的指引，不是权限边界，别人有可能把模型说动绕过它。
+- 桌面应用：MiniMax 模型供应商现在有「MiniMax 地区」设置——国际版或国内版——并使用对应地区的接口，模型列表改为 MiniMax-M3 和 MiniMax-M3.1-Flash（取代 MiniMax-M2）；连接测试的结果还会说明找到的模型来自供应商还是 myco 内置的模型目录。
+- 桌面应用：新建 agent 的对话框更清爽——给 agent 起名的字段现在写作「它的名字」（可以不填，比如「后端小助手」），并排在文件夹之前；模型来源是一份短的选项列表，不再是两张高卡片。
+- 桌面应用：新建 agent 的「用哪个 AI」现在先显示 Claude Code、Codex、Gemini CLI 和 Cursor，以及这台电脑上装了的其他 AI 和已选的那个；其余收在「更多 · N」里。
+- 桌面应用与命令行：agent 的运行时上报现在会带上一份本地提供的账号邮箱——只是身份提示，不是认证——App 会在 agent 的机器名旁把它显示出来。
+- 桌面应用：交棒对话框现在会在命令被用掉后几秒内发现——以前那次 3 秒检查每秒都被拆掉、从没问过 Hub，于是一直显示还在等待——关掉再打开还是同一个交棒（只保留 id，不保留命令）。
+- 桌面应用：排队中的消息在发往 Hub 途中，「编辑」和「撤回」按钮仍可点击——以前这一行会把它们变灰，被禁用的按钮会吞掉第一次点击——现在点一次会等消息到达 Hub，再编辑或撤回那一条。
+
 ## v0.23.6
 
 - CLI and App: a chat-app bot (Feishu, Lark, Slack) now speaks as the agent itself — status and replies are in the first person, never "passed to X" — and Feishu and Lark are separate apps, each with its own Bind button and QR code.
