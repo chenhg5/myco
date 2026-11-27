@@ -588,7 +588,7 @@ func logRequests(h http.Handler, log *slog.Logger, slow time.Duration, rec *perf
 		}
 		w.Header().Set(requestid.Header, id)
 		sr := &statusRecorder{ResponseWriter: w, status: 200}
-		r = r.WithContext(perf.WithRoute(requestid.With(r.Context(), id)))
+		r = r.WithContext(perf.WithRoute(requestid.With(r.Context(), id), start))
 		h.ServeHTTP(sr, r)
 		if rec != nil && !waitsOnPurpose(r) {
 			route := perf.Route(r.Context())

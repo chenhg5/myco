@@ -133,8 +133,11 @@ type SendInput struct {
 // SendOutput reports the stored message; Duplicate is true when an earlier
 // message with the same idempotency key was returned instead.
 type SendOutput struct {
-	Message   *domain.Message
-	Duplicate bool
+	// EnqueuedAt is observed immediately after the new message is committed.
+	// It is diagnostic only; duplicate and dry-run requests leave it zero.
+	EnqueuedAt time.Time
+	Message    *domain.Message
+	Duplicate  bool
 	// ViaAlias is the alias the sender used ("" if a real name).
 	ViaAlias domain.AgentName
 }
@@ -244,6 +247,7 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 		}
 		return nil, err
 	}
+	enqueuedAt := s.clock.Now()
 	if afterOpen {
 		// A close racing with Create may have happened before the close's
 		// wake-up query. Recheck after storing so neither side misses it.
@@ -253,7 +257,7 @@ func (s *MessageService) send(ctx context.Context, sender *domain.Agent, in Send
 	} else {
 		s.queued(to)
 	}
-	return &SendOutput{Message: m, ViaAlias: via}, nil
+	return &SendOutput{Message: m, ViaAlias: via, EnqueuedAt: enqueuedAt}, nil
 }
 
 // wakeAfter releases the notification for messages gated on a closed task.

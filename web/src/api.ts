@@ -199,6 +199,9 @@ export interface ProjectMember {
 }
 /** One step of a task's run (GET …/messages/{id}/trace). */
 export interface TraceStep {
+  /** Runner observation time, Unix ms; Hub event.at is later ingestion time.
+   * Cross-host subtraction requires measured clock-skew bounds. */
+  observed_at_ms?: number;
   kind: "text" | "thinking" | "tool" | "tool_result" | "usage" | "error" | "output" | "delta" | string;
   /** output: stdout/stderr; delta: text/thinking (pieces share a block id). */
   stream?: string;

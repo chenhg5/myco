@@ -1291,6 +1291,8 @@ type RecentItem struct {
 // TraceEvent is one step of the run that handled a task: what the agent
 // said, thought and did. Data is the step (harness.Event): kind, text,
 // tool, id, input, output, failed, and usage figures.
+// Data may also contain observed_at_ms (runner wall clock, Unix ms). At is
+// the Hub's ingestion clock; comparing the two requires clock-skew bounds.
 type TraceEvent struct {
 	Seq  int             `json:"seq"`
 	Kind string          `json:"kind"`

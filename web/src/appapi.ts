@@ -1,6 +1,7 @@
 import type { UsageResponse } from "@/lib/usage";
 import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList, Goal, GoalList, GoalStartRequest, GoalPatchRequest, ModelProvider, ModelProviderTestResponse } from "@/api";
 import { L } from "@/lib/i18n";
+import { latencySend } from "@/lib/latency";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
 /** GET /app/notices: whether this computer shows notices, per workspace
@@ -826,7 +827,7 @@ export const appApi = {
   },
   /** Sends a task from this console; without thread_id it starts a conversation. */
   sendMessage: (hubId: string, input: SendMessageInput) =>
-    request<Message>("POST", `app/hubs/${enc(hubId)}/messages`, input),
+    latencySend(hubId, performance.now(), request<Message>("POST", `app/hubs/${enc(hubId)}/messages`, input)),
   /** Uploads a file to attach to the next message (as yours; sealed when the
    *  workspace encrypts). Older workspaces answer not_found. */
   uploadAttachment: (hubId: string, file: File, name = file.name) =>

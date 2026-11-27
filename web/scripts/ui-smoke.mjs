@@ -2932,6 +2932,46 @@ async function runMatrix(browser, size, scheme) {
       await page.unroute("**/app/hubs/*/messages", slowSend);
     });
 
+    await step("单聊 · 首字计时不含内容", async () => {
+      await openMember(page, narrow, "聊天", "MCP Claude");
+      await noRound(page);
+      let message = "";
+      const text = `Timing fixture prompt ${size.width} ${scheme}`;
+      const pattern = "**/app/hubs/*/messages/*/trace*";
+      const sendPattern = "**/app/hubs/*/messages";
+      const sendFixture = async (route) => {
+        if (route.request().method() !== "POST" || !route.request().postData()?.includes(text)) return route.continue();
+        const response = await route.fetch();
+        const data = await response.json();
+        message = data.id; // Before the App can request the first trace.
+        await route.fulfill({ response, json: data });
+      };
+      const fixture = async (route) => {
+        if (!message || !new URL(route.request().url()).pathname.endsWith(`/messages/${message}/trace`)) return route.continue();
+        return route.fulfill({ json: { message, status: "acked", events: [{ seq: 1, kind: "text", at: new Date().toISOString(), data: { kind: "text", text: "Timing fixture response" } }] } });
+      };
+      await page.route(pattern, fixture);
+      try {
+        await page.route(sendPattern, sendFixture);
+        const box = page.locator(".conv-detail .conv-compose-input");
+        await box.fill(text);
+        const [response] = await Promise.all([
+          page.waitForResponse((r) => r.request().method() === "POST" && /\/app\/hubs\/[^/]+\/messages$/.test(new URL(r.url()).pathname) && r.request().postData()?.includes(text), { timeout: 15_000 }),
+          box.press("Enter"),
+        ]);
+        message = (await response.json()).id;
+        await page.waitForFunction((id) => performance.getEntriesByName("myco.latency").some((e) => e.detail?.message === id && e.detail.stage === "app_paint_opportunity"), message, { timeout: 15_000 });
+        const marks = await page.evaluate((id) => performance.getEntriesByName("myco.latency").filter((e) => e.detail?.message === id).map((e) => ({ at: e.startTime, detail: e.detail })), message);
+        const expected = ["app_send", "app_send_ack", "app_trace_received", "app_text_dom", "app_paint_opportunity"];
+        if (marks.length !== expected.length || marks.some((m, i) => m.detail.stage !== expected[i] || i > 0 && m.at < marks[i - 1].at)) throw new Error(`首字时间点不完整或顺序错乱：${JSON.stringify(marks)}`);
+        if (marks.some((m) => Object.keys(m.detail).sort().join(",") !== "hub,message,observed_at_ms,stage") || JSON.stringify(marks).includes("Timing fixture")) throw new Error("首字计时只能记录标识和时间，不能记录内容");
+      } finally {
+        await page.unroute(sendPattern, sendFixture);
+        await page.unroute(pattern, fixture);
+      }
+      await noRound(page);
+    });
+
     await step("单聊 · 空对话", async () => {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       const ask = compactText(await page.locator(".conv-empty h3").innerText({ timeout: 20_000 }));

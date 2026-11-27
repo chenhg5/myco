@@ -149,6 +149,9 @@ func New(agents *app.AgentService, messages *app.MessageService, enroll *app.Enr
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if perf.RequestStart(r.Context()).IsZero() {
+		r = r.WithContext(perf.WithRoute(r.Context()))
+	}
 	limit := int64(domain.MaxBodyBytes + 64*1024)
 	if r.Method == http.MethodPost && (r.URL.Path == "/v1/files" || r.URL.Path == "/v1/console/files") && s.files != nil {
 		limit = s.files.Policy().MaxSize + 1 // FileService reports "too large" itself
@@ -1388,6 +1391,10 @@ func bindingFromAPI(b api.Binding) domain.Binding {
 }
 
 func (s *Server) send(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	received := perf.RequestStart(r.Context())
+	if received.IsZero() {
+		received = time.Now()
+	}
 	var req api.SendRequest
 	if !decode(w, r, &req) {
 		return
@@ -1404,6 +1411,9 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	status := http.StatusCreated
 	if out.Duplicate || dry {
 		status = http.StatusOK
+	}
+	if !out.EnqueuedAt.IsZero() {
+		s.log.Info("message latency", "message_id", out.Message.ID, "received_at_ms", received.UnixMilli(), "enqueued_at_ms", out.EnqueuedAt.UnixMilli(), "service_ms", time.Since(received).Milliseconds())
 	}
 	writeJSON(w, status, api.SendResponse{Message: s.messageDTO(out.Message), Duplicate: out.Duplicate, DryRun: dry, ViaAlias: string(out.ViaAlias)})
 }
@@ -1991,6 +2001,10 @@ func (s *Server) consoleDevice(r *http.Request) string {
 }
 
 func (s *Server) consoleSend(w http.ResponseWriter, r *http.Request) {
+	received := perf.RequestStart(r.Context())
+	if received.IsZero() {
+		received = time.Now()
+	}
 	var req api.SendRequest
 	if !decode(w, r, &req) {
 		return
@@ -2013,6 +2027,9 @@ func (s *Server) consoleSend(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusCreated
 	if out.Duplicate {
 		status = http.StatusOK
+	}
+	if !out.EnqueuedAt.IsZero() {
+		s.log.Info("message latency", "message_id", out.Message.ID, "received_at_ms", received.UnixMilli(), "enqueued_at_ms", out.EnqueuedAt.UnixMilli(), "service_ms", time.Since(received).Milliseconds())
 	}
 	if !out.Duplicate {
 		s.record(r, "message."+string(out.Message.Type), string(out.Message.To), out.Message.ID)

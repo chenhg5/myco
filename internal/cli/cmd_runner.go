@@ -168,6 +168,12 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 // startup only bounds the initial Hub handshake. Runtime reporters and inbox
 // polling retain the service context after startup succeeds.
 func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *config.Config, sh runnerShared, ov runnerOverrides, log *slog.Logger) (*runner.Runner, error) {
+	startupStart := time.Now()
+	startupStamp := func(stage string) {
+		log.Info("runner startup latency", "agent", cfg.Agent, "stage", stage, "elapsed_ms", time.Since(startupStart).Milliseconds(), "observed_at_ms", time.Now().UnixMilli())
+	}
+	startupStamp("profile_build_start")
+	defer startupStamp("profile_build_end")
 	rc := cfg.Runner
 	first := func(vals ...string) string {
 		for _, v := range vals {
@@ -200,6 +206,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	if err != nil {
 		return nil, err
 	}
+	startupStamp("identity_ready")
 	var execSpec *harness.ExecSpec
 	if name == execnode.Name {
 		// Remote command execution: refuse to serve anyone-can-send agents.
@@ -244,6 +251,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 		return resolveProvider(h.Name(), ref, envFile)
 	}
 	initial := currentProvider()
+	startupStamp("initial_provider_ready")
 	workdir, err := filepath.Abs(first(ov.workdir, rc.Workdir, "."))
 	if err != nil {
 		return nil, err
@@ -280,6 +288,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	if me, err = c.Bind(startup, api.Binding{Harness: name, Environment: host, Workdir: workdir}); err != nil {
 		return nil, err
 	}
+	startupStamp("binding_ready")
 	var sessions runner.SessionStore = runner.NewHubSessions(c, me.Binding.SessionID)
 	if sh.scope == runner.ScopeThread {
 		if sessions, err = runner.NewFileSessions(filepath.Join(config.Dir(cfgPath), "sessions", me.Name+".json")); err != nil {

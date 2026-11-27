@@ -413,7 +413,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		if r.opts.Once {
 			wait = 0
 		}
+		pullStart := time.Now()
 		msgs, err := r.hub.Pull(ctx, free, wait)
+		for _, m := range msgs {
+			r.log.Info("run latency", "message_id", m.ID, "stage", "pull_received", "pull_wait_ms", time.Since(pullStart).Milliseconds(), "observed_at_ms", time.Now().UnixMilli())
+		}
 		// Return unused slots.
 		for i := len(msgs); i < free; i++ {
 			<-slots
@@ -461,6 +465,11 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		return
 	}
 	log := r.log.With("message_id", m.ID, "from", m.From, "type", m.Type, "thread_id", m.ThreadID)
+	latencyStart := time.Now()
+	stamp := func(stage string) {
+		log.Info("run latency", "stage", stage, "elapsed_ms", time.Since(latencyStart).Milliseconds(), "observed_at_ms", time.Now().UnixMilli())
+	}
+	stamp("runner_handle")
 	rerun := false
 	if m.Type == "task" {
 		// Before the ack: an ack can reach the hub while its answer is lost
@@ -468,6 +477,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		// and never redelivered, so a restart must still close it.
 		rerun = r.markPending(m.ID)
 	}
+	stamp("pending_persisted")
 	ackCtx, cancel := r.finishContext(ctx)
 	ackErr, unreachable := r.retryFinish(ackCtx, log, "ack", func(c context.Context) error { return r.hub.Ack(c, m.ID) })
 	cancel()
@@ -478,6 +488,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		log.Warn("ack failed; skipping", "err", ackErr, "hub_unreachable", unreachable)
 		return
 	}
+	stamp("ack_done")
 	if m.Unreadable != "" {
 		// End-to-end encrypted, and this agent cannot open it (keys changed,
 		// or not sealed for it): never run it; tell the sender.
@@ -508,6 +519,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	key := r.sessionKey(m)
 	unlock := r.lockThread(key)
 	defer unlock()
+	stamp("thread_lock_acquired")
 	if m.Type == "task" && !executor {
 		r.trackTask(m.ID)
 		defer r.untrackTask(m.ID)
@@ -550,6 +562,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		}
 		defer unlockSession()
 	}
+	stamp("session_checks_done")
 	if r.opts.SlotPool != nil {
 		ticket := r.opts.SlotPool.Request(r.opts.HubURL, SlotOwner(r.opts.HubURL, r.opts.Self), m.ID)
 		defer ticket.Done()
@@ -563,11 +576,13 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		defer func() { <-r.opts.Slots }()
 	}
 
+	stamp("slot_acquired")
 	var files []LocalFile
 	var extraDirs []string
 	if !executor { // exec nodes act on the body only; attachments stay on the hub
 		files, extraDirs = r.downloadAttachments(ctx, log, m)
 	}
+	stamp("attachments_ready")
 	log.Info("running harness", "harness", r.harness.Name(), "attachments", len(files))
 	start := time.Now()
 	deadline := start.Add(r.opts.MaxRun)
@@ -585,6 +600,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	}
 	build := func() string { return withProject(r.prompt.Build(r.opts.Self, m, files), project) }
 	prompt := build()
+	stamp("context_ready")
 	// The run's steps, for the sender's live view in the app (tasks only;
 	// never for end-to-end encrypted ones, whose content the hub must not see).
 	var tr *tracer
@@ -602,8 +618,10 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 	)
 	var run api.RunSettings
 	if !executor {
-		run = r.runSettings(ctx, log)
+		run = r.runSettings(ctx, log, stamp)
 	}
+	stamp("run_settings_ready")
+	invocation := 0
 	for first := true; ; first = false {
 		// Steers that arrived before this run (task still queued, or the
 		// previous run was interrupted by them).
@@ -641,6 +659,7 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 				"MYCO_MESSAGE_ID="+m.ID, "MYCO_THREAD_ID="+m.ThreadID, "MYCO_FROM="+m.From, "MYCO_MESSAGE_TYPE="+m.Type,
 				"MYCO_PROJECT="+m.Project),
 		}
+		stamp("environment_ready")
 		if !executor {
 			req.Env = append(req.Env, "MYCO_RUNNER_HOLD=1")
 		}
@@ -676,10 +695,13 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 				}
 			}
 		}
+		stamp("provider_resolved")
 		if r.opts.ModelEnv != nil && !executor {
 			withModelEnv(&req, r.opts.ModelEnv(req.Model))
 		}
-		res, runErr = r.harness.Run(runCtx, req)
+		stamp("request_ready")
+		invocation++
+		res, runErr = r.timedRun(runCtx, req, log, latencyStart, invocation)
 		// A session busy for a moment (just copied, or another program
 		// glancing at it) is retried here a few times before the task goes
 		// back and the App says the session is open elsewhere.
@@ -687,7 +709,8 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 			select {
 			case <-runCtx.Done():
 			case <-time.After(busyPause):
-				res, runErr = r.harness.Run(runCtx, req)
+				invocation++
+				res, runErr = r.timedRun(runCtx, req, log, latencyStart, invocation)
 			}
 		}
 		r.postUsage(ctx, usage)
@@ -1088,11 +1111,12 @@ type meReader interface {
 // the hub ("" = the machine's own). A hub that cannot answer keeps the last
 // ones known: a run is never held up by it. Access above what this machine
 // allows is lowered to it.
-func (r *Runner) runSettings(ctx context.Context, log *slog.Logger) api.RunSettings {
+func (r *Runner) runSettings(ctx context.Context, log *slog.Logger, stamp func(string)) api.RunSettings {
 	if hub, ok := r.hub.(meReader); ok {
 		c, cancel := context.WithTimeout(ctx, 5*time.Second)
 		me, err := hub.Me(c)
 		cancel()
+		stamp("settings_fetch_done")
 		r.mu.Lock()
 		if err == nil {
 			r.settings = api.RunSettings{}
@@ -1113,6 +1137,7 @@ func (r *Runner) runSettings(ctx context.Context, log *slog.Logger) api.RunSetti
 			log.Warn("provider setting not applied; keeping the local configuration")
 		}
 		cancel()
+		stamp("provider_apply_done")
 	}
 	if a, err := harness.ParseAccess(rs.Access); err != nil {
 		rs.Access = ""
@@ -1127,6 +1152,7 @@ func (r *Runner) runSettings(ctx context.Context, log *slog.Logger) api.RunSetti
 	if r.opts.OnModelsRefresh != nil {
 		r.opts.OnModelsRefresh(rs.ModelsRefresh)
 	}
+	stamp("settings_hooks_done")
 	return rs
 }
 

@@ -45,23 +45,25 @@ const (
 
 // tracer collects a run's steps and uploads them in batches.
 type tracer struct {
-	up    TraceUploader
-	ctx   context.Context
-	id    string
-	mode  string
-	log   *slog.Logger
-	mu    sync.Mutex
-	queue []api.TraceEvent
-	out   *harness.Event // output lines not queued yet
-	live  int            // output bytes so far
-	delta *harness.Event // delta text not queued yet
-	dlen  int            // delta bytes so far
-	seq   int
-	fails int
-	off   bool
-	stop  chan struct{}
-	done  chan struct{}
-	once  sync.Once
+	up                TraceUploader
+	ctx               context.Context
+	id                string
+	mode              string
+	log               *slog.Logger
+	mu                sync.Mutex
+	queue             []api.TraceEvent
+	out               *harness.Event // output lines not queued yet
+	live              int            // output bytes so far
+	delta             *harness.Event // delta text not queued yet
+	dlen              int            // delta bytes so far
+	seq               int
+	fails             int
+	off               bool
+	stop              chan struct{}
+	done              chan struct{}
+	once              sync.Once
+	firstTextAt       time.Time
+	firstTextUploaded bool
 }
 
 func newTracer(ctx context.Context, up TraceUploader, id, mode string, log *slog.Logger) *tracer {
@@ -72,6 +74,16 @@ func newTracer(ctx context.Context, up TraceUploader, id, mode string, log *slog
 
 // add records a step (harness.Request.OnEvent).
 func (t *tracer) add(ev harness.Event) {
+	if t.mode != TraceSummary && ev.Text != "" && (ev.Kind == "text" || ev.Kind == "delta" && ev.Stream == "text") {
+		t.mu.Lock()
+		if t.firstTextAt.IsZero() {
+			t.firstTextAt = time.Now()
+		}
+		t.mu.Unlock()
+	}
+	if ev.ObservedAtMS == 0 {
+		ev.ObservedAtMS = time.Now().UnixMilli()
+	}
 	switch ev.Kind {
 	case "output":
 		t.addOutput(ev)
@@ -111,7 +123,7 @@ func (t *tracer) addDelta(ev harness.Event) {
 		t.queueDelta()
 	}
 	if t.delta == nil {
-		t.delta = &harness.Event{Kind: "delta", Stream: ev.Stream, ID: ev.ID}
+		t.delta = &harness.Event{Kind: "delta", Stream: ev.Stream, ID: ev.ID, ObservedAtMS: ev.ObservedAtMS}
 	}
 	t.delta.Text += ev.Text
 }
@@ -146,7 +158,7 @@ func (t *tracer) addOutput(ev harness.Event) {
 		t.queueOutput()
 	}
 	if t.out == nil {
-		t.out = &harness.Event{Kind: "output", Stream: ev.Stream}
+		t.out = &harness.Event{Kind: "output", Stream: ev.Stream, ObservedAtMS: ev.ObservedAtMS}
 	}
 	t.out.Text += line
 }
@@ -197,16 +209,45 @@ func (t *tracer) flush() {
 	batch := t.queue
 	t.queue = nil
 	off := t.off
+	firstTextAt := t.firstTextAt
+	measureText := !t.firstTextUploaded && !firstTextAt.IsZero()
 	t.mu.Unlock()
 	if off || len(batch) == 0 {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(t.ctx), 10*time.Second)
 	defer cancel()
+	hasText := false
+	if measureText {
+		for _, event := range batch {
+			if event.Kind != "text" && event.Kind != "delta" {
+				continue
+			}
+			var step struct {
+				Kind   string `json:"kind"`
+				Stream string `json:"stream"`
+				Text   string `json:"text"`
+			}
+			if json.Unmarshal(event.Data, &step) == nil && step.Text != "" && (step.Kind == "text" || step.Kind == "delta" && step.Stream == "text") {
+				hasText = true
+				break
+			}
+		}
+	}
+	uploadStart := time.Now()
+	if hasText {
+		t.log.Info("trace latency", "message_id", t.id, "stage", "first_text_upload_start", "buffer_ms", uploadStart.Sub(firstTextAt).Milliseconds(), "observed_at_ms", uploadStart.UnixMilli())
+	}
 	err := t.up.PostTrace(ctx, t.id, batch)
+	if hasText {
+		t.log.Info("trace latency", "message_id", t.id, "stage", "first_text_upload_done", "upload_ms", time.Since(uploadStart).Milliseconds(), "succeeded", err == nil, "observed_at_ms", time.Now().UnixMilli())
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if err == nil {
+		if hasText {
+			t.firstTextUploaded = true
+		}
 		t.fails = 0
 		return
 	}

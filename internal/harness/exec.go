@@ -31,6 +31,8 @@ type Process struct {
 	OnStdoutLine func(line []byte)
 	// OnStderrLine is the same for stderr; the two may be called concurrently.
 	OnStderrLine func(line []byte)
+	// OnStarted runs after the OS has successfully started the child process.
+	OnStarted func()
 	// SilentStart, when set, stops a process that has written nothing to
 	// stdout this long after it started (an agent CLI stuck before its
 	// first event: no network to its model, a login prompt, a hung tool
@@ -106,7 +108,13 @@ func Exec(parent context.Context, p Process) (ProcessResult, error) {
 			}
 		}()
 	}
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil {
+		if p.OnStarted != nil {
+			p.OnStarted()
+		}
+		err = cmd.Wait()
+	}
 	if lines != nil {
 		lines.flush()
 	}

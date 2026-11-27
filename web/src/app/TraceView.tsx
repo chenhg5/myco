@@ -13,6 +13,7 @@ import { MessageAttachments } from "@/app/attachments";
 import { PageCards } from "@/app/pages";
 import { AskCard } from "@/app/AskCard";
 import { drafted, grown, Reveal } from "@/app/Reveal";
+import { latencyMark, latencyPending } from "@/lib/latency";
 
 /** When this App first had each thing an agent said in a run. */
 const sayFirstSeen = new Map<string, number>();
@@ -439,6 +440,19 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     return [...own, ...more].sort((a, b) => msOf(a.at) - msOf(b.at) || a.seq - b.seq).map((e, i) => ({ ...e, seq: i + 1 }));
   }, [ownEvents, extra, until, from]);
   const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (borrow?.ids.length || !latencyPending(hubId, task.id)) return;
+    const text = body.current?.querySelector(".trace-say");
+    if (!text?.textContent?.trim() || !text.getClientRects().length) return;
+    latencyMark(hubId, task.id, "app_text_dom");
+    // A paint opportunity is observable; actual pixels on a hidden/occluded
+    // native window are not. Keep that distinction in performance reports.
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => latencyMark(hubId, task.id, "app_paint_opportunity"));
+    });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, [hubId, task.id, events, borrow]);
   // New steps while live: follow them, inside the block and in the chat.
   useEffect(() => {
     if (!running || !events) return;
@@ -460,6 +474,9 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
       try {
         const r = await appApi.trace(hubId, task.id, last.current);
         if (off) return;
+        if (r.events.some((e) => e.data.text && (e.data.kind === "text" || e.data.kind === "delta" && e.data.stream === "text"))) {
+          latencyMark(hubId, task.id, "app_trace_received");
+        }
         if (r.status) {
           setTraceStatus(r.status);
           onStatus?.(task.id, r.status);

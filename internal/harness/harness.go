@@ -69,10 +69,16 @@ type Request struct {
 	// agent says, thinks and does), for the live view in the app. Harnesses
 	// that cannot tell leave it uncalled. It may be called from several goroutines.
 	OnEvent func(Event)
+	// OnTiming receives content-free lifecycle milestones, never model text or
+	// credentials. A session announcement does not prove history is restored.
+	OnTiming func(stage string)
 }
 
 // Event is one step of a run.
 type Event struct {
+	// ObservedAtMS is the runner's source observation time (Unix ms), not
+	// the Hub's later ingestion time. Cross-host differences need clock bounds.
+	ObservedAtMS int64 `json:"observed_at_ms,omitempty"`
 	// Kind: text, thinking, tool, tool_result, usage, error, output (a
 	// shell command's output as it runs; Stream says stdout or stderr), or
 	// turn_end (a session followed from its file ended its turn and waits).

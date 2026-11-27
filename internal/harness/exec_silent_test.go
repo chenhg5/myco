@@ -6,9 +6,35 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestProcessTimingStartsBeforeForwardedStdout(t *testing.T) {
+	var started atomic.Bool
+	var early atomic.Bool
+	p := Process{Binary: "sh", Args: []string{"-c", `printf '{"type":"thread.started"}\n'`},
+		OnStarted: func() { time.Sleep(20 * time.Millisecond); started.Store(true) },
+		OnStdoutLine: func([]byte) {
+			if !started.Load() {
+				early.Store(true)
+			}
+		},
+	}
+	ObserveProcess(&p, Request{OnTiming: func(string) {}}, "codex")
+	if _, err := Exec(context.Background(), p); err != nil {
+		t.Fatal(err)
+	}
+	if !started.Load() || early.Load() {
+		t.Fatal("stdout escaped before the successful process-start milestone")
+	}
+	called := false
+	_, _ = Exec(context.Background(), Process{Binary: "/no/such/myco-fixture", OnStarted: func() { called = true }})
+	if called {
+		t.Fatal("start failure emitted a process-start milestone")
+	}
+}
 
 func TestSilentStartStopsAProcessThatPrintsNothing(t *testing.T) {
 	_, err := Exec(context.Background(), Process{Binary: "sh", Args: []string{"-c", "echo 'stream error: retrying 1/5' >&2; sleep 5"},
