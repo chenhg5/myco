@@ -2121,6 +2121,19 @@ async function runMatrix(browser, size, scheme) {
       await dialog.locator("[data-testid=allowed-dirs]", { hasText: "~/code/demo-team" }).waitFor({ timeout: 10_000 });
       const vpsFolder = dialog.locator("input.app-input.mono").first();
       if (!/^不填就新建 ~\/code\/demo-team\//.test(await vpsFolder.getAttribute("placeholder") || "")) throw new Error("只允许一个文件夹的电脑，新文件夹应建在它里面");
+      // 用哪个 AI: the common ones and what that computer has; the rest
+      // behind "更多".
+      const aiChips = dialog.locator("#add-new-agent .ws-computers").first();
+      const more = aiChips.locator("[data-testid=new-agent-more-ais]");
+      await more.waitFor({ timeout: 5_000 });
+      const shownAIs = await aiChips.locator(".ws-computer:not(.ws-computer-more)").count();
+      if (shownAIs !== 4) throw new Error(`用哪个 AI 应先只显示常用的 4 个，实际 ${shownAIs} 个`);
+      if (await aiChips.locator(".ws-computer", { hasText: "Kiro" }).count()) throw new Error("不常用的 AI 应收进「更多」");
+      await settle(page, 150);
+      await shot(page, size, scheme, "add-agent-ais-folded");
+      await clickVisible(page, more);
+      await aiChips.locator(".ws-computer", { hasText: "Kiro" }).waitFor({ timeout: 5_000 });
+      if (await more.count()) throw new Error("展开后「更多」应消失");
       await clickVisible(page, dialog.locator(".ws-computer", { hasText: "Codex" }));
       await dialog.locator("[data-testid=remote-ai-missing] code", { hasText: "npm install -g @openai/codex" }).waitFor({ timeout: 5_000 });
       // A long command (CodeBuddy's, say) wraps in the notice: the dialog

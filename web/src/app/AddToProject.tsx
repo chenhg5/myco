@@ -105,6 +105,10 @@ const NEW_CLIS: { value: SpawnCli; label: string }[] = [
   { value: "atomcode", label: "AtomCode" },
 ];
 
+/** The AIs shown at once in a new agent's "用哪个 AI"; the rest wait
+ *  behind "更多" unless the computer has them installed (or one is picked). */
+const COMMON_CLIS: SpawnCli[] = ["claude", "codex", "gemini", "cursor"];
+
 /** What a computer told about itself, as the dialog keeps it. */
 type InfoState = { info?: MachineInfo; error?: unknown; loading?: boolean };
 
@@ -870,6 +874,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   // the member's model providers, which goes to that computer with it.
   const [providerId, setProviderId] = useState("");
   const [allFolders, setAllFolders] = useState(false);
+  const [allClis, setAllClis] = useState(false);
   useEffect(() => { if (open) setError(null); }, [open, machine.id]);
   // A model or effort picked for one CLI means nothing to another.
   useEffect(() => { setModel(""); setEffort(""); setProviderId(""); }, [cli]);
@@ -882,6 +887,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   /** the models its CLI offers on that computer (Codex), when it said */
   const offered = aiOf(cli)?.models;
   const ai = aiOf(cli);
+  const hiddenClis = NEW_CLIS.filter((c) => !(COMMON_CLIS.includes(c.value) || c.value === cli || (info?.ais.find((x) => x.cli === c.value)?.state ?? "missing") !== "missing")).length;
   const folders = usedFolders(rows, hubId, machine.id).filter((d) => !info || insideDirs(d, info));
   // Newer computers make a folder when none is given (where they say).
   const autoDir = machineMakesFolders(machine.myco_version);
@@ -942,7 +948,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
       <div className="app-field">
         <span className="app-field-label">{L("用哪个 AI", "Which AI")}</span>
         <div className="ws-computers">
-          {NEW_CLIS.map((c) => {
+          {NEW_CLIS.filter((c) => allClis || COMMON_CLIS.includes(c.value) || c.value === cli || (info?.ais.find((a) => a.cli === c.value)?.state ?? "missing") !== "missing").map((c) => {
             const a = here ? undefined : aiOf(c.value);
             return (
               <button key={c.value} type="button" className={cn("ws-computer", cli === c.value && "active", a?.state === "missing" && "is-away")} onClick={() => setCli(c.value)} disabled={!!busy}>
@@ -952,6 +958,11 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
               </button>
             );
           })}
+          {!allClis && hiddenClis > 0 && (
+            <button type="button" className="ws-computer ws-computer-more" onClick={() => setAllClis(true)} disabled={!!busy} data-testid="new-agent-more-ais">
+              {L(`更多 · ${hiddenClis}`, `More · ${hiddenClis}`)}<ChevronDown />
+            </button>
+          )}
         </div>
       </div>
       {here ? <LocalAgentLines only={[cli]} hideReady /> : ai && (ai.state === "missing" || ai.state === "signed_out") && (
