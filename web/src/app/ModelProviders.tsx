@@ -427,7 +427,7 @@ export function ModelSource({ hubId, cli, machineName, value, onChange, model, o
         <label className={cn("app-provider-opt", adding && "picked")} data-testid="model-source-add">
           <input type="radio" name="model-source" checked={adding} onChange={() => setAdding(true)} disabled={busy} />
           <span>
-            <b>{L("+ 用自己的 API key", "+ Use your own API key")}</b>
+            <b>{L("用自己的 API key", "Use your own API key")}</b>
             <small>{usable.length
               ? L("再接一家", "Add another vendor")
               : L("有自己的 key（DeepSeek、Kimi、MiniMax、OpenCode Go……）可以直接接", "Have your own key (DeepSeek, Kimi, MiniMax, OpenCode Go…)? Use it directly")}</small>
