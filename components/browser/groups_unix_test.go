@@ -435,3 +435,61 @@ func TestCopiedProfileRecordCannotKillSourceBrowser(t *testing.T) {
 		t.Fatal("source profile browser was killed")
 	}
 }
+
+// Chrome is asked to quit before its helpers: a SIGTERM to the whole group
+// kills helpers under a browser still running, which crashes it ("Google
+// Chrome quit unexpectedly" on macOS). Here the leader ends its helper
+// itself; the helper notes a SIGTERM that reaches it directly.
+func TestBrowserGroupStopsLeaderFirst(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "profiles", "p_leader")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	dir, _ = filepath.EvalSymlinks(dir)
+	script := `M="$1"
+sh -c 'trap "echo term > \"$0/helper-term\"; exit 0" TERM; while :; do sleep 0.05; done' "$M" &
+c=$!
+trap 'kill -KILL $c; wait $c 2>/dev/null; exit 0' TERM
+echo $c > "$M/helper.pid"
+while :; do sleep 0.05; done`
+	cmd := exec.Command("/bin/sh", "-c", script, "leader", dir)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
+	for i := 0; ; i++ {
+		if _, err := os.Stat(filepath.Join(dir, "helper.pid")); err == nil {
+			break
+		}
+		if i > 500 {
+			t.Fatal("helper did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	owner, err := ownProcess()
+	if err != nil {
+		t.Fatal(err)
+	}
+	members, err := groupProcesses(cmd.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := browserGroup{Version: 1, Profile: filepath.Base(dir), Nonce: "test-fixture-generation", PGID: cmd.Process.Pid, Owner: owner, Members: members}
+	if err := saveBrowserGroup(dir, r); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if err := terminateBrowserGroup(dir, r, false); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	if _, err := os.Stat(filepath.Join(dir, "helper-term")); err == nil {
+		t.Fatal("the helper was sent SIGTERM directly, not ended by its browser")
+	}
+	if took := time.Since(start); took > 3*time.Second {
+		t.Fatalf("a browser that quits on SIGTERM took %v", took)
+	}
+}

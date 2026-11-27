@@ -242,7 +242,7 @@ func TestUpdateCompatibleComponent(t *testing.T) {
 				requests := 0
 				c.HTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 					requests++
-					if !strings.HasPrefix(r.URL.String(), ComponentRelease+"/") || !strings.Contains(r.URL.Path, "/browser-v0.6.2/") {
+					if !strings.HasPrefix(r.URL.String(), ComponentRelease+"/") || !strings.Contains(r.URL.Path, "/browser-v0.6.3/") {
 						t.Errorf("wrong release: %s", r.URL)
 					}
 					if !c.Status().Running {
@@ -294,7 +294,7 @@ func TestUpdateCompatibleComponent(t *testing.T) {
 }
 
 func TestCompatibleComponentVersions(t *testing.T) {
-	for version, want := range map[string]bool{"0.1.0": true, "0.1.1": true, "0.2.0": true, "0.3.0": true, "0.3.1": true, "0.4.0": true, "0.5.0": true, "0.6.0": true, "0.6.1": true, "0.6.2": true, "0.1.2": false, "": false} {
+	for version, want := range map[string]bool{"0.1.0": true, "0.1.1": true, "0.2.0": true, "0.3.0": true, "0.3.1": true, "0.4.0": true, "0.5.0": true, "0.6.0": true, "0.6.1": true, "0.6.2": true, "0.6.3": true, "0.1.2": false, "": false} {
 		if CompatibleComponentVersion(version) != want {
 			t.Errorf("version %q compatibility", version)
 		}
