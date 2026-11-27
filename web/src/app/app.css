@@ -4748,6 +4748,28 @@ html.fp-docked .app-main .sp-side {
 .conv-compose-tools:empty {
   display: none;
 }
+/* A narrow box (a side pane, a small window): the tools give way first,
+   cut short with an ellipsis, and the mic and Send always stay inside the
+   box. Nothing here hides overflow: the pills' menus hang below them. */
+.conv-compose-box { container: compose / inline-size; }
+.conv-compose-tools { flex: 0 1 auto; min-width: 0; }
+.conv-compose-tools > * { flex-shrink: 0; }
+.conv-compose-tools > :is(.run-pill-wrap, .quota-pill-wrap) { display: inline-flex; flex: 0 1 auto; min-width: 0; }
+/* (the quota's number and the access shield stay whole: the model's name
+   is what gets cut) */
+.conv-compose-tools > .quota-pill-wrap,
+.conv-compose-tools > .run-pill-wrap:has(.run-pill-icon) { flex-shrink: 0; }
+.conv-compose-tools :is(.run-pill, .quota-pill) { min-width: 0; max-width: 100%; }
+.conv-compose-bar > :not(.conv-compose-tools):not(.conv-compose-hint) { flex-shrink: 0; }
+/* (narrower still: the access pill is its shield, its words in its title;
+   the quota keeps its number) */
+@container compose (max-width: 520px) {
+  .conv-compose-tools .run-pill:has(.run-pill-icon) .run-pill-text { display: none; }
+  .conv-compose-tools .run-pill:has(.run-pill-icon) .run-pill-icon { margin-right: 0; }
+}
+@container compose (max-width: 420px) {
+  .conv-compose-tools .quota-pill-icon { display: none; }
+}
 /* How to send, shown only while the box has the caret. */
 .conv-compose-hint {
   visibility: hidden;

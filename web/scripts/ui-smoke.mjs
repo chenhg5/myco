@@ -6045,6 +6045,47 @@ async function runMatrix(browser, size, scheme) {
     // no computer to read a quota on; its session reports it
     // (myco agent runtime quota: source_kind cloud_session, no machine_id).
     // The member card, its card's 额度 and the composer all show it.
+    // A narrow box you write in (a side pane, a small window): the model,
+    // access and quota pills give way; the mic and Send never leave the box.
+    await step("单聊 · 窄的输入框", async () => {
+      // (the coordinator's box has all three: model, access, quota; with a
+      // long model name, as a provider's can be)
+      await go(page, "官网改版", narrow);
+      const box = page.locator(".sp-home .conv-compose-box").first();
+      await box.waitFor({ timeout: 10_000 });
+      await box.locator(".conv-compose-tools .run-pill .run-pill-icon").first().waitFor({ timeout: 10_000 });
+      await box.locator(".conv-compose-tools .quota-pill").first().waitFor({ timeout: 10_000 });
+      const model = box.locator(".conv-compose-tools .run-pill:not(:has(.run-pill-icon)) .run-pill-text").first();
+      const modelWas = await model.innerText();
+      try {
+        for (const w of [560, 440, 380, 320]) {
+          const out = await box.evaluate((el, w) => {
+            const m = el.querySelector(".conv-compose-tools .run-pill:not(:has(.run-pill-icon)) .run-pill-text");
+            if (m) m.textContent = "MiniMax M3.1 Flash · 高";
+            el.style.width = `${w}px`;
+            el.style.maxWidth = `${w}px`;
+            const r = el.getBoundingClientRect();
+            const bar = el.querySelector(".conv-compose-bar");
+            const items = [...bar.querySelectorAll(":scope > *, :scope > .conv-compose-tools > *")].filter((x) => x.getClientRects().length);
+            const outside = items.filter((x) => { const b = x.getBoundingClientRect(); return b.width > 0 && (b.right > r.right + 0.5 || b.left < r.left - 0.5); })
+              .map((x) => x.className || x.tagName);
+            const send = bar.querySelector(":scope > .conv-send, :scope > button:last-child");
+            return { outside, sendIn: !!send && send.getBoundingClientRect().right <= r.right + 0.5 };
+          }, w);
+          if (out.outside.length || !out.sendIn) throw new Error(`输入框 ${w}px 宽时按钮跑到框外：${out.outside.join("、") || "发送"}`);
+          const quota = box.locator(".conv-compose-tools .quota-pill-text").first();
+          if (await quota.evaluate((x) => x.scrollWidth > x.clientWidth + 1)) throw new Error(`输入框 ${w}px 宽时额度的数字不该被截断`);
+          if (w === 380) { await settle(page, 150); await shot(page, size, scheme, "chat-compose-narrow"); }
+        }
+      } finally {
+        await box.evaluate((el, was) => {
+          el.style.width = ""; el.style.maxWidth = "";
+          const m = el.querySelector(".conv-compose-tools .run-pill:not(:has(.run-pill-icon)) .run-pill-text");
+          if (m) m.textContent = was;
+        }, modelWas);
+      }
+    });
+
     await step("成员 · 会话上报的额度", async () => {
       const at = new Date(Date.now() - 5 * 60e3).toISOString();
       const quota = {
