@@ -3678,6 +3678,8 @@ const server = http.createServer(async (req, res) => {
         ...(body.project && !body.thread_id ? { project: body.project } : {}),
         ...(atts.length ? { attachments: atts } : {}),
         ...(afterTask ? { after: afterTask.id } : {}),
+        // (a workflow's step, as a run gives one to an agent)
+        ...(typeof body.workflow === "string" && body.workflow ? { workflow: body.workflow } : {}),
       });
       if (!hub.threads) hub.threads = {};
       if (!hub.threads[threadId]) hub.threads[threadId] = [];

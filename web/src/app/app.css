@@ -10369,37 +10369,36 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
   .wf-start-field.is-switch { grid-template-columns: minmax(0, 1fr) auto; }
 }
 
-/* A workflow's run ended (WorkflowNote.tsx): a card in the chat, not a
-   note of text. Which workflow and how it ended, a way to its run; the
-   steps folded underneath, one line each. */
-.conv-bubble:has(> .wfn) { align-self: stretch; max-width: 560px; }
-.wfn { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.wfn-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.wfn-icon { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--pill); color: var(--fg-2); }
-.wfn-icon svg { width: 15px; height: 15px; }
-.wfn.is-failed .wfn-icon { background: var(--red-soft); color: var(--red); }
-.wfn-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.wfn-name { font-weight: 500; color: var(--fg); overflow-wrap: anywhere; }
-.wfn-state { padding: 0 7px; border-radius: 999px; font-size: 11.5px; line-height: 19px; background: var(--pill); color: var(--muted); }
-.wfn-state.is-succeeded { background: color-mix(in srgb, var(--green) 14%, transparent); color: var(--green); }
-.wfn-state.is-failed { background: var(--red-soft); color: var(--red); }
-.wfn-open { flex: none; }
-.wfn-open svg { width: 13px; height: 13px; margin-left: 2px; }
-.wfn-why { font-size: 12.5px; color: var(--muted); padding-left: 38px; }
-.wfn-fold { display: flex; align-items: center; gap: 6px; align-self: flex-start; margin-left: 32px; padding: 3px 6px; border: 0; border-radius: 6px; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: default; }
+/* What a workflow says in a chat (WorkflowNote.tsx): a step it gives an
+   agent, or the end of a run. Quiet: a small grey line saying which
+   workflow (and step) with a way to its run, then what matters, the rest
+   folded. No icon, no coloured badges: the theme's greys only. */
+.conv-bubble:has(> .wfn) { max-width: min(620px, 100%); }
+.wfn { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wfn-head { display: flex; align-items: center; gap: 10px; min-width: 0; padding-bottom: 6px; border-bottom: 1px solid var(--line-2); }
+.wfn-where { flex: 1; min-width: 0; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfn-open { flex: none; display: inline-flex; align-items: center; gap: 1px; padding: 2px 4px 2px 6px; border: 0; border-radius: 6px; background: none;
+  color: var(--muted); font: inherit; font-size: 11.5px; cursor: default; }
+.wfn-open:hover:not(:disabled) { background: var(--nav-hover); color: var(--fg); }
+.wfn-open svg { width: 12px; height: 12px; }
+.wfn-outcome { color: var(--fg); overflow-wrap: anywhere; }
+.wfn.is-failed .wfn-outcome { font-weight: 500; }
+.wfn-why { color: var(--fg-2); font-weight: 400; }
+.wfn-fold { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; margin-left: -4px; padding: 2px 6px 2px 4px; border: 0; border-radius: 6px;
+  background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: default; }
 .wfn-fold:hover { background: var(--nav-hover); color: var(--fg-2); }
 .wfn-chev { width: 13px; height: 13px; transform: rotate(-90deg); transition: transform .15s; }
 .wfn-fold[aria-expanded="true"] .wfn-chev { transform: none; }
-.wfn-bad { display: inline-flex; align-items: center; gap: 5px; }
-.wfn-bad::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--red); }
-.wfn-steps { margin: 0 0 0 38px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
-.wfn-steps li { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); column-gap: 8px; row-gap: 1px; padding: 4px 0; border-top: 1px solid var(--line-2); }
+.wfn-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; font-size: 12.5px; }
+.wfn-steps li { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); column-gap: 8px; row-gap: 1px; padding: 5px 0; border-top: 1px solid var(--line-2); }
 .wfn-steps li:first-child { border-top: 0; }
 .wfn-step-label { color: var(--fg); font-weight: 500; overflow-wrap: anywhere; }
 .wfn-step-who { color: var(--muted); font-size: 11.5px; align-self: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wfn-step-line { grid-column: 1 / -1; color: var(--fg-2); white-space: pre-wrap; overflow-wrap: anywhere; }
-/* (a step that did not go well: a red dot, its words stay grey) */
-.wfn-steps li.is-bad .wfn-step-label::before { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 6px 1px 0; border-radius: 50%; background: var(--red); vertical-align: middle; }
+/* (a step that did not go well: its name says so in plain weight, not colour) */
+.wfn-steps li.is-bad .wfn-step-line { color: var(--fg); }
+.wfn-prompt, .wfn-rest { min-width: 0; }
+.wfn-rest { padding: 6px 0 0; border-top: 1px solid var(--line-2); font-size: 12.5px; color: var(--fg-2); }
 
 /* ---------- 专注模式 (focus mode) ----------
    The chat you are in alone, on a plain background: no sidebar, no top

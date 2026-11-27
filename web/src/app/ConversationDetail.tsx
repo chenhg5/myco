@@ -1,4 +1,4 @@
-import { parseWorkflowNote, WorkflowNoteCard } from "@/app/WorkflowNote";
+import { parseWorkflowNote, parseWorkflowStep, WorkflowNoteCard, WorkflowStepCard } from "@/app/WorkflowNote";
 import { localPreferences } from "@/lib/localPreferences";
 import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -2344,6 +2344,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       const receipt = receiptOf(m);
       // A workflow's run ended (the note it sends whoever started it): a card.
       const wfNote = m.workflow && m.type === "note" && !m.unreadable ? parseWorkflowNote(m.body) : null;
+      // A step it gave an agent: what to do, the rest folded.
+      const wfStep = m.workflow && m.type === "task" && !m.unreadable ? parseWorkflowStep(m.body) : null;
       return (
         <Fragment key={m.id}>
         <div className={cn("conv-msg", mine ? "is-me" : "is-agent", (fromOther || toOther || (alsoSet.size > 0 && showName && isMe(m.from, row?.hub))) && "is-other")} data-msg={m.id} data-turn={turnIds.has(m.id) ? m.id : undefined}>
@@ -2364,6 +2366,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.type === "note" && !wfNote && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
             {mine && voiced && <VoiceMark heard={voiced.heard} />}
             {wfNote ? <WorkflowNoteCard hubId={target.hubId} note={wfNote} />
+              : wfStep && m.workflow ? <WorkflowStepCard hubId={target.hubId} runId={m.workflow} step={wfStep} />
               : m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : mine && voiced ? <MessageContent body={voiced.text} />
@@ -2381,7 +2384,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               const rest = f.items.filter((a) => !inText.has(a.file_id));
               return rest.length > 0 ? <MessageAttachments hubId={target.hubId} items={rest} /> : null;
             })()}
-            {!growsIn(m) && !m.unreadable && !wfNote && <PageCards body={m.body} />}
+            {!growsIn(m) && !m.unreadable && !wfNote && !wfStep && <PageCards body={m.body} />}
             {(steersOf.get(m.id) || []).map((s) => (
               <div className="conv-supplement" key={s.id} data-supplement={s.id}>
                 <div className="conv-supplement-head">

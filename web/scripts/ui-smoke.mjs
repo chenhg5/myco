@@ -6072,12 +6072,24 @@ async function runMatrix(browser, size, scheme) {
       const body = `[工作流「myco-release」完成了]\n运行 ${run.id}\n${steps.map((x) => `- ${x}`).join("\n")}\n详情：myco workflow run show --id ${run.id}`;
       // (into this chat's thread, as the other notes here: the mock starts a
       // new thread otherwise, which an open chat picks up on its next read)
-      const anchor = await page.locator(".conv-detail .conv-msg[data-msg]").last().getAttribute("data-msg");
-      const note = await sendFromElsewhere("hub_studio", "review-cloud", body, { type: "note", workflow: run.id, of: anchor });
+      // (run on its own the chat may have nothing in it yet: then the note
+      // starts its own thread, and the chat is opened again to read it)
+      const msgs = page.locator(".conv-detail .conv-msg[data-msg]");
+      await msgs.first().waitFor({ timeout: 5_000 }).catch(() => undefined);
+      const anchor = (await msgs.count()) ? await msgs.last().getAttribute("data-msg") : undefined;
+      const note = await sendFromElsewhere("hub_studio", "review-cloud", body, { type: "note", workflow: run.id, ...(anchor ? { of: anchor } : {}) });
+      if (!anchor) {
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.locator(".app-shell").waitFor();
+        await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      }
       const card = page.locator(`.conv-detail [data-msg="${note.id}"] [data-testid=workflow-note]`);
       await card.waitFor({ timeout: 15_000 });
-      const head = await card.locator(".wfn-head").innerText();
+      const head = await card.innerText();
       if (!head.includes("myco-release") || !head.includes("完成了") || !head.includes("打开这次运行")) throw new Error(`工作流结束的消息应写出名字、结果和打开运行，实际「${head}」`);
+      // Quiet: no icon, no coloured badge.
+      const loud = await card.evaluate((el) => !!el.querySelector("svg.lucide-workflow, .wfn-icon, .wfn-state"));
+      if (loud) throw new Error("工作流消息不该有图标或彩色标签");
       if (await page.locator(`.conv-detail [data-msg="${note.id}"] .conv-tag`, { hasText: "备注" }).count()) throw new Error("工作流结束的消息不该再标「备注」");
       if (await card.locator(".wfn-steps").count()) throw new Error("步骤应先收起来");
       const fold = card.locator("[data-testid=workflow-note-steps]");
@@ -6088,6 +6100,20 @@ async function runMatrix(browser, size, scheme) {
       if ((await card.locator(".wfn-steps li").count()) !== 8) throw new Error("展开后应列出 8 步");
       await settle(page, 150);
       await shot(page, size, scheme, "chat-workflow-note-open");
+      // A step it gave an agent: what to do shows; its instructions, input
+      // and the result's shape are folded.
+      const stepBody = `[工作流「myco-release」· 第 6 步 finish · 第 2 次]\n\n运行发版收尾脚本一次，结果由脚本自己交回。\n\n---\n这是工作流里的一步：只做这一步，不要自己安排下一步，工作流会接着走。\n这一步的输入（JSON）：\n\`\`\`json\n{\n  "node_ok": true\n}\n\`\`\`\n做完照常 myco message reply 回复，第一行写一句话总结。`;
+      const task = await sendFromElsewhere("hub_studio", "review-cloud", stepBody, { workflow: run.id });
+      const stepCard = page.locator(`.conv-detail [data-msg="${task.id}"] [data-testid=workflow-step]`);
+      await stepCard.waitFor({ timeout: 15_000 });
+      const stepText = await stepCard.innerText();
+      if (!stepText.includes("第 6 步 finish · 第 2 次") || !stepText.includes("运行发版收尾脚本一次")) throw new Error(`工作流的一步应写出第几步和要做的事，实际「${stepText}」`);
+      if (stepText.includes("node_ok") || stepText.includes("不要自己安排下一步")) throw new Error("一步的说明、输入和交回格式应先收起来");
+      await clickVisible(page, stepCard.locator("[data-testid=workflow-step-more]"));
+      await stepCard.locator(".wfn-rest", { hasText: "node_ok" }).waitFor({ timeout: 5_000 });
+      await clickVisible(page, stepCard.locator("[data-testid=workflow-step-more]"));
+      await settle(page, 150);
+      await shot(page, size, scheme, "chat-workflow-step");
       await clickVisible(page, card.locator("[data-testid=workflow-note-open]"));
       await page.locator("[data-testid=workflow-run]").waitFor({ timeout: 15_000 });
     });
