@@ -2935,7 +2935,7 @@ async function runMatrix(browser, size, scheme) {
     await step("单聊 · 首字计时不含内容", async () => {
       await openMember(page, narrow, "聊天", "MCP Claude");
       await noRound(page);
-      let message = "";
+      let message = "", traceRequests = 0;
       const text = `Timing fixture prompt ${size.width} ${scheme}`;
       const pattern = "**/app/hubs/*/messages/*/trace*";
       const sendPattern = "**/app/hubs/*/messages";
@@ -2948,7 +2948,8 @@ async function runMatrix(browser, size, scheme) {
       };
       const fixture = async (route) => {
         if (!message || !new URL(route.request().url()).pathname.endsWith(`/messages/${message}/trace`)) return route.continue();
-        return route.fulfill({ json: { message, status: "acked", events: [{ seq: 1, kind: "text", at: new Date().toISOString(), data: { kind: "text", text: "Timing fixture response" } }] } });
+        traceRequests++;
+        return route.fulfill({ json: { message, status: "acked", events: [{ seq: 1, kind: "delta", at: new Date().toISOString(), data: { kind: "delta", stream: "text", id: "latency-fixture", text: "Timing fixture response" } }] } });
       };
       await page.route(pattern, fixture);
       try {
@@ -2960,7 +2961,12 @@ async function runMatrix(browser, size, scheme) {
           box.press("Enter"),
         ]);
         message = (await response.json()).id;
-        await page.waitForFunction((id) => performance.getEntriesByName("myco.latency").some((e) => e.detail?.message === id && e.detail.stage === "app_paint_opportunity"), message, { timeout: 15_000 });
+        try {
+          await page.waitForFunction((id) => performance.getEntriesByName("myco.latency").some((e) => e.detail?.message === id && e.detail.stage === "app_paint_opportunity"), message, { timeout: 15_000 });
+        } catch (error) {
+          const stages = await page.evaluate((id) => performance.getEntriesByName("myco.latency").filter((e) => e.detail?.message === id).map((e) => e.detail.stage), message);
+          throw new Error(`首字计时未落地：trace_requests=${traceRequests}, stages=${stages.join(",")}`, { cause: error });
+        }
         const marks = await page.evaluate((id) => performance.getEntriesByName("myco.latency").filter((e) => e.detail?.message === id).map((e) => ({ at: e.startTime, detail: e.detail })), message);
         const expected = ["app_send", "app_send_ack", "app_trace_received", "app_text_dom", "app_paint_opportunity"];
         const byStage = new Map(marks.map((m) => [m.detail.stage, m.at]));

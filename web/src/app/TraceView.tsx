@@ -442,16 +442,28 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const body = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (borrow?.ids.length || !latencyPending(hubId, task.id)) return;
-    const text = body.current?.querySelector(".trace-say");
-    if (!text?.textContent?.trim() || !text.getClientRects().length) return;
-    latencyMark(hubId, task.id, "app_text_dom");
-    // A paint opportunity is observable; actual pixels on a hidden/occluded
-    // native window are not. Keep that distinction in performance reports.
-    let second = 0;
-    const first = requestAnimationFrame(() => {
-      second = requestAnimationFrame(() => latencyMark(hubId, task.id, "app_paint_opportunity"));
-    });
-    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+    const root = body.current;
+    if (!root) return;
+    let first = 0, second = 0, observed = false;
+    // Reveal can insert its first character after this parent's effect runs,
+    // without another trace event. Observe that actual DOM change as well.
+    const observer = new MutationObserver(() => inspect());
+    const inspect = () => {
+      if (observed) return;
+      const text = root.querySelector(".trace-say");
+      if (!text?.textContent?.trim() || !text.getClientRects().length) return;
+      observed = true;
+      observer.disconnect();
+      latencyMark(hubId, task.id, "app_text_dom");
+      // A paint opportunity is observable; actual pixels on a hidden/occluded
+      // native window are not. Keep that distinction in performance reports.
+      first = requestAnimationFrame(() => {
+        second = requestAnimationFrame(() => latencyMark(hubId, task.id, "app_paint_opportunity"));
+      });
+    };
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+    inspect();
+    return () => { observer.disconnect(); cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [hubId, task.id, events, borrow]);
   // New steps while live: follow them, inside the block and in the chat.
   useEffect(() => {
