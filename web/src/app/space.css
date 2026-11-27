@@ -3815,6 +3815,9 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
 .ui-clean .ob-intro {
   display: none !important;
 }
+/* the chat's head is one line: the name; what it is with shows on hover */
+.ui-clean .conv-head-what { display: none; }
+.ui-clean .conv-head-titles p:not(:has(.app-stale)) { display: none; }
 .ui-clean .sp-member > .pa {
   width: 10px !important;
   height: 10px !important;

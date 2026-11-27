@@ -5004,6 +5004,13 @@ async function runMatrix(browser, size, scheme) {
       if (look.mushrooms) throw new Error("清爽模式下不该有走路的小蘑菇");
       await settle(page, 300);
       await shot(page, size, scheme, "clean-mode");
+      // A chat's head is one line: the name; what it is with on hover.
+      await go(page, "Release (Claude 云端)", narrow);
+      const head = page.locator(".conv-head").first();
+      await head.locator("h2", { hasText: "Release" }).waitFor({ timeout: 10_000 });
+      if (await head.locator(".conv-head-titles p").isVisible()) throw new Error("清爽模式下会话标题只留一行名字，不显示描述");
+      if (!(await head.locator("h2").getAttribute("title"))) throw new Error("清爽模式下描述应在名字的悬停提示里");
+      await shot(page, size, scheme, "clean-mode-chat");
       await style("标准");
       if (await page.evaluate(() => document.documentElement.classList.contains("ui-clean"))) throw new Error("换回标准，装饰应回来");
       await go(page, "官网改版", narrow);
