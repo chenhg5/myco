@@ -3665,7 +3665,9 @@ const server = http.createServer(async (req, res) => {
       // "task failed: why"; in the thread of the message it names)
       if (body.type === "event") {
         const of = typeof body.of === "string" ? Object.values(hub.threads || {}).flat().find((m) => m.id === body.of) : null;
-        const ev = makeMessage({ thread_id: of ? of.thread_id : threadId, from: to, to: CONSOLE, type: "event", status: "failed", body: text, created_at: iso(0), updated_at: iso(0) });
+        const ev = makeMessage({ thread_id: of ? of.thread_id : threadId, from: to, to: CONSOLE, type: "event", status: "failed", body: text, created_at: iso(0), updated_at: iso(0),
+          // (the task it is about, as the hub's own line names it)
+          ...(typeof body.reply_to === "string" && body.reply_to ? { reply_to: body.reply_to } : {}) });
         (hub.threads ||= {})[ev.thread_id] ||= [];
         hub.threads[ev.thread_id].push(ev);
         return send(res, 201, ev);

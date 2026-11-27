@@ -2309,6 +2309,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       if (m.type === "event") {
         // (the hub's own line, "task failed: why": said in words, quietly)
         const failed = /^task failed:\s*/i.exec(m.body);
+        // A workflow's step that was not done says so in its own card: the
+        // hub's line about it would say the same thing twice.
+        const about = failed && m.reply_to ? byId.get(m.reply_to) : undefined;
+        if (about?.workflow && about.type === "task" && !about.unreadable && parseWorkflowStep(about.body)) return null;
         return (
           <div className="conv-event" key={m.id} data-msg={m.id}>
             <AlertTriangle />

@@ -6167,6 +6167,16 @@ async function runMatrix(browser, size, scheme) {
       if (under.tag) throw new Error("工作流卡片下面不该再有「工作流」标签");
       if (under.text.includes("失败了")) throw new Error(`工作流卡片下面不该写失败，实际「${under.text}」`);
       if (await page.locator(`.conv-detail [data-failed="${failedStep.id}"]`).count()) throw new Error("工作流的一步不该给「重新发送」");
+      // The hub's own line about that step ("task failed: …", in reply to
+      // it) would say it twice: not shown. Its "没完成" is in colour, its
+      // reason grey.
+      const dup = await sendFromElsewhere("hub_studio", "review-cloud", "task failed: Fixed release-first node failed; inspect workflow diagnostics", { type: "event", of: failedStep.id, reply_to: failedStep.id });
+      await page.waitForTimeout(6_000); // (the next read of the chat)
+      if (await page.locator(`.conv-detail [data-msg="${dup.id}"]`).count()) throw new Error("工作流的一步没完成时，Hub 的那行提示和卡片重复了，不该再显示");
+      const tint = await fmsg.locator("[data-testid=workflow-step-failed]").evaluate((el) => ({
+        word: getComputedStyle(el.querySelector("b")).color, rest: getComputedStyle(el).color,
+      }));
+      if (tint.word === tint.rest) throw new Error("没完成应有一点颜色，方便认出来");
       await fmsg.locator(".conv-bubble").hover();
       await settle(page, 250);
       await shot(page, size, scheme, "chat-workflow-step-failed");

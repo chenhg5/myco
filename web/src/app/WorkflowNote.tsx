@@ -136,7 +136,7 @@ export function WorkflowNoteCard({ hubId, note }: { hubId: string; note: Workflo
     <div className={cn("wfn", `is-${note.status}`)} data-testid="workflow-note">
       <Head hubId={hubId} runId={note.runId} words={L(`工作流 · ${note.name}`, `Workflow · ${note.name}`)} />
       <div className="wfn-outcome">
-        {L(`「${note.name}」${outcome(note.status)}`, `“${note.name}” ${outcome(note.status).toLowerCase()}`)}
+        {L(`「${note.name}」`, `“${note.name}” `)}<b className="wfn-word">{outcome(note.status)}</b>
         {note.why && <span className="wfn-why">{L(`：${note.why}`, `: ${note.why}`)}</span>}
       </div>
       {note.steps.length > 0 && (
@@ -174,7 +174,7 @@ export function WorkflowStepCard({ hubId, runId, step, failed }: { hubId: string
     <div className="wfn wfn-step" data-testid="workflow-step">
       <Head hubId={hubId} runId={runId} words={words} />
       {step.prompt && <div className="wfn-prompt"><MessageContent body={step.prompt} /></div>}
-      {failed && <div className="wfn-failed" data-testid="workflow-step-failed">{L(`这一步没完成：${failed}`, `This step was not done: ${failed}`)}</div>}
+      {failed && <div className="wfn-failed" data-testid="workflow-step-failed"><b>{L("这一步没完成", "Not done")}</b>{L(`：${failed}`, `: ${failed}`)}</div>}
       {step.rest && (
         <>
           <Fold open={open} onToggle={() => setOpen((o) => !o)} testId="workflow-step-more">
