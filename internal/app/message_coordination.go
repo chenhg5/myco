@@ -297,7 +297,7 @@ func (s *MessageService) Reassign(ctx context.Context, by Actor, id, to, note st
 		if owner := s.ownerName(ctx, target); owner != "" && ConsoleSender(owner) == m.From {
 			original.Owner = target.Owner
 		}
-		if target.Private() && original.Owner == "" && !by.Manages() {
+		if target.Private() && original.Owner == "" {
 			return nil, domain.Errf(domain.CodePermissionDenied, "new recipient is private to a different owner")
 		}
 	} else {

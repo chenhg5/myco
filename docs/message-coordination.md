@@ -41,8 +41,9 @@ attachments, project and thread while changing the recipient. Existing holds
 and sender references remain valid. The new recipient must be visible to the caller and, for a project task,
 belong to that unarchived project. Agent-origin tasks retain the original
 sender's recipient visibility and allow-from restrictions. Console-origin tasks
-use the normal console-send exception; receiving exec nodes still enforce their
-console-owner rules. Reassignment does not change the original sender. Coordinators cannot use a
+use the normal console-send exception; private recipients must still belong to
+the original console sender, even when an administrator reassigns the task.
+Receiving exec nodes also enforce their console-owner rules. Reassignment does not change the original sender. Coordinators cannot use a
 known task ID to forward an otherwise hidden private task. Claims and reassignment race atomically: the old recipient cannot
 claim a successfully moved task. Existing file grants are not revoked (they may
 also serve other messages); the new recipient receives attachment access in the

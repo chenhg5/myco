@@ -176,7 +176,8 @@ func TestMessageTreeAndReassignThroughHubAndCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.admin().InviteMember(c, api.InviteRequest{Name: "private-owner"}); err != nil {
+	privateInvite, err := h.admin().InviteMember(c, api.InviteRequest{Name: "private-owner"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.admin().SetAgentOwner(c, "old", "private-owner"); err != nil {
@@ -196,6 +197,28 @@ func TestMessageTreeAndReassignThroughHubAndCLI(t *testing.T) {
 	}
 	if _, err := clients["lead"].ReassignMessage(c, privateTask.Message.ID, api.ReassignRequest{To: "new"}, false); err != nil {
 		t.Fatalf("original sender lost reassignment permission: %v", err)
+	}
+
+	// Hub management does not let an original console sender use somebody
+	// else's private computer. The original owner's own nodes remain valid.
+	consoleTask, err := h.admin().ConsoleSend(c, api.SendRequest{To: "new", Body: "console work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.admin().ReassignMessage(c, consoleTask.Message.ID, api.ReassignRequest{To: "old"}, false); err == nil {
+		t.Fatal("admin bypassed original console sender's private-recipient boundary")
+	}
+	paired, err := h.client("").Pair(c, privateInvite.Link[strings.Index(privateInvite.Link, "/c/")+3:], "private-device")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ownerClient := h.client(paired.Token)
+	ownerTask, err := ownerClient.ConsoleSend(c, api.SendRequest{To: "new", Body: "owner work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.admin().ReassignMessage(c, ownerTask.Message.ID, api.ReassignRequest{To: "old"}, false); err != nil {
+		t.Fatalf("original console owner could not use own private node: %v", err)
 	}
 
 }
