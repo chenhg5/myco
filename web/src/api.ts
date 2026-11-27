@@ -57,6 +57,8 @@ export interface RunSettings {
   provider?: string;
   /** present while a sealed key waits for its runner to take it (it applies before its next task) */
   provider_encrypted?: EncryptedProvider;
+  /** present while a provider the hub keeps (encryption off, i119) waits for its runner to fetch it */
+  provider_hub?: { id: string; from: string };
   model?: string;
   effort?: string;
   /** Agent owner's choice; omitted on old hubs means disabled. */
@@ -90,6 +92,12 @@ export interface ModelProvider {
   settings_changed?: boolean;
   /** saved before its addresses were sealed with its key: used only once saved again with the key */
   seal_again?: boolean;
+  /** who keeps the key (i119): "e2e", sealed for the member's devices, or "hub", kept by the hub (its administrator could read it) */
+  custody?: "e2e" | "hub";
+  /** the hub kept the key but its own key file is gone: enter the key again */
+  key_lost?: boolean;
+  /** sealed for the member's devices, but the workspace has encryption off now: usable once handed to the hub (after the person agrees) */
+  move_to_hub?: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -1039,22 +1039,27 @@ acting for a person cannot. Omitting model/effort also preserves those values;
 explicit empty strings still clear them. Existing local provider routes remain
 available independently of remote settings.
 
-**Remote custom keys must be encrypted before contacting the Hub.** The local
-App backend exposes `PUT /app/hubs/{id}/agents/{name}/provider` with the same
-`{manual:{base_url, api_key, model?, wire_api?}}` input as local editing. It checks
-that workspace E2E is on and that the target agent has registered its public key,
-then seals the whole configuration with `internal/e2e` for that agent alone. It
-sends the Hub only `{provider:"custom", provider_encrypted:{id,from,body}}` through
-run settings. Without E2E this endpoint returns `e2e_required` and advises entering
-settings in the App or CLI on the target computer. Never put `manual`, `api_key`
-or `key` in a Hub request or ordinary message.
+**Remote custom keys are encrypted before contacting the Hub, or kept by it.**
+The local App backend exposes `PUT /app/hubs/{id}/agents/{name}/provider` with
+the same `{manual:{base_url, api_key, model?, wire_api?}}` input as local editing.
+With workspace E2E on, it checks that the target agent has registered its public
+key, then seals the whole configuration with `internal/e2e` for that agent alone,
+and sends the Hub only `{provider:"custom", provider_encrypted:{id,from,body}}`
+through run settings. With E2E off (i119) it sends `{provider:"custom",
+provider_hub:{id, manual}}` instead: the Hub seals the settings with the
+workspace's own key for that agent and request, keeps only the ciphertext in
+`run_settings.provider_hub` (shown as `{id, from}` alone), and the agent's runner
+fetches them (see Model providers › Without end-to-end encryption). A runner
+without the `hub_provider` feature is refused (`unsupported`): enter the settings
+on that computer, or update myco there. Never put `manual`, `api_key` or `key` in
+an ordinary message.
 
 The envelope uses header `{From:from, To:agentName, Type:"provider.settings",
 ReplyTo:id}`, with `from` the authenticated owner's `@console:<member>` name.
 `id` is a fresh 16–80 character request identifier. The Hub validates the owner,
 E2E setting, device signature, envelope format and sole target recipient without
 decrypting it. Neither audit entries nor logs include the ciphertext or key.
-A pending `run_settings.provider_encrypted` means the runner has not acknowledged
+A pending `run_settings.provider_encrypted` (or `provider_hub`) means the runner has not acknowledged
 installation. The runner opens it locally before its next invocation, validates
 and writes a private 0600 env file, then `POST /v1/me/provider/ack {id}` consumes
 only that matching pending envelope. A stale receipt returns conflict and cannot
@@ -1666,22 +1671,28 @@ it is stored in `run_settings.models_refresh` and nothing else changes. Runners
 that read it report `runtime.features: ["models_refresh"]`; they read it within
 a minute while their agent uses another vendor. Older Hubs ignore the field.
 
-## Model providers (i115)
+## Model providers (i115, i119)
 
 A member's model providers: a vendor (a catalogue id from
 `internal/provider` — `opencode_go`, `deepseek`, `kimi`, `minimax`, `zhipu`,
 `qwen`, `doubao`, `openrouter` — or `custom`), its two base URLs
 (`anthropic_base` for Claude Code, `openai_base` for Codex; at least one), an
 optional `small_model`, the models last read with the key (`models`,
-`models_at`), and the API key as an end-to-end envelope, `key_sealed`, with
-`key_version`. Every computer the member adds an agent on can use them.
+`models_at`), and the API key with `key_version`. Every computer the member adds
+an agent on can use them. Who keeps the key is the provider's `custody`, set by
+the workspace's end-to-end encryption: on, `"e2e"`, the key is an envelope only
+the member's devices open (`key_sealed`); off, `"hub"`, the hub keeps it,
+encrypted with the workspace's own key, and its administrator could read it
+(see Without end-to-end encryption, below). Whether encryption is on is the
+member's call; providers work either way.
 
 | Route | Who | |
 |---|---|---|
 | `GET /v1/console/providers` | a member's device | `{e2e, providers: [...]}`: the caller's own providers only |
-| `POST /v1/console/providers` | a member's device | `{id, name, vendor, anthropic_base?, openai_base?, small_model?, key_sealed, key_version: 1}` → the provider. The client picks `id` (`prv_` and 8 to 40 lowercase letters or digits): the key is sealed for it |
+| `POST /v1/console/providers` | a member's device | `{id, name, vendor, anthropic_base?, openai_base?, small_model?, key_sealed, key_version: 1}` (encryption on) or `{id, name, vendor, …, api_key}` (off) → the provider. The client picks `id` (`prv_` and 8 to 40 lowercase letters or digits): the key is sealed for it |
 | `PATCH /v1/console/providers/{id}` | its member | Only what is set changes. A new `key_sealed` comes with `key_version`: the current one plus one for a new key, or the current one when the same key is sealed again for the member's devices now (rewrap); anything else is `conflict` |
 | `DELETE /v1/console/providers/{id}` | its member | Agents it was sent to keep what was written on their computers |
+| `GET /v1/console/providers/{id}/key` | its member | `"hub"` custody only: `{api_key, key_version}`, for its owner's App to seal it for their devices or to list the vendor's models. Recorded, rate limited, `Cache-Control: no-store` |
 
 **The key.** `key_sealed` is an e2e envelope (`e2e.Seal`) with header
 `e2e.ProviderKeyHeader(member id, provider id, key_version)`; its payload is
@@ -1694,9 +1705,9 @@ the name alone may change without it. An envelope from before the addresses were
 sealed is not used until the provider is saved again with its key. The hub keeps it only when it is signed by one of the
 member's device keys and readable by those devices alone
 (`e2e.VerifySealedFor`); it cannot open it, and it never logs it (the audit log
-says `provider.create`, `provider.key key_version=N`, `provider.delete`). New
-providers need the workspace's end-to-end encryption on (`e2e_required`, HTTP
-409, otherwise). Agents, superagents and other members get `permission_denied`
+says `provider.create`, `provider.key key_version=N`, `provider.delete`). A
+`key_sealed` needs the workspace's end-to-end encryption on, and an `api_key`
+needs it off (a provider names its `custody` in a request only to match). Agents, superagents and other members get `permission_denied`
 or `not_found`, and so do the hub's administrator token and device tokens
 that belong to no member: only a member's own devices manage their providers.
 
@@ -1734,6 +1745,56 @@ provider only when its agent's owner sealed it. `GET /v1/machines` names each ma
 registered yet) is sent the request without a provider; the App sends the
 provider to the new agent once its runner has registered its key, before
 anything is sent to it.
+
+### Without end-to-end encryption: the hub keeps the key (i119)
+
+**The workspace's key.** Each workspace (each `hub.db`) has its own random
+32-byte key in `provider-secret.key` next to its database, mode 0600, made the
+first time a key is to be kept (written whole: a temporary file, then a link).
+The provider's key is sealed with it (AES-256-GCM, random nonce), bound to the
+provider, its owner and `key_version`, as `key_hub` in the provider's row; the
+response carries only `custody: "hub"` and `key_hint` (the last four
+characters), never the key. A copy of the database alone does not open it. A
+backup (`myco hub backup`, the App's, a workspace's) carries the key file with
+the database, and a restore puts it back (0600; the one that was there is kept
+aside with the rest): **keep backups as secrets**. If the key file is gone while
+keys sealed with it are kept, the hub logs a warning when it starts, providers
+say `key_lost: true`, and nothing makes a new key quietly (that would hide that
+they cannot be opened): the owner entering a lost provider's key again does.
+
+**Settings for one runner or node.** The key leaves the hub only through
+`GET /v1/me/provider-material`, to:
+
+- an agent's runner, `?id=<request>`, for the `run_settings.provider_hub` its
+  owner set (`PUT /v1/agents/{name}/run-settings` with `provider: "custom"`
+  and `provider_hub: {id, ref: {id, key_version}, model}` for one of their
+  providers, or `{id, manual}` for settings of this agent alone; the owner
+  only, at one of their devices, encryption off, to a runner with the
+  `hub_provider` feature). The settings show only `provider_hub: {id, from}`;
+  the runner checks `from` is its owner's, writes the env file (0600) and
+  acknowledges with `POST /v1/me/provider/ack {id}`, which clears it;
+- a machine node starting a session: `POST /v1/machines/{id}/spawn` with
+  `provider_ref` and `provider_hub: true` (that computer's owner only, `claude`
+  or `codex`, a node with the `hub_provider` feature) makes a grant the node
+  is sent instead (`provider_grant`): for that node and that request only,
+  used once, gone when the request ends and after ten minutes at most. The node
+  fetches `?grant=<grant>`, takes it only when `from` is the computer's owner,
+  runs the first turn with it and writes the new agent's env file; the hub then
+  records the agent's provider as for a sealed one.
+
+Every answer is recorded (`provider.material`, `provider.key.read`: who, which
+provider, which version, never the key), refusals too; each caller may read
+six a minute; nothing is cached or logged. Other members, other agents, the
+administrator token and device tokens of no member get nothing.
+
+**Turning encryption on or off.** On: the owner's App, at its next look at the
+list, reads each key the hub keeps, seals it for their devices and saves it
+(`PATCH` with `custody: "e2e"`, `key_sealed` at the same `key_version`); the hub
+drops its copy. Off: a provider sealed for the member's devices says
+`move_to_hub` and is not used until the owner agrees in the App, which opens it
+and hands it to the hub (`PATCH` with `custody: "hub"`, `api_key`, the same
+version). Agents already set keep what is on their computers either way; the
+next key pushed goes the new way.
 
 **Not shared.** A provider is its member's only; there is no workspace-wide
 shared provider. A key sealed for every member's devices cannot be taken back

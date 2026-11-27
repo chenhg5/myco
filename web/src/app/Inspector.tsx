@@ -350,13 +350,16 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
   const owns = !!me && (ag.owner_id ? ag.owner_id === me.id : ag.owner ? ag.owner === me.name : me.role === "owner");
   const remote = elsewhere && owns && !!rt?.features?.includes("remote_provider");
   const olderRunner = elsewhere && owns && !!rt && !rt.features?.includes("remote_provider");
-  const pending = remote && !!ag.run_settings?.provider_encrypted;
+  const pending = remote && (!!ag.run_settings?.provider_encrypted || !!ag.run_settings?.provider_hub);
+  // End-to-end encryption on: keys go sealed for that computer. Off: the
+  // hub keeps them (i119), for a runner that can fetch one.
   const sealed = !!row.hub.e2e;
+  const hubKept = !sealed && !!rt?.features?.includes("hub_provider");
   // Remote: "custom" is a custom address kept private on that computer (the
   // App shows it as the custom choice, without its address).
   const remoteCustom = remote && ag.run_settings?.provider === "custom";
   // The member's model providers (i115): only over the hub, sealed.
-  const mine = useModelProviders(remote && sealed ? row.hub.id : undefined);
+  const mine = useModelProviders(remote && (sealed || hubKept) ? row.hub.id : undefined);
   const ref = ag.run_settings?.provider_ref;
   const refProvider = ref ? mine.list?.providers.find((p) => p.id === ref.id) : undefined;
   const refDeleted = !!ref && !!mine.list && !refProvider;
@@ -413,7 +416,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
     ? L("已保存：它那台电脑从下一条消息开始用。", "Saved: its computer uses it from its next message.")
     : L("已保存，从它收到的下一条消息开始生效。", "Saved. It applies from the agent's next message.");
   // A custom address needs its key: over the hub only sealed.
-  const customOff = remote && !sealed;
+  const customOff = remote && !sealed && !hubKept;
   const useMine = async (id: string) => {
     setBusy(true);
     setError(null);
@@ -497,7 +500,7 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
               </span>
             </label>
           ))}
-          {remote && sealed && mine.list?.providers.filter((p) => p.key_readable && (codex ? p.openai_base : p.anthropic_base)).map((p) => (
+          {remote && (sealed || hubKept) && mine.list?.providers.filter((p) => p.key_readable && !p.move_to_hub && (codex ? p.openai_base : p.anthropic_base)).map((p) => (
             <label key={p.id} className={cn("app-provider-opt", choice === "ws:" + p.id && "picked")} data-testid={`provider-mine-${p.id}`}>
               <input type="radio" name="provider" checked={choice === "ws:" + p.id} onChange={() => setChoice("ws:" + p.id)} />
               <span>
@@ -514,7 +517,9 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
                 {remoteCustom && !customOff
                   ? L("已设置：地址和密钥只存在它那台电脑上；重新填会换掉它。", "Set: its address and key stay on that computer; entering new ones replaces them.")
                   : customOff
-                  ? L("密钥不经过 hub：请在那台电脑上的 App 里填，或在那台电脑上用 myco runner provider set。工作区开了端到端加密时，这里也能填。", "The key does not go through the hub: enter it in the App on that computer, or run myco runner provider set there. With end-to-end encryption on, you can enter it here.")
+                  ? L("它那台电脑上的 myco 版本太旧，收不了这里填的密钥：请在那台电脑上的 App 里填，或者先更新那里的 myco。", "myco on its computer is too old to take a key entered here: enter it in the App on that computer, or update myco there first.")
+                  : remote && hubKept
+                  ? L("地址和密钥由 Hub 保管（Hub 管理员能看到），只发给它那台电脑上的 runner。", "The hub keeps the address and key (its administrator could see them) and sends them only to its runner.")
                   : custom
                   ? [urlHost(custom.base_url), custom.model, codex && custom.wire_api ? (custom.wire_api === "chat" ? "Chat Completions" : "Responses") : ""].filter(Boolean).join(" · ")
                   : codex ? L("OpenAI 兼容的地址、模型和密钥", "An OpenAI-compatible address, model and key") : L("Anthropic 兼容的地址、模型和密钥", "An Anthropic-compatible address, model and key")}
@@ -540,7 +545,9 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
                     placeholder={L("不填就用它默认的；在 设置 › 模型供应商 里点「测试」可以读出列表", "Blank: its default. Test it in Settings › Model providers to list the models")} />
                 )}
               </label>
-              <p className="app-modal-note">{L("key 在这台电脑上解开后再加密，只有那个 agent 能解开；hub 只经手密文。", "The key is opened here and sealed again for that agent alone; the hub only carries it sealed.")}</p>
+              <p className="app-modal-note">{p?.custody === "hub"
+                ? L("key 由 Hub 保管（Hub 管理员能看到），只发给这个 agent 那台电脑上的 runner。", "The hub keeps the key (its administrator could see it) and sends it only to this agent's runner.")
+                : L("key 在这台电脑上解开后再加密，只有那个 agent 能解开；hub 只经手密文。", "The key is opened here and sealed again for that agent alone; the hub only carries it sealed.")}</p>
             </div>
           );
         })()}
