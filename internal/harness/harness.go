@@ -174,6 +174,9 @@ type Harness interface {
 
 // Options configures a harness instance.
 type Options struct {
+	// ClientVersion is the host CLI version advertised by protocol adapters.
+	// It is captured per instance so concurrent runners share no mutable metadata.
+	ClientVersion string
 	// ACPTransport overrides the ACP transport (stdio or streamable-http).
 	ACPTransport string
 	// Binary overrides the executable (e.g. a full path to claude).

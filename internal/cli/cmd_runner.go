@@ -16,7 +16,6 @@ import (
 	"github.com/myco-ai/myco/internal/client"
 	"github.com/myco-ai/myco/internal/config"
 	"github.com/myco-ai/myco/internal/harness"
-	"github.com/myco-ai/myco/internal/harness/acp"
 	"github.com/myco-ai/myco/internal/harness/builtin"
 	"github.com/myco-ai/myco/internal/harness/execnode"
 	"github.com/myco-ai/myco/internal/harness/machinenode"
@@ -224,7 +223,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 			return nil, err
 		}
 	} else {
-		h, err = sh.registry.New(name, harness.Options{Binary: first(ov.binary, rc.Binary), Args: args, Command: first(ov.command, rc.Command),
+		h, err = sh.registry.New(name, harness.Options{ClientVersion: Version, Binary: first(ov.binary, rc.Binary), Args: args, Command: first(ov.command, rc.Command),
 			Model: first(ov.model, rc.Model), Access: access, Template: rc.Template, Exec: execSpec, ACPTransport: rc.ACPTransport})
 		if err != nil {
 			return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
@@ -366,7 +365,6 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	if initial.warn != "" {
 		alog.Warn("provider: "+initial.warn, "provider", initial.name)
 	}
-	acp.ClientVersion = Version
 	// The cap is on agent CLIs: a command node's shell commands and a
 	// machine node's own work (upgrade, start an agent) never wait for one.
 	slots := sh.slots

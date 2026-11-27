@@ -27,9 +27,6 @@ const Name = "acp"
 // protocolVersion is the ACP version myco speaks.
 const protocolVersion = 1
 
-// ClientVersion is myco's version, told to the agent (set by the CLI).
-var ClientVersion = "dev"
-
 // Spec describes how to start an ACP agent. Placeholders: {model} in
 // ModelArgs, {dir} in DirArgs. The command line is Binary, Args, the model,
 // access and directory arguments, then Sub (a subcommand that must come
@@ -206,13 +203,17 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 			} `json:"sessionCapabilities"`
 		} `json:"agentCapabilities"`
 	}
+	version := a.opts.ClientVersion
+	if version == "" {
+		version = "dev"
+	}
 	err = c.call(startCtx, "initialize", map[string]any{
 		"protocolVersion": protocolVersion,
 		"clientCapabilities": map[string]any{
 			"fs":       map[string]bool{"readTextFile": false, "writeTextFile": false},
 			"terminal": false,
 		},
-		"clientInfo": map[string]string{"name": "myco", "title": "myco", "version": ClientVersion},
+		"clientInfo": map[string]string{"name": "myco", "title": "myco", "version": version},
 	}, &init)
 	if err != nil {
 		return fail(err)
