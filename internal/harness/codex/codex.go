@@ -119,6 +119,10 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	}
 	switch {
 	case req.SessionID != "" && req.Fork:
+		// A managed copy may live in another worktree; do not inherit the source root.
+		if req.Workdir != "" {
+			args = append(args, "--cd", req.Workdir)
+		}
 		args = append(args, "fork", req.SessionID)
 	case req.SessionID != "":
 		args = append(args, "resume", req.SessionID)

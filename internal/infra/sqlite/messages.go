@@ -280,6 +280,8 @@ func (r *MessageRepo) ClaimDue(ctx context.Context, recipient domain.AgentName, 
 	defer tx.Rollback()
 	// Over-fetch: some candidates may be failed out instead of claimed.
 	where, args := dueForWhere, []any{recipient, ms(now)}
+	// Retirement is a barrier in the same database transaction as claiming.
+	where += ` AND NOT EXISTS (SELECT 1 FROM agent_forks f WHERE f.copy_name=messages.to_agent AND f.copy_id=(SELECT id FROM agents WHERE name=messages.to_agent) AND (f.state='retired' OR (f.state='retiring' AND (COALESCE(json_extract(f.data,'$.now'),0)=1 OR messages.id NOT IN (SELECT value FROM json_each(f.data,'$.finishing'))))))`
 	if len(types) > 0 {
 		where += ` AND type IN (?` + strings.Repeat(",?", len(types)-1) + `)`
 		for _, t := range types {

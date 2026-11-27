@@ -69,6 +69,7 @@ type Plan struct {
 
 // Deps are the effects a spawn needs, injected by the CLI layer.
 type Deps struct {
+	ManagedFork func(context.Context, harness.Request, string, bool) (api.SpawnResult, error)
 	// SealedProvider opens a provider sealed for this node with a spawn
 	// request from sender (i115): the variables for the new agent's env file
 	// and the settings its first turn runs with. It refuses one not sealed by
@@ -152,6 +153,13 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	var sr api.SpawnRequest
 	if err := json.Unmarshal([]byte(req.Body), &sr); err != nil {
 		return denied("the task body must be a spawn request (JSON), as sent by `myco agent spawn`: %v", err)
+	}
+	if sr.CLI == ManagedForkCLI || sr.CLI == ManagedRetireCLI {
+		var ctl struct {
+			ForkID string `json:"fork_id"`
+		}
+		_ = json.Unmarshal([]byte(req.Body), &ctl)
+		return n.managedFork(ctx, req, ctl.ForkID, sr.CLI == ManagedRetireCLI)
 	}
 	if strings.TrimSpace(sr.CLI) == api.StopProcessCLI {
 		if req.From != AdminSender {

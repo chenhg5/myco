@@ -30,7 +30,9 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
-	taskMonitor   *app.TaskMonitorService
+	taskMonitor *app.TaskMonitorService
+
+	forks         *app.ForkService
 	databaseStats func() api.DatabasePoolStats
 	perf          *perf.Timings
 	goals         *app.GoalService
@@ -190,6 +192,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) routes() {
+	s.mux.HandleFunc("POST /v1/agents/fork", s.adminOrAgent(s.createAgentFork))
+	s.mux.HandleFunc("POST /v1/agents/retire", s.adminOrAgent(s.retireAgentFork))
+	s.mux.HandleFunc("GET /v1/agent-forks/{id}", s.adminOrAgent(s.getAgentFork))
+	s.mux.HandleFunc("GET /v1/me/agent-forks/{id}", s.agent(s.machineForkPlan))
+	s.mux.HandleFunc("POST /v1/me/agent-forks/{id}", s.agent(s.completeAgentFork))
 	m := s.mux
 	s.usageRoutes(m)
 	s.taskMonitorRoutes(m)

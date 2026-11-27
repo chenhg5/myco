@@ -2029,3 +2029,38 @@ and failures retain their ordinary delivery; the alert budget does not suppress 
 
 New clients must treat missing task routes on an old Hub as `unsupported` with an
 upgrade suggestion, not simulate a board from a truncated inbox/history listing.
+
+### Managed agent fork and retirement
+
+These endpoints require an agent or console/admin token. Older Hubs without these routes
+are reported as `unsupported` by newer clients. Machine nodes must advertise
+`fork_retire_v1`; ordinary agent spawn remains unchanged. See [managed copies](agent-forks.md).
+
+- `POST /v1/agents/fork?dry_run=true`: `AgentForkRequest` (`from`, `count` 1–32,
+  `worktree`, `name_prefix`, optional `for_task`, `force`, required `request_id`).
+  Returns `AgentForkResult {forks, dry_run?}` with durable reservations and their spawn
+  message IDs. An identical creator/request key returns the original copies; changing
+  its source, count or options conflicts. Only the machine's normal spawn senders or
+  permitted project coordinators may request copies. `force` affects capacity/quota only.
+- `POST /v1/agents/retire?dry_run=true`: `AgentRetireRequest` with exactly one of `name`
+  or `fork_of`, and optional `now`. Returns `AgentForkResult`. Retirement first records
+  the existing work allowed to finish and blocks new claims. The original creator identity,
+  current machine owner or administrator may retire copies; ordinary labels confer no rights.
+- `GET /v1/agent-forks/{id}`: an `AgentFork` provenance/lifecycle record, visible only to
+  its creator, the machine owner/admin, or that exact copy with unchanged ownership.
+- `GET /v1/me/agent-forks/{id}`: the trusted execution plan, restricted to the exact
+  registered machine node and current machine owner binding.
+- `POST /v1/me/agent-forks/{id}`: `AgentForkCompletion {workdir, repository?, branch?,
+  retired?, error?}`. Only that machine node may confirm registration or cleanup. The Hub
+  checks the registered identity, enrollment, directory and owner; retirement deletes by
+  immutable ID and fails remaining queued work in the same transaction.
+
+`AgentFork` includes `id`, `batch`, `name`, `agent_id?`, `fork_of`, `source_id`, `cli`,
+`source_session`, `source_dir`, `source_visibility?`, `source_allow_from?`, `forked_by`,
+`for_task?`, `machine_id`, `node_id`, `node`, `owner_id`, `worktree`, `force?`, `access?`,
+`model?`, `name_prefix?`, `state` (`planned`, `ready`, `retiring`, `retired`),
+`message_id?`, `retire_message_id?`, `retire_attempt?`, `finishing?` (already claimed message
+IDs), `workdir?`, `repository?`, `branch?`, `now?`, `created_at`, and `error?`.
+Creator identity IDs are private storage metadata, never an editable permission field.
+Copies retain source visibility and sender restrictions. Only the initial context-copy turn
+requires the source's original identity, session and permissions still to match.

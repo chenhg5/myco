@@ -2,10 +2,12 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -133,14 +135,15 @@ notes are never auto-answered. Logs go to stderr.`,
 
 // runnerShared holds settings common to every agent a process serves.
 type runnerShared struct {
-	processes  *processwatch.Manager
-	once       bool
-	busyWindow time.Duration
-	busyRetry  time.Duration
-	scope      runner.SessionScope
-	rebind     bool
-	trace      string
-	slots      *runner.SlotPool
+	forkWorkers *forkWorkers
+	processes   *processwatch.Manager
+	once        bool
+	busyWindow  time.Duration
+	busyRetry   time.Duration
+	scope       runner.SessionScope
+	rebind      bool
+	trace       string
+	slots       *runner.SlotPool
 	// locks: one turn at a time per CLI session, across every agent
 	// (several workspaces can share a session) and runner process.
 	locks    *runner.SessionLocks
@@ -209,6 +212,12 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 		return nil, err
 	}
 	e.withSealer(c, cfgPath, cfg)
+	if cfg.ForkID != "" {
+		f, ferr := c.AgentFork(startup, cfg.ForkID)
+		if ferr != nil || (f.State != "ready" && !(f.State == "retiring" && !f.Now && len(f.Finishing) > 0)) || f.Name != cfg.Agent {
+			return nil, errorf("invalid_state", ExitConflict, "wait for managed fork registration or retirement to finish", "managed copy is not ready")
+		}
+	}
 	c.Via = "runner" // yields to a session that keeps `inbox wait` running
 	me, err := c.Me(startup)
 	if err != nil {
@@ -393,8 +402,22 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	}
 	alog.Info("runner ready", "hub", cfg.Hub, "provider", initial.name, "provider_source", initial.source, "harness", h.Name(), "access", orDefault(string(access), "default"), "workdir", workdir, "environment", host,
 		"session_scope", sh.scope, "session_id", me.Binding.SessionID)
+	var authorizeCopy func(context.Context, string) error
+	if cfg.ForkID != "" {
+		authorizeCopy = func(ctx context.Context, taskID string) error {
+			f, err := c.AgentFork(ctx, cfg.ForkID)
+			if err != nil {
+				return err
+			}
+			if (f.State != "ready" && !(f.State == "retiring" && !f.Now && slices.Contains(f.Finishing, taskID))) || f.AgentID != me.ID {
+				return errors.New("managed copy is not ready")
+			}
+			return nil
+		}
+	}
 	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{
-		Processes: sh.processes, ProcessWorkspace: cfg.Hub, ProcessMember: me.OwnerID,
+		AuthorizeRun: authorizeCopy,
+		Processes:    sh.processes, ProcessWorkspace: cfg.Hub, ProcessMember: me.OwnerID,
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
 		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, SlotPool: slots, OnSlots: rep.Slots, Trace: sh.trace, SessionLocks: sh.locks,
 		StatePath:      runnerStatePath(e.defaultPath, me.Name),
@@ -432,6 +455,9 @@ const runnerStartupTimeout = 20 * time.Second
 // runAll serves every profile, rescanning for new ones until ctx ends.
 func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 	dir := config.ProfilesDir(e.defaultPath)
+	if sh.forkWorkers == nil {
+		sh.forkWorkers = newForkWorkers()
+	}
 	var (
 		wg          sync.WaitGroup
 		mu          sync.Mutex            // started: a runner ends by itself when its node is taken over
@@ -523,13 +549,23 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				workerCtx, stopWorker := context.WithCancel(e.in.Ctx)
+				workerDone := make(chan struct{})
+				defer func() { stopWorker(); close(workerDone) }()
+				if !sh.forkWorkers.add(p.Path, p.Config.Token, stopWorker, workerDone) {
+					return
+				}
+				defer sh.forkWorkers.remove(p.Path, p.Config.Token)
+				workerEnv, invocation := *e, *e.in
+				invocation.Ctx = workerCtx
+				workerEnv.in = &invocation
 				select {
 				case slots <- struct{}{}:
 				case <-e.in.Ctx.Done():
 					return
 				}
-				ctx, cancel := context.WithTimeout(e.in.Ctx, runnerStartupTimeout)
-				r, err := e.buildRunnerContext(ctx, p.Path, p.Config, sh, runnerOverrides{}, log)
+				ctx, cancel := context.WithTimeout(workerCtx, runnerStartupTimeout)
+				r, err := workerEnv.buildRunnerContext(ctx, p.Path, p.Config, sh, runnerOverrides{}, log)
 				cancel()
 				<-slots
 				mu.Lock()
@@ -564,7 +600,7 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 				}
 				mu.Unlock()
 				path, token := p.Path, p.Config.Token
-				if err := r.Run(e.in.Ctx); runner.IsCredentialRejected(err) {
+				if err := r.Run(workerCtx); runner.IsCredentialRejected(err) {
 					// Taken over (a handover) or its credential replaced:
 					// look again, as a new identity may have been saved in
 					// this profile (a new session on this machine).

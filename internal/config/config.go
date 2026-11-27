@@ -29,9 +29,11 @@ const (
 
 // Config is the on-disk client configuration.
 type Config struct {
-	Hub   string `yaml:"hub,omitempty" json:"hub,omitempty"`
-	Agent string `yaml:"agent,omitempty" json:"agent,omitempty"`
-	Token string `yaml:"token,omitempty" json:"token,omitempty"`
+	// ForkID binds a managed profile to the Hub lifecycle barrier.
+	ForkID string `yaml:"fork_id,omitempty" json:"fork_id,omitempty"`
+	Hub    string `yaml:"hub,omitempty" json:"hub,omitempty"`
+	Agent  string `yaml:"agent,omitempty" json:"agent,omitempty"`
+	Token  string `yaml:"token,omitempty" json:"token,omitempty"`
 	// ResumeToken is the durable recovery credential for this identity. It is
 	// only saved locally to avoid rotating an existing link on every join.
 	ResumeToken string `yaml:"resume_token,omitempty" json:"-"`

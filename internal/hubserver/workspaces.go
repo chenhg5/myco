@@ -155,6 +155,7 @@ func (ws *workspaces) open(name string) (*workspaceHub, error) {
 	w.run(ctx, h.TaskMonitor.Run)
 	w.run(ctx, h.Watches.Run)
 	w.run(ctx, h.Goals.Run)
+	w.run(ctx, h.Forks.Run)
 	if h.RunBackups != nil {
 		w.run(ctx, h.RunBackups)
 	}
