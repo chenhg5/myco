@@ -281,6 +281,7 @@ func (e *env) inboxWaitAll(ids []config.Profile) error {
 		if e.in.Getenv != nil {
 			reportSessionRuntime(e.in.Ctx, clients[i], e.in.Getenv)
 			reportSessionQuota(e.in.Ctx, clients[i], e.in.Getenv, time.Now())
+			reportStatusLineQuota(e.in.Ctx, clients[i], e.mycoDir(), p.Config.Agent, time.Now())
 		}
 	}
 	targets := make([]sessionUsageTarget, 0, len(ids))
