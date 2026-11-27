@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { KeyRound, Lock, Plus } from "lucide-react";
 import { appApi, type HubOverview, type ModelProviderInput } from "@/appapi";
 import type { ModelProvider, RuntimeModel } from "@/api";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
@@ -48,7 +49,7 @@ function usersOf(hub: HubOverview | undefined, p: ModelProvider) {
 
 /** Settings › 模型供应商: the member's vendors and keys, for every computer
  *  they add an agent on. Keys are sealed for their own devices. */
-export function ModelProvidersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; onRefresh: () => Promise<void> }) {
+export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: { hubsOv?: HubOverview[]; onRefresh: () => Promise<void>; onOpenWorkspaces?: () => void }) {
   const hubs = (hubsOv || []).filter((h) => h.ok && h.me?.member);
   const [hubId, setHubId] = useState("");
   const hub = hubs.find((h) => h.id === hubId) || hubs[0];
@@ -110,32 +111,65 @@ export function ModelProvidersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverv
     }
   };
   const deletingUsers = deleting ? usersOf(hub, deleting).all.length : 0;
+  const providers = list?.providers || [];
+  const empty = !!list && providers.length === 0;
   return (
     <>
-      {hubs.length > 1 && (
-        <select className="app-select-field app-members-hub" value={hub.id} onChange={(e) => setHubId(e.target.value)}>
-          {hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-        </select>
-      )}
-      <div className="app-members-head">
-        <span className="app-group-title"><span className="name">{L("我的模型供应商", "My model providers")}</span></span>
-        <button type="button" className="app-btn app-btn-small app-members-invite" disabled={!e2e} onClick={() => setEditing("new")} data-testid="providers-add">
-          {L("新增", "Add")}
-        </button>
+      {/* One row: what this is, which workspace (when there are several),
+          and adding one (only when it can be). */}
+      <div className="app-members-head pv-head">
+        <span className="app-group-title">
+          <span className="name">{L("我的模型供应商", "My model providers")}</span>
+          {providers.length > 0 && <span className="app-group-note">{L(` · ${providers.length} 个`, ` · ${providers.length}`)}</span>}
+        </span>
+        {hubs.length > 1 && (
+          <select className="app-select-field pv-hub" value={hub.id} onChange={(e) => setHubId(e.target.value)} aria-label={L("工作区", "Workspace")} title={L("存在哪个工作区", "Which workspace keeps them")}>
+            {hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          </select>
+        )}
+        {e2e && providers.length > 0 && (
+          <button type="button" className="app-btn app-btn-small app-btn-primary pv-add" onClick={() => setEditing("new")} data-testid="providers-add">
+            <Plus />{L("新增", "Add")}
+          </button>
+        )}
       </div>
       <section className="app-setting-card app-members" data-testid="providers">
         <ErrorText error={error || actionError} />
         {note && <p className="app-small-note app-offline-ok">{note}</p>}
-        {!e2e && (
-          <p className="app-small-note" data-testid="providers-e2e-off">
-            {L("key 要加密后存在工作区里，只有你自己的设备能解开：请先在 设置 › 工作区 里打开端到端加密。也可以照旧到 agent 所在的那台电脑上，在它的「服务商」里本地填。",
-              "Keys are kept in the workspace encrypted for your own devices: turn on end-to-end encryption in Settings › Workspaces first. Or, as before, enter the provider on the agent's computer, in its Provider row.")}
-          </p>
-        )}
-        {list && list.providers.length === 0 && e2e && (
-          <p className="app-small-note">{L("还没有。新增一个，以后在任何一台电脑上新增 agent 都能直接选。", "None yet. Add one, and pick it whenever you add an agent on any of your computers.")}</p>
-        )}
-        {list?.providers.map((p) => {
+        {!e2e ? (
+          // Why it cannot be used yet, and the way there.
+          <div className="pv-state" data-testid="providers-e2e-off">
+            <span className="pv-state-icon"><Lock /></span>
+            <div className="pv-state-body">
+              <b>{L("先打开端到端加密", "Turn on end-to-end encryption first")}</b>
+              <p>{L("key 会加密后存在工作区里，只有你自己的设备能解开，所以这个工作区要先打开端到端加密。",
+                "Keys are kept in the workspace encrypted for your own devices, so this workspace needs end-to-end encryption first.")}</p>
+              <div className="pv-state-actions">
+                {onOpenWorkspaces && (
+                  <button type="button" className="app-btn app-btn-small app-btn-primary" onClick={onOpenWorkspaces} data-testid="providers-open-e2e">
+                    {L("去打开", "Turn it on")}
+                  </button>
+                )}
+                <span className="pv-state-or">{L("或者照旧到 agent 所在的电脑上，在它的「服务商」里填。", "Or, as before, enter it on the agent's computer, in its Provider row.")}</span>
+              </div>
+            </div>
+          </div>
+        ) : empty ? (
+          <div className="pv-state" data-testid="providers-empty">
+            <span className="pv-state-icon"><KeyRound /></span>
+            <div className="pv-state-body">
+              <b>{L("还没有模型供应商", "No model providers yet")}</b>
+              <p>{L("新增一个（比如 OpenCode Go、DeepSeek、Kimi），以后在任何一台电脑上新增 agent 都能直接选。",
+                "Add one (OpenCode Go, DeepSeek, Kimi…), then pick it whenever you add an agent on any of your computers.")}</p>
+              <div className="pv-state-actions">
+                <button type="button" className="app-btn app-btn-small app-btn-primary" onClick={() => setEditing("new")} data-testid="providers-add">
+                  <Plus />{L("新增模型供应商", "Add a model provider")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {providers.map((p) => {
           const users = usersOf(hub, p);
           return (
             <div key={p.id} className="app-member-row" data-testid={`provider-${p.id}`}>
@@ -172,9 +206,11 @@ export function ModelProvidersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverv
             </div>
           );
         })}
-        <p className="app-hint">{L("key 在这台电脑上加密后存到工作区，只有你自己的设备能解开，工作区看不到。新增 agent 时只写到那台电脑上（它的 env 文件，权限 600）。",
-          "Keys are encrypted on this computer before they are kept in the workspace: only your own devices open them, the workspace cannot. When you add an agent, the key is written only to that computer (its env file, mode 600).")}</p>
       </section>
+      {e2e && (
+        <p className="app-hint pv-foot">{L("key 在这台电脑上加密后存到工作区，只有你自己的设备能解开，工作区看不到。新增 agent 时只写到那台电脑上（它的 env 文件，权限 600）。",
+          "Keys are encrypted on this computer before they are kept in the workspace: only your own devices open them, the workspace cannot. When you add an agent, the key is written only to that computer (its env file, mode 600).")}</p>
+      )}
 
       {editing && (
         <ProviderEditor hubId={hub.id} provider={editing === "new" ? null : editing} onClose={() => setEditing(null)}

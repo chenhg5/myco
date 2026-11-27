@@ -5960,6 +5960,23 @@ button.app-label:hover { filter: brightness(0.95); }
 
 /* Settings → 成员 / 审计 */
 .app-members-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+/* 模型供应商: the title, the workspace (when several) and 新增 in one row;
+   what to do when there is nothing yet, or it cannot be used yet, as a
+   short card with its way forward; the note on keys under the card. */
+.pv-head .app-group-title { margin-right: auto; }
+.pv-hub { width: auto; min-width: 140px; max-width: 220px; height: 30px; padding-top: 0; padding-bottom: 0; font-size: 12.5px; }
+.pv-add { display: inline-flex; align-items: center; gap: 5px; }
+.pv-add svg, .pv-state-actions svg { width: 14px; height: 14px; }
+.pv-state { display: flex; gap: 12px; align-items: flex-start; padding: 6px 2px; }
+.pv-state-icon { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--pill); color: var(--fg-2); }
+.pv-state-icon svg { width: 17px; height: 17px; }
+.pv-state-body { min-width: 0; flex: 1; }
+.pv-state-body b { display: block; font-size: 13px; font-weight: 600; color: var(--fg); }
+.pv-state-body p { margin: 4px 0 0; font-size: 12px; line-height: 1.55; color: var(--muted); }
+.pv-state-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; }
+.pv-state-actions .app-btn { display: inline-flex; align-items: center; gap: 5px; }
+.pv-state-or { font-size: 11.5px; color: var(--faint); }
+.pv-foot { margin: 10px 2px 0; padding: 0; background: none; border: 0; color: var(--faint); font-size: 11.5px; line-height: 1.55; }
 .app-members-hub { width: auto; min-width: 160px; }
 .app-members-invite { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
 .app-members-invite svg { width: 14px; height: 14px; }

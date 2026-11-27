@@ -5325,14 +5325,22 @@ async function runMatrix(browser, size, scheme) {
       };
       await setE2E(false);
       await openSection();
+      // Not usable yet: why, and the way there (no add button that does
+      // nothing).
       await page.locator("[data-testid=providers-e2e-off]").waitFor({ timeout: 10_000 });
-      if (!(await page.locator("[data-testid=providers-add]").isDisabled())) throw new Error("没开端到端加密时不该能新增");
+      if (await page.locator("[data-testid=providers-add]").count()) throw new Error("没开端到端加密时不该有「新增」");
       await settle(page, 200);
       await shot(page, size, scheme, "settings-providers-e2e-off");
+      await clickVisible(page, page.locator("[data-testid=providers-open-e2e]"));
+      await page.locator(".app-settings-tab.active", { hasText: "工作区" }).first().waitFor({ timeout: 5_000 });
       await setE2E(true);
       await go(page, "成员", narrow);
       await openSection();
       await page.locator("[data-testid=providers-e2e-off]").waitFor({ state: "hidden", timeout: 10_000 });
+      // Nothing yet: one card that says what it is for, and adds one.
+      await page.locator("[data-testid=providers-empty]").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-providers-empty");
       await clickVisible(page, page.locator("[data-testid=providers-add]"));
       const dlg = page.locator(".app-modal", { has: page.locator("[data-testid=provider-vendors]") });
       await dlg.waitFor({ timeout: 5_000 });
