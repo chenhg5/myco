@@ -5002,6 +5002,12 @@ async function runMatrix(browser, size, scheme) {
       if (look.headFaces) throw new Error("清爽模式下会话标题不该有头像");
       if (look.memberFace > 12) throw new Error(`清爽模式下成员栏只留状态点，实际宽 ${look.memberFace}px`);
       if (look.mushrooms) throw new Error("清爽模式下不该有走路的小蘑菇");
+      const projectHead = await page.evaluate(() => {
+        const p = document.querySelector(".sp-home .sp-head-titles p");
+        return { line: !!p && p.getClientRects().length > 0, tip: document.querySelector(".sp-home .sp-head-titles h2")?.getAttribute("title") || "" };
+      });
+      if (projectHead.line) throw new Error("清爽模式下项目标题只留一行名字，不显示目标");
+      if (!projectHead.tip) throw new Error("清爽模式下项目的目标应在名字的悬停提示里");
       await settle(page, 300);
       await shot(page, size, scheme, "clean-mode");
       // A chat's head is one line: the name; what it is with on hover.

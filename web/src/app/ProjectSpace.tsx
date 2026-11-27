@@ -865,7 +865,8 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
     <div className="sp-home">
       <header className="sp-head">
         <div className="sp-head-titles">
-          <h2>{project.title || project.name}</h2>
+          {/* (清爽 keeps the head to one line: the goal shows on hover) */}
+          <h2 title={project.goal || undefined}>{project.title || project.name}</h2>
           <p>{project.goal || L("跟协调者说你想做什么，它会把活分给大家。", "Tell the coordinator what you want; it hands the work out.")}</p>
         </div>
         <span className="sp-head-tools">
@@ -968,7 +969,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
           <button type="button" className="app-btn app-btn-plain" onClick={onBack} aria-label={L("返回", "Back")} title={L("返回", "Back")}><ArrowLeft /></button>
         )}
         <div className="sp-head-titles">
-          <h2>{activity ? L("全部动态", "All activity") : title}</h2>
+          <h2 title={!activity && !loose ? project?.goal || undefined : undefined}>{activity ? L("全部动态", "All activity") : title}</h2>
           <p>
             {activity
               ? L(`「${title}」里所有成员之间的任务，留着回头查。`, `Every task between the members of ${title}, to look back at.`)
