@@ -594,7 +594,7 @@ func imAllowCommand() *Command {
 }
 
 func imSetCommand() *Command {
-	return &Command{Name: "set", Summary: "Change a bridge's project, language or front-desk model", Mutating: true,
+	return &Command{Name: "set", Summary: "Change a bridge's project, language, or front desk (model and instructions)", Mutating: true,
 		Examples: []string{"myco im set --name feishu-coder --project website"},
 		Flags: []Flag{{Name: "name", Kind: String, Required: true, Help: "Bridge name"},
 			{Name: "project", Kind: String, Help: "Project for new conversations (\"\" for none)"},
@@ -602,11 +602,22 @@ func imSetCommand() *Command {
 			{Name: "llm-base-url", Kind: String, Help: "Front desk: an OpenAI-compatible model's base URL (it answers as the agent, as in voice chats)"},
 			{Name: "llm-model", Kind: String, Help: "Front desk: the model (a fast one)"},
 			{Name: "llm-key-file", Kind: String, Help: "Front desk: file with the model's API key"},
-			{Name: "no-desk", Kind: Bool, Help: "Turn the front desk off: messages go straight to the agent"}},
+			{Name: "no-desk", Kind: Bool, Help: "Turn the front desk off: messages go straight to the agent"},
+			{Name: "prompt-file", Kind: String, Help: "Front desk: file with your own instructions for this bot (rules for whoever talks to it); an empty file clears them"}},
 		Run: handler(func(e *env) error {
 			c, err := e.loadBridge()
 			if err != nil {
 				return err
+			}
+			if f := e.in.String("prompt-file"); f != "" {
+				b, err := os.ReadFile(f)
+				if err != nil {
+					return errorf("not_found", ExitNotFound, "", "reading --prompt-file: %v", err)
+				}
+				c.Prompt = strings.TrimSpace(string(b))
+				if n := len([]rune(c.Prompt)); n > im.MaxPrompt {
+					return errorf("invalid_argument", ExitUsage, "shorten it", "the instructions are %d characters; at most %d", n, im.MaxPrompt)
+				}
 			}
 			if e.in.Bool("no-desk") {
 				c.LLMBaseURL, c.LLMModel, c.LLMKey, c.NoDesk = "", "", "", true

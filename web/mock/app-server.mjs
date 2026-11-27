@@ -3243,6 +3243,13 @@ const server = http.createServer(async (req, res) => {
       imBridges.push(b);
       return send(res, 200, { bridge: b });
     }
+    if (parts.length === 4 && parts[3] === "prompt" && method === "PUT") {
+      const body = await readBody(req);
+      const b = imBridges.find((x) => x.name === parts[2]);
+      if (!b) return send(res, 404, { error: "not_found", message: "no such bot on this computer" });
+      b.prompt = String(body.prompt || "").trim();
+      return send(res, 200, { name: b.name, prompt: b.prompt });
+    }
     if (parts.length === 4 && parts[3] === "claim" && method === "POST") {
       const b = imBridges.find((x) => x.name === parts[2]);
       if (b) { b.claim = "5e6f7a8b9c"; b.claim_expired = false; }

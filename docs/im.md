@@ -57,7 +57,10 @@ To give a bot a front-desk model from the command line (the App does this for yo
 ```bash
 myco im set --name feishu-coder --llm-base-url https://api.example.com/v1 --llm-model fast-model --llm-key-file key.txt
 myco im set --name feishu-coder --no-desk     # straight to the agent again
+myco im set --name feishu-coder --prompt-file rules.txt   # its own instructions (an empty file clears them)
 ```
+
+**Instructions.** Each bot can have its owner's own instructions for the front desk, separate from voice chats: in the App, **Instructions** next to the bot; or `--prompt-file` above. They matter most when people other than the owner talk to the bot: how to talk to them, what it may answer, what it must not do. The front desk is told whether the person is the owner, and the instructions win over its defaults. Tasks it hands over for anyone other than the owner carry the instructions too, so the agent keeps to them as well. They are stored in the bot's config file on that computer (at most 8000 characters).
 
 Then:
 

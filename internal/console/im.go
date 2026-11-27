@@ -16,6 +16,7 @@ package console
 //	DELETE /app/im/feishu/{id}        stop waiting for the scan
 //	POST   /app/im/slack              {hub_id, agent, bot_token, app_token} → {bridge}
 //	POST   /app/im/{name}/claim       a new claim code (the old one stops working) → {claim}
+//	PUT    /app/im/{name}/prompt      {prompt} the bot's own front-desk instructions
 //	DELETE /app/im/{name}
 
 import (
@@ -44,6 +45,7 @@ import (
 
 func (b *Backend) imRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/im", b.getIM)
+	m.HandleFunc("PUT /app/im/{name}/prompt", b.putIMPrompt)
 	m.HandleFunc("POST /app/im/feishu", b.postIMFeishu)
 	m.HandleFunc("GET /app/im/feishu/{id}", b.getIMFeishu)
 	m.HandleFunc("DELETE /app/im/feishu/{id}", b.deleteIMFeishu)
@@ -67,6 +69,8 @@ type IMBridge struct {
 	Online       bool   `json:"online"`
 	// Desk: it answers as the agent with the voice chats' model.
 	Desk bool `json:"desk,omitempty"`
+	// Prompt: its owner's own instructions for the front desk.
+	Prompt string `json:"prompt,omitempty"`
 }
 
 // imScan is a QR code being scanned.
@@ -127,6 +131,7 @@ func (b *Backend) imList(ctx context.Context) ([]IMBridge, error) {
 				}
 				// Bots made before the front desk get it once voice is set.
 				br.Desk = b.imDesk(res.Dir, c)
+				br.Prompt = c.Prompt
 			}
 		}
 		list = append(list, br)
@@ -352,6 +357,40 @@ func (b *Backend) postIMClaim(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.Unmarshal(out, &res)
 	writeJSON(w, http.StatusOK, map[string]any{"name": name, "claim": res.Claim})
+}
+
+// putIMPrompt sets a bot's own front-desk instructions. It writes the bot's
+// config on this computer (a running bot picks it up within seconds), so it
+// works with CLIs from before them too.
+func (b *Backend) putIMPrompt(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !im.ValidName(name) {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "invalid bridge name"})
+		return
+	}
+	var in struct {
+		Prompt string `json:"prompt"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	in.Prompt = strings.TrimSpace(in.Prompt)
+	if len([]rune(in.Prompt)) > im.MaxPrompt {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: fmt.Sprintf("at most %d characters", im.MaxPrompt)})
+		return
+	}
+	dir := im.Dir(filepath.Join(b.Local.Home, ".myco"))
+	c, err := im.Load(dir, name)
+	if err != nil || c == nil {
+		writeErr(w, &client.Error{Status: http.StatusNotFound, Code: "not_found", Message: "no such bot on this computer"})
+		return
+	}
+	c.Prompt = in.Prompt
+	if err := im.Save(dir, c); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"name": name, "prompt": c.Prompt})
 }
 
 func (b *Backend) deleteIM(w http.ResponseWriter, r *http.Request) {

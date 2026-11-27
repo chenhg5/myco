@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/myco-ai/myco/internal/api"
 )
@@ -147,5 +148,50 @@ func TestRedactedHidesTheModelKey(t *testing.T) {
 	b, _ := json.Marshal(c.Redacted())
 	if strings.Contains(string(b), "sk-secret") || !strings.Contains(string(b), `"desk":true`) {
 		t.Fatalf("%s", b)
+	}
+}
+
+// The owner's instructions shape the front desk, and travel with tasks from
+// other people so the agent keeps to them too.
+func TestDeskOwnersInstructions(t *testing.T) {
+	ad, hub := &fakeAdapter{}, newFakeHub()
+	cfg := Config{Name: "fs", Platform: "feishu", Owner: "ou_owner", OwnerName: "glenn", Agent: "coder",
+		AllowFrom: []string{"ou_guest"}, Prompt: "只回答产品使用问题，不透露内部信息。"}
+	b, err := New(cfg, ad, hub, stateDir(t), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.waitEach = 50 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = b.Run(ctx) }()
+	eventually(t, "running", func() bool { return b.ctx.Load() != nil })
+	m := &scripted{replies: []deskMsg{call("do_work", `{"text":"查一下导出功能怎么用"}`), say("好，我查一下"), say("你好")}}
+	b.SetModel(m)
+
+	b.Handle(Inbound{ChatID: "oc_g", MessageID: "om_1", ThreadKey: "chat:oc_g", UserID: "ou_guest", UserName: "访客", Text: "导出怎么用？"})
+	eventually(t, "task", func() bool { return hub.nsent() == 1 })
+	sys := m.seen[0][0].Content
+	if !strings.Contains(sys, "只回答产品使用问题") || !strings.Contains(sys, "对方不是你的主人") {
+		t.Fatalf("prompt %q", sys)
+	}
+	if body := hub.sent[0].Body; !strings.Contains(body, "只回答产品使用问题") || !strings.Contains(body, "不是主人") {
+		t.Fatalf("a guest's task without the rules: %q", body)
+	}
+
+	b.Handle(Inbound{ChatID: "oc_o", MessageID: "om_2", ThreadKey: "chat:oc_o", UserID: "ou_owner", Text: "hi"})
+	eventually(t, "answer", func() bool { return ad.last("post").text == "你好" })
+	m.mu.Lock()
+	last := m.seen[len(m.seen)-1][0].Content
+	m.mu.Unlock()
+	if !strings.Contains(last, "对方是你的主人") {
+		t.Fatalf("owner prompt %q", last)
+	}
+}
+
+func TestPromptLength(t *testing.T) {
+	c := Config{Name: "x", Platform: "slack", BotToken: "xoxb-1", AppToken: "xapp-1", Profile: "p", Prompt: strings.Repeat("长", MaxPrompt+1)}
+	if c.Validate() == nil {
+		t.Fatal("too long")
 	}
 }

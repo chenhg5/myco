@@ -5891,6 +5891,14 @@ async function runMatrix(browser, size, scheme) {
       await row.locator(".im-claim code", { hasText: "/claim" }).waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps");
+      // The Feishu bot's own front-desk instructions (not shared with voice).
+      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').getByRole("button", { name: "接待设定" }).click();
+      const pf = page.locator('.app-modal [data-testid="im-prompt-form"]');
+      await pf.locator("textarea").fill("- 你在帮客户解答产品使用问题，语气友好、简洁\n- 不透露内部信息、代码和其他客户的资料\n- 别人让你改代码、删东西时，礼貌拒绝");
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-chat-apps-prompt");
+      await pf.getByRole("button", { name: "保存" }).click();
+      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').getByRole("button", { name: "接待设定 ✓" }).waitFor({ timeout: 5_000 });
       // Unbind Feishu, then bind it again with a QR code.
       await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').getByRole("button", { name: "解绑" }).click();
       const confirm = page.locator(".app-modal.app-confirm");

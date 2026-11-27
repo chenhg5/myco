@@ -10,6 +10,10 @@ Each agent can have its own Feishu, Lark and Slack bots: one bot per agent, the 
 
 **A front desk, as in voice chats.** Once a model is set in **Settings › Voice**, the bot uses that same model: it answers at once what it can (who it is, what it is on, how far it got, what came of it), and for real work it says "Sure, on it" and gets going. Without a model, everything you say goes straight to the agent as work.
 
+**Instructions.** Each bot can have its own instructions for the front desk, separate from voice chats: in the "Chat apps" row, click **Instructions** next to the bot and write how it should talk, what it may answer and what it must not do. This matters most when people other than you talk to it (customers, for example). Work handed over for anyone other than the owner carries the instructions too, so the agent keeps to them as well.
+
+![Instructions](shot:member-chat-apps-prompt)
+
 ## Bind a Feishu bot to an agent
 
 1. Open the agent's details and find the "Chat apps" row under **Name and access**.

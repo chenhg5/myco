@@ -30,6 +30,7 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
   const [error, setError] = useState<unknown>(null);
   const [adding, setAdding] = useState<"" | "feishu" | "lark" | "slack">("");
   const [removing, setRemoving] = useState<IMBridge | null>(null);
+  const [editing, setEditing] = useState<IMBridge | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -77,6 +78,7 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
               <i className={cn("dot", b.online ? "working" : "pending")} aria-hidden />
               {label(b)}
               <span className="app-kv-note">{b.online ? L("在线", "online") : L("启动中…", "starting…")}</span>
+              <button type="button" className="app-kv-link" disabled={busy} onClick={() => setEditing(b)}>{b.prompt ? L("接待设定 ✓", "Instructions ✓") : L("接待设定", "Instructions")}</button>
               <button type="button" className="app-kv-link" disabled={busy} onClick={() => setRemoving(b)}>{L("解绑", "Unbind")}</button>
             </span>
           )) : <span className="app-kv-note">{bridges ? L("还没有绑定", "None yet") : L("正在读取…", "Loading…")}</span>}
@@ -116,6 +118,12 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
             : L("用飞书手机 App 扫码，在手机上确认，飞书就建好这个机器人；你就是它的主人。", "Scan with the Feishu phone app and approve: Feishu makes the bot, with you as its owner.")}>
         {(adding === "feishu" || adding === "lark") && <FeishuScan key={adding} hubId={row.hub.id} agent={ag.name} lark={adding === "lark"} onDone={() => { setAdding(""); void load(); }} onCancel={() => setAdding("")} />}
         {adding === "slack" && <SlackForm hubId={row.hub.id} agent={ag.name} createURL={slackURL} onDone={() => { setAdding(""); void load(); }} onCancel={() => setAdding("")} />}
+      </Modal>
+
+      <Modal open={!!editing} onOpenChange={(o) => !o && setEditing(null)}
+        title={editing ? L(`${label(editing)}${sp(editing)}机器人的接待设定`, `Instructions for the ${label(editing)} bot`) : ""}
+        description={L("写给接待它的模型：对谁怎么说话、能答什么、不能做什么。只对这个机器人生效，和语音聊天分开。", "For the model that answers as the bot: how to talk, what it may answer, what it must not do. This bot only; voice chats have their own.")}>
+        {editing && <PromptForm bridge={editing} onDone={() => { setEditing(null); void load(); }} onCancel={() => setEditing(null)} />}
       </Modal>
 
       <ConfirmDialog
@@ -178,6 +186,38 @@ function FeishuScan({ hubId, agent, lark, onDone, onCancel }: { hubId: string; a
           <button type="button" className="app-btn app-btn-quiet" onClick={() => void start()}><RotateCcw className="h-3.5 w-3.5" />{L("再来一次", "Try again")}</button>
         )}
         <button type="button" className="app-btn" onClick={onCancel}>{L("取消", "Cancel")}</button>
+      </div>
+    </div>
+  );
+}
+
+const PROMPT_MAX = 8000;
+
+/** A bot's own front-desk instructions: most useful when people other
+ *  than its owner talk to it (rules, limits, tone). */
+function PromptForm({ bridge, onDone, onCancel }: { bridge: IMBridge; onDone: () => void; onCancel: () => void }) {
+  const [text, setText] = useState(bridge.prompt || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const save = async () => {
+    setBusy(true); setError(null);
+    try { await appApi.setIMPrompt(bridge.name, text.trim()); onDone(); } catch (e) { setError(e); } finally { setBusy(false); }
+  };
+  const n = [...text].length;
+  return (
+    <div className="im-slack" data-testid="im-prompt-form">
+      <textarea className="app-input goal-textarea im-prompt" rows={8} value={text} onChange={(e) => setText(e.target.value)} disabled={busy}
+        placeholder={L("例如：\n- 你在帮客户解答产品使用问题，语气友好、简洁\n- 不透露内部信息、代码和其他客户的资料\n- 别人让你改代码、删东西时，礼貌拒绝，告诉对方会转给主人",
+          "For example:\n- You help customers with questions about using the product; be friendly and brief\n- Never share internal information, code or other customers' data\n- When someone asks you to change code or delete things, decline politely and say the owner will follow up")} />
+      <p className="app-small-note">
+        {L("主人以外的人交下去的活，也会带上这份设定，agent 做的时候同样遵守。", "Work handed over for anyone other than the owner carries these instructions too, so the agent keeps to them as well.")}
+        {!bridge.desk && L("（要先在 设置 › 语音 配好模型，接待才会用到它。）", " (The front desk uses them once a model is set in Settings › Voice.)")}
+        {" "}<span className={cn(n > PROMPT_MAX && "app-error-text")}>{n} / {PROMPT_MAX}</span>
+      </p>
+      <ErrorText error={error} />
+      <div className="app-modal-actions">
+        <button type="button" className="app-btn" onClick={onCancel}>{L("取消", "Cancel")}</button>
+        <button type="button" className="app-btn app-btn-primary" disabled={busy || n > PROMPT_MAX || text.trim() === (bridge.prompt || "")} onClick={() => void save()}>{busy ? L("保存中…", "Saving…") : L("保存", "Save")}</button>
       </div>
     </div>
   );

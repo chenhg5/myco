@@ -279,7 +279,7 @@ func (b *Bridge) process(ctx context.Context, in Inbound) {
 	if b.desk(ctx, in, ref, known, who, text) {
 		return
 	}
-	body := text + "\n\n——\n" + b.t("via", platformName(b.cfg.Platform, b.lang), who)
+	body := text + "\n\n——\n" + b.t("via", platformName(b.cfg.Platform, b.lang), who) + b.rules(in.UserID)
 	steered, err := b.work(ctx, in, ref, body, true)
 	if err != nil {
 		b.say(ctx, ref, b.t("send_failed", err.Error()))

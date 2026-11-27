@@ -131,6 +131,8 @@ export interface IMBridge {
   claim_expired?: boolean;
   /** It answers as the agent with the voice chats' model (front desk). */
   desk?: boolean;
+  /** Its owner's own instructions for the front desk (this bot only). */
+  prompt?: string;
   node?: string;
   hub?: string;
   online: boolean;
@@ -1061,6 +1063,7 @@ export const appApi = {
     request<{ bridge: IMBridge }>("POST", "app/im/slack", { hub_id: hubId, agent, bot_token: botToken, app_token: appToken }),
   /** A new claim code for a bot without an owner (the old one stops working). */
   renewIMClaim: (name: string) => request<{ name: string; claim: string }>("POST", `app/im/${enc(name)}/claim`),
+  setIMPrompt: (name: string, prompt: string) => request<{ name: string; prompt: string }>("PUT", `app/im/${enc(name)}/prompt`, { prompt }),
   removeIMBridge: (name: string) => request<{ removed: string }>("DELETE", `app/im/${enc(name)}`),
   /** The agent CLIs on this computer: installed, signed in (from v0.20.12). */
   localAgents: () => request<{ agents: LocalAgent[] }>("GET", "app/local/agents"),

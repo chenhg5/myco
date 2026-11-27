@@ -1,6 +1,7 @@
 package console
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/myco-ai/myco/internal/im"
@@ -30,5 +31,28 @@ func TestIMDeskFromVoice(t *testing.T) {
 	off := &im.Config{Name: "slack-coder", Platform: "slack", Agent: "coder", Profile: "p", NoDesk: true}
 	if b.imDesk(dir, off) || off.LLMKey != "" {
 		t.Fatal("turned off by its owner")
+	}
+}
+
+// The owner's own instructions for a bot: written to its config here.
+func TestIMPrompt(t *testing.T) {
+	home := t.TempDir()
+	b := &Backend{Store: NewStore(t.TempDir() + "/hubs.json"), Secrets: &memKeys{m: map[string]string{}}, Local: &Local{Home: home}}
+	dir := im.Dir(home + "/.myco")
+	if err := im.Save(dir, &im.Config{Name: "feishu-coder", Platform: "feishu", AppID: "a", AppSecret: "s", Agent: "coder", Profile: "p"}); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptestServer(t, b)
+	if code, body := srv("PUT", "/app/im/feishu-coder/prompt", `{"prompt":"  只回答产品问题  "}`); code != 200 || !strings.Contains(body, `"prompt":"只回答产品问题"`) {
+		t.Fatalf("put: %d %s", code, body)
+	}
+	if c, _ := im.Load(dir, "feishu-coder"); c.Prompt != "只回答产品问题" || c.AppSecret != "s" {
+		t.Fatalf("saved %+v", c)
+	}
+	if code, _ := srv("PUT", "/app/im/nobody/prompt", `{"prompt":"x"}`); code != 404 {
+		t.Fatalf("unknown bot: %d", code)
+	}
+	if code, _ := srv("PUT", "/app/im/feishu-coder/prompt", `{"prompt":"`+strings.Repeat("长", im.MaxPrompt+1)+`"}`); code != 400 {
+		t.Fatalf("too long: %d", code)
 	}
 }
