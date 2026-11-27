@@ -98,6 +98,41 @@ func TestRunAccessIsCappedByTheMachine(t *testing.T) {
 	}
 }
 
+// The machine's limit is read at every run: allowing full in the app takes
+// effect on the next turn without a restart, and so does taking it back
+// (a session that ran at full drops to the new limit).
+func TestRunAccessFollowsTheMachineLimitLive(t *testing.T) {
+	limit := harness.AccessWorkspace
+	var got []harness.Access
+	h := fakeHarness{fn: func(req harness.Request) (harness.Result, error) {
+		got = append(got, req.Access)
+		return harness.Result{Output: "done"}, nil
+	}}
+	m1 := api.Message{ID: "t1", Type: "task", From: "alice", ThreadID: "th"}
+	m2 := api.Message{ID: "t2", Type: "task", From: "alice", ThreadID: "th"}
+	m3 := api.Message{ID: "t3", Type: "task", From: "alice", ThreadID: "th"}
+	fake := newFakeHub(m1, m2, m3)
+	hub := &settingsHub{traceHub: &traceHub{fakeHub: fake}, settings: &api.RunSettings{Access: "full"}}
+	r := New(hub, h, NewMemorySessions(), nil, Options{
+		Access: harness.AccessWorkspace, MaxAccess: harness.AccessWorkspace,
+		MaxAccessFunc: func() harness.Access { return limit },
+	}, quiet())
+	r.Handle(context.Background(), m1) // before: capped
+	limit = harness.AccessFull
+	r.Handle(context.Background(), m2) // allowed: the next turn runs at full
+	limit = harness.AccessWorkspace
+	r.Handle(context.Background(), m3) // taken back: down again
+	want := []harness.Access{harness.AccessWorkspace, harness.AccessFull, harness.AccessWorkspace}
+	if len(got) != len(want) {
+		t.Fatalf("ran %d times, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("turn %d ran with %q, want %q (all: %v)", i+1, got[i], want[i], got)
+		}
+	}
+}
+
 func TestRemoteProviderAppliedBeforeInvocationEnvironment(t *testing.T) {
 	m := api.Message{ID: "provider-task", Type: "task", From: "owner", ThreadID: "provider-thread"}
 	selected := "cc-switch:chosen"
