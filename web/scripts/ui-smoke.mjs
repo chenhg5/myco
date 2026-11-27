@@ -5315,6 +5315,7 @@ async function runMatrix(browser, size, scheme) {
       await profile.waitFor({ timeout: 10_000 });
       const where = profile.locator(".ms-fact", { has: page.locator(".ms-fact-k", { hasText: /^在哪$/ }) });
       if (!(await where.innerText()).includes("云端（claude.ai · alice@example.com）")) throw new Error("Cloud profile must identify its account");
+      await settle(page, 250); // Let the profile's 180 ms entrance animation finish before capture.
       await shot(page, size, scheme, "member-account");
       // Keep shareable 2x captures isolated from the smoke's navigation and preferences.
       if (size.width === 1200) {
