@@ -604,6 +604,10 @@ func open(path string, t *Timing) (*sql.DB, error) {
 			return nil, fmt.Errorf("migrate: %w", err)
 		}
 	}
+	if err := migrateTaskMonitor(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate task monitor: %w", err)
+	}
 	if t != nil {
 		t.live.Store(true) // (from here on: the migrations are not timed)
 	}

@@ -30,6 +30,7 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
+	taskMonitor   *app.TaskMonitorService
 	databaseStats func() api.DatabasePoolStats
 	perf          *perf.Timings
 	goals         *app.GoalService
@@ -191,6 +192,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) routes() {
 	m := s.mux
 	s.usageRoutes(m)
+	s.taskMonitorRoutes(m)
 	m.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
 		h := api.Health{OK: true, Version: api.Version, PublicURL: s.PublicURL(), ServerVersion: s.version, Workspace: strings.TrimPrefix(s.prefix, "/w/")}
 		if h.PublicURL != "" {

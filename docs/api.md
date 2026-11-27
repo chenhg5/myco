@@ -1959,3 +1959,73 @@ follow-up counts, percentile convention and deterministic ranking weights are
 specified in [Coordination statistics](coordination-statistics.md). API structs
 live in `internal/api/coordination_stats.go`; web contracts in
 `web/src/lib/coordination-stats.ts`.
+
+### Sent-task board and coordinator alerts
+
+`GET /v1/tasks/board?project=<name>&stale=15m&all=true` accepts agent or
+console/admin credentials. By default it returns every unfinished **task sent by
+that caller**, across projects. `project` restricts the result to a visible project.
+`all=true` requires `project` and either a coordinator agent in that project, its
+human owner, or a workspace administrator; it returns all unfinished tasks in that
+project. Ordinary members cannot enumerate other senders' tasks with this route.
+
+The response is `{"observed_at":"<RFC3339>","tasks":[...]}`. Items contain only
+`id`, `from`, `to`, `thread_id`, optional `project`, `status`, `created_at`, optional
+`active_at`, `last_activity_at`, `age_ms`, `queued_for_ms`, `idle_ms`,
+`stale_after_ms`, and `stale`. No body, result, attachment, credential, error text or
+runtime/account data is read or returned. States are `queued`, `delivered`,
+`acked` and `held` (delivered/acked are in progress). `queued_for_ms` is the age of
+currently queued tasks since creation, zero otherwise; it does **not** reconstruct
+historical queue latency or reset to the start of a requeue episode. Activity follows the existing `Message.LastActive` rule: the later of
+`active_at` and the last state/metadata update (`updated_at`), falling back to
+creation for a legacy task with neither timestamp. A new ack/hold is activity
+even if its previous recipient heartbeat was older. Items sort stale first, then greatest idle time,
+then ID. An empty result is `tasks: []`.
+
+`stale` overrides only the board's display threshold, in whole seconds from `1s`
+to `168h`. Without it, each task uses its project's configured alert threshold,
+or 15 minutes for projects without an override and non-project tasks.
+
+`GET /v1/projects/{name}/task-alerts` returns
+`{"project":"acme","stale_seconds":900}`. `PUT` to the same route with
+`{"stale_seconds":1200}` changes only this project's threshold (1–604800 seconds).
+Both require the same project coordinator/owner/administrator permissions as
+`all=true`. `PUT ?dry_run=true` validates permissions and returns the proposed
+policy without persisting it. Concurrent ordinary project edits do not overwrite
+this independent setting. No fields are added to old project requests/responses.
+
+New console tasks are additionally bound to their authenticated member's ID in
+internal storage; the existing display-name `from_owner` contract is unchanged.
+Human boards, alert destinations and the cooldown follow that member across
+renames. Missing/removed accounts never redirect notes to a reused old handle.
+Historical console tasks without this attribution are not guessed from names;
+use a project-authorized `all=true` view for those records. Agent-sent tasks,
+including old runners' tasks, remain addressed by their existing agent identity.
+
+Every 30 seconds the Hub evaluates metadata for three conditions:
+
+- An open task has no recipient activity for its project's stale threshold.
+- A delivered/acked task's recipient has a nonzero heartbeat whose online window
+  has expired, after overlapping the task's lifetime. Held tasks and agents never
+  seen online during that lifetime do not trigger this condition.
+- Within a rolling 10 minutes, tasks have failed on at least three **distinct**
+  agents on the same verified machine and owner. Failure time, agent and machine
+  identity are captured in the failure transaction, starting after this migration;
+  later agent moves, ownership changes and message metadata edits do not rewrite
+  them. A quiet gap greater than 10 minutes starts a new machine incident. The
+  incident is an observation, not an assertion of infrastructure failure or OOM.
+
+The Hub sends the task sender a `note` with affected task metadata and suggested
+`myco task board` / `myco message steer` commands. Machine incidents disclose only
+that sender's task reference and an aggregate distinct-agent count, never other
+senders' tasks, machine paths or task contents. One note batches up to 50 conditions
+across the sender's projects. At most one alert note per sender is committed in
+five minutes; remaining conditions wait for later batches. Stale/offline conditions
+that resolve before delivery are discarded and may be detected again later.
+Delivered stale/offline conditions are deduplicated once per task and condition;
+machine alerts once per incident and affected sender. Deduplication, cooldown and
+note insertion commit atomically and survive Hub restarts. Existing task replies
+and failures retain their ordinary delivery; the alert budget does not suppress them.
+
+New clients must treat missing task routes on an old Hub as `unsupported` with an
+upgrade suggestion, not simulate a board from a truncated inbox/history listing.
