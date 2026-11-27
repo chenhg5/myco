@@ -985,6 +985,8 @@ export const appApi = {
   handOver: (hubId: string, name: string, input: HandoverRequest) =>
     request<HandoverResult>("POST", `app/hubs/${enc(hubId)}/agents/${enc(name)}/handover`, input),
   /** Starts a session on a machine; the machine may take up to two minutes. */
+  stopMachineProcess: (hubId: string, machineId: string, ref: string) =>
+    request<{ stopped_process?: import("@/api").MachineProcess }>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/spawn`, { cli: "process-stop", process_ref: ref }),
   spawn: (hubId: string, machineId: string, input: SpawnInput) =>
     request<SpawnResult>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/spawn`, input),
   machineInfo: (hubId: string, machineId: string) =>

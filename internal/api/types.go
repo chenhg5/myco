@@ -140,6 +140,7 @@ type Runtime struct {
 	// Account is a private, locally reported email identity hint (not authentication).
 	Account string `json:"account,omitempty"`
 
+	MachineHealth *MachineHealth `json:"machine_health,omitempty"`
 	// RunnerInstance identifies a runner process; RestartingUntil is a
 	// short lease for planned restarts, cleared by the next instance.
 	RunnerInstance  string       `json:"runner_instance,omitempty"`
@@ -434,15 +435,17 @@ type ModelProviderRequest struct {
 
 // Machine is a computer, server or cloud environment agents run on.
 type Machine struct {
-	Updating    bool       `json:"updating,omitempty"`
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Hostname    string     `json:"hostname,omitempty"`
-	OS          string     `json:"os,omitempty"`
-	Arch        string     `json:"arch,omitempty"`
-	MycoVersion string     `json:"myco_version,omitempty"`
-	Online      bool       `json:"online"`
-	LastSeenAt  *time.Time `json:"last_seen_at,omitempty"`
+	Health         *MachineHealth `json:"machine_health,omitempty"`
+	CanStopProcess bool           `json:"can_stop_process,omitempty"`
+	Updating       bool           `json:"updating,omitempty"`
+	ID             string         `json:"id"`
+	Name           string         `json:"name"`
+	Hostname       string         `json:"hostname,omitempty"`
+	OS             string         `json:"os,omitempty"`
+	Arch           string         `json:"arch,omitempty"`
+	MycoVersion    string         `json:"myco_version,omitempty"`
+	Online         bool           `json:"online"`
+	LastSeenAt     *time.Time     `json:"last_seen_at,omitempty"`
 	// CanSpawn: its machine node is online, so sessions can be started on it.
 	CanSpawn bool `json:"can_spawn"`
 	// Node is that machine node's name (a provider is sealed for it, i115);
@@ -975,6 +978,7 @@ type Overview struct {
 // session in a directory on its machine and join it to the network. It is
 // sent as the body of a task; see `myco agent spawn`.
 type SpawnRequest struct {
+	ProcessRef string `json:"process_ref,omitempty"`
 	// CLI is the agent CLI to start: claude, codex, or a preset (pi, kiro, ...).
 	CLI string `json:"cli"`
 	// Dir is the working directory on the node's machine ("~/..." allowed).
@@ -1084,11 +1088,12 @@ type MachineUpgrade struct {
 
 // SpawnResult is a machine node's answer to a SpawnRequest.
 type SpawnResult struct {
-	Agent     string `json:"agent,omitempty"`
-	SessionID string `json:"session_id,omitempty"`
-	CLI       string `json:"cli,omitempty"`
-	Workdir   string `json:"workdir,omitempty"`
-	Access    string `json:"access,omitempty"`
+	StoppedProcess *MachineProcess `json:"stopped_process,omitempty"`
+	Agent          string          `json:"agent,omitempty"`
+	SessionID      string          `json:"session_id,omitempty"`
+	CLI            string          `json:"cli,omitempty"`
+	Workdir        string          `json:"workdir,omitempty"`
+	Access         string          `json:"access,omitempty"`
 	// Reply is the new session's answer to its first turn.
 	Reply string `json:"reply,omitempty"`
 	// Denied: the machine refused the request (policy); Error says why.

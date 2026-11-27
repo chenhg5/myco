@@ -10935,3 +10935,9 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .pc-list.au-cards .wf-row-actions { justify-content: flex-end; margin: 0 6px 6px; }
 .pc-list.au-cards > .au-row.is-off { opacity: .8; }
 
+/* Machine health uses the same status colours and controls as other details. */
+.machine-health { margin: 12px 0; padding: 12px; }
+.machine-health .app-row { display: flex; gap: 12px; justify-content: space-between; align-items: center; }
+.machine-health-process { min-width: 0; overflow-wrap: anywhere; }
+.machine-health-process div { color: var(--muted); font-size: 11.5px; }
+.machine-health-alert .pc-online { color: var(--red); }

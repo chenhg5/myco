@@ -78,6 +78,7 @@ type Deps struct {
 	// HubProvider fetches, with a spawn request's one-use grant, the
 	// provider the hub keeps for the new agent (i119), as SealedProvider.
 	HubProvider func(ctx context.Context, cli, sender, grant string) (map[string]string, *harness.ProviderSettings, error)
+	StopProcess func(context.Context, string) (*api.MachineProcess, error)
 	// ProviderFor is how a session of cli started here signs in (the
 	// machine node's pinned provider or env-file API settings); nil: none.
 	ProviderFor func(cli string) *harness.ProviderSettings
@@ -151,6 +152,19 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	var sr api.SpawnRequest
 	if err := json.Unmarshal([]byte(req.Body), &sr); err != nil {
 		return denied("the task body must be a spawn request (JSON), as sent by `myco agent spawn`: %v", err)
+	}
+	if strings.TrimSpace(sr.CLI) == api.StopProcessCLI {
+		if req.From != AdminSender {
+			return denied("only the machine owner or workspace administrator may end processes")
+		}
+		if n.Deps.StopProcess == nil {
+			return denied("this runner does not support process termination")
+		}
+		stopped, err := n.Deps.StopProcess(ctx, sr.ProcessRef)
+		if err != nil {
+			return denied("process termination refused: %v", err)
+		}
+		return api.SpawnResult{CLI: api.StopProcessCLI, StoppedProcess: stopped}
 	}
 	if sr.JoinLink != "" {
 		return n.join(ctx, sr.JoinLink)

@@ -430,7 +430,12 @@ func (a *agent) startConnection(ctx, procCtx context.Context, kill context.Cance
 		select {
 		case <-exited:
 		case <-time.After(exitTimeout):
-			kill() // interrupt, then kill the process group
+			if ctx.Err() != nil {
+				kill() // explicit cancellation cleans the complete owned scope
+			} else {
+				_ = cmd.StopForeground() // normal turn preserves owned background children
+			}
+			_ = stdout.Close() // background children may still hold this pipe
 			<-exited
 		}
 	}

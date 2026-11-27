@@ -20,15 +20,16 @@ const AdminSender domain.AgentName = "@admin"
 // MachineService tracks the machines agents run on, from what their
 // runners report, and starts sessions on them for administrators.
 type MachineService struct {
-	runtimeMu    sync.Mutex
-	machines     domain.MachineRepository
-	agents       domain.AgentRepository
-	agentService *AgentService
-	enroll       *EnrollmentService
-	messages     *MessageService
-	ids          IDGenerator
-	clock        Clock
-	window       time.Duration
+	runtimeMu      sync.Mutex
+	healthProjects domain.ProjectRepository
+	machines       domain.MachineRepository
+	agents         domain.AgentRepository
+	agentService   *AgentService
+	enroll         *EnrollmentService
+	messages       *MessageService
+	ids            IDGenerator
+	clock          Clock
+	window         time.Duration
 }
 
 // SetRemovalDeps wires the existing agent cleanup and enrollment revocation paths.
@@ -243,6 +244,13 @@ func (s *MachineService) SetRuntime(ctx context.Context, a *domain.Agent, rt dom
 	if err != nil {
 		return err
 	}
+	if rt.MachineHealth != "" {
+		var health domain.MachineHealth
+		_ = json.Unmarshal([]byte(rt.MachineHealth), &health)
+		if health.OwnerID != current.Owner {
+			return domain.Errf(domain.CodePermissionDenied, "machine health owner changed; refresh the runner binding")
+		}
+	}
 	now := s.clock.Now()
 	if rt.Away == "updating" {
 		if rt.RestartingUntil.IsZero() || rt.RestartingUntil.After(now.Add(domain.RestartLease)) {
@@ -270,14 +278,32 @@ func (s *MachineService) SetRuntime(ctx context.Context, a *domain.Agent, rt dom
 			return domain.Errf(domain.CodeConflict, "report the machine before account quota")
 		}
 	}
+	// Keep an incident identity through runner restarts so recovery and retry
+	// notifications remain idempotent across processes.
+	if rt.MachineHealth != "" {
+		var h, prior domain.MachineHealth
+		_ = json.Unmarshal([]byte(rt.MachineHealth), &h)
+		_ = json.Unmarshal([]byte(old.MachineHealth), &prior)
+		if h.Incident == "" {
+			h.Incident = prior.Incident
+		}
+		b, _ := json.Marshal(h)
+		rt.MachineHealth = string(b)
+	}
 	a.Runtime = rt
-	return s.agents.SetRuntime(ctx, a.Name, rt)
+	if err := s.agents.SetRuntime(ctx, a.Name, rt); err != nil {
+		return err
+	}
+	s.notifyHealth(ctx, a, old, rt)
+	return nil
 }
 
 // MachineView is a machine with its agents, for lists and the overview.
 // Machines whose agents' runners have not reported yet (older myco) are
 // grouped by the agents' environment (host name) and marked Legacy.
 type MachineView struct {
+	Health         *domain.MachineHealth
+	CanStopProcess bool
 	domain.Machine
 	Legacy bool
 	// Agents are the names of the nodes on it (machine nodes excluded).
@@ -311,6 +337,7 @@ func (s *MachineService) List(ctx context.Context) ([]*MachineView, map[domain.A
 		}
 	}
 	where := map[domain.AgentName]string{}
+	controlRunners := map[domain.AgentName]string{}
 	for _, a := range agents {
 		if a.Kind() == domain.KindHuman || a.InCloud() {
 			continue // people and cloud sandboxes are not on machines
@@ -334,6 +361,16 @@ func (s *MachineService) List(ctx context.Context) ([]*MachineView, map[domain.A
 			}
 		}
 		v := views[id]
+		// A single-agent runner can still report pressure without a machine node.
+		// Prefer the machine node's equally fresh sample for process controls.
+		if a.Owner == v.Owner && a.Runtime.MachineHealth != "" {
+			var h domain.MachineHealth
+			if json.Unmarshal([]byte(a.Runtime.MachineHealth), &h) == nil && h.OwnerID == v.Owner {
+				if v.Health == nil || h.At.After(v.Health.At) || (h.At.Equal(v.Health.At) && a.Kind() == domain.KindMachine) {
+					v.Health = &h
+				}
+			}
+		}
 		v.Updating = v.Updating || a.Runtime.Updating(now)
 		online := a.IsOnline(now, s.window)
 		if online {
@@ -345,11 +382,17 @@ func (s *MachineService) List(ctx context.Context) ([]*MachineView, map[domain.A
 		if a.Kind() == domain.KindMachine {
 			if online {
 				v.SpawnNode = a.Name
+				controlRunners[a.Name] = a.Runtime.RunnerInstance
 			}
 			continue
 		}
 		v.Agents = append(v.Agents, a.Name)
 		where[a.Name] = id
+	}
+	for _, v := range views {
+		if v.Health != nil && v.Health.RunnerInstance != "" {
+			v.CanStopProcess = controlRunners[v.SpawnNode] == v.Health.RunnerInstance
+		}
 	}
 	out := make([]*MachineView, 0, len(order))
 	for _, id := range order {

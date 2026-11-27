@@ -20,6 +20,7 @@ import (
 	"github.com/myco-ai/myco/internal/harness/execnode"
 	"github.com/myco-ai/myco/internal/harness/machinenode"
 	"github.com/myco-ai/myco/internal/logkeep"
+	"github.com/myco-ai/myco/internal/processwatch"
 	"github.com/myco-ai/myco/internal/quota"
 	"github.com/myco-ai/myco/internal/runner"
 )
@@ -90,8 +91,14 @@ notes are never auto-answered. Logs go to stderr.`,
 			} else if lp := filepath.Join(config.Dir(e.defaultPath), "runner.log"); logkeep.IsStderr(lp) {
 				go logkeep.Run(lp, logkeep.Policy{}, keep)
 			}
+			processes := processwatch.NewPersistent(runnerInstance, filepath.Join(config.Dir(e.defaultPath), "process-scopes"))
+			defer processes.Close()
+			healthCtx, stopHealth := context.WithCancel(e.in.Ctx)
+			defer stopHealth()
+			go processes.Run(healthCtx)
 			shared := runnerShared{
-				once: e.in.Bool("once"), busyWindow: e.in.Duration("busy-window"), busyRetry: e.in.Duration("busy-retry"),
+				processes: processes,
+				once:      e.in.Bool("once"), busyWindow: e.in.Duration("busy-window"), busyRetry: e.in.Duration("busy-retry"),
 				scope: runner.SessionScope(e.in.String("session-scope")), rebind: e.in.Bool("rebind"), registry: harnesses,
 				trace: e.in.String("trace"), locks: runner.NewSessionLocks(filepath.Join(config.Dir(e.defaultPath), "locks")),
 			}
@@ -126,6 +133,7 @@ notes are never auto-answered. Logs go to stderr.`,
 
 // runnerShared holds settings common to every agent a process serves.
 type runnerShared struct {
+	processes  *processwatch.Manager
 	once       bool
 	busyWindow time.Duration
 	busyRetry  time.Duration
@@ -333,6 +341,9 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	var rep *runtimeReporter
 	if !sh.once {
 		rep = e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, maxAccess, initial, workdir, log)
+		if sh.processes != nil {
+			go rep.watchHealth(e.in.Ctx, sh.processes, cfg.Hub, me.OwnerID)
+		}
 		go rep.watchMaxAccess(e.in.Ctx, 20*time.Second, maxAccess, e.machineMaxAccess)
 		if sh.slots != nil {
 			go rep.watchSlots(e.in.Ctx, sh.slots, runner.SlotOwner(cfg.Hub, me.Name))
@@ -383,6 +394,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	alog.Info("runner ready", "hub", cfg.Hub, "provider", initial.name, "provider_source", initial.source, "harness", h.Name(), "access", orDefault(string(access), "default"), "workdir", workdir, "environment", host,
 		"session_scope", sh.scope, "session_id", me.Binding.SessionID)
 	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{
+		Processes: sh.processes, ProcessWorkspace: cfg.Hub, ProcessMember: me.OwnerID,
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
 		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, SlotPool: slots, OnSlots: rep.Slots, Trace: sh.trace, SessionLocks: sh.locks,
 		StatePath:      runnerStatePath(e.defaultPath, me.Name),

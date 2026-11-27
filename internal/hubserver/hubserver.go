@@ -267,6 +267,7 @@ func Build(o Options) (*Hub, error) {
 	}
 	agents.SetDefaultVisibility(defaultVisibility)
 	projectRepo := sqlite.NewProjectRepo(db)
+	machineSvc.SetHealthProjects(projectRepo)
 	agents.SetProjects(projectRepo)
 	messages.SetProjects(projectRepo)
 	projectSvc := app.NewProjectService(projectRepo, agentsRepo, ids, clock)

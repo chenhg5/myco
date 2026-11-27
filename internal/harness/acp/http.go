@@ -360,7 +360,19 @@ func (a *agent) startHTTP(ctx, procCtx context.Context, kill context.CancelFunc,
 	}
 	exited := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(exited) }()
-	cleanupProcess := func() { stdin.Close(); kill(); <-exited }
+	cleanupProcess := func() {
+		_ = stdin.Close()
+		select {
+		case <-exited:
+		case <-time.After(exitTimeout):
+			if ctx.Err() != nil {
+				kill()
+			} else {
+				_ = cmd.StopForeground()
+			}
+			<-exited
+		}
+	}
 	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 	var endpoint string

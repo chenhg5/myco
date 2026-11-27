@@ -1,3 +1,4 @@
+import { MachineHealthPanel, healthState } from "@/app/MachineHealth";
 import { runnerUpdating, machineUpdating } from "@/lib/runner-state";
 import { currentSlots } from "@/app/RunnerQueue";
 import { useEffect, useState } from "react";
@@ -191,6 +192,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
           </div>
         </header>
 
+        <MachineHealthPanel hubId={hub.id} machine={m} onChanged={onChanged} />
         <MachineUpgrade hubId={hub.id} machine={m} here={isHere(m)} latest={latest} onDone={onChanged} />
 
         <div className="wf-tabs" role="tablist" aria-label={L("看什么", "View")} data-testid="pc-tabs">
@@ -266,7 +268,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
             const Icon = osInfo(m.os).icon;
             const quota = computerQuotaHint(m.id, hub.id, rows);
             return (
-              <button key={key} type="button" className={cn("pc-card", !m.online && !updating(m) && "is-away")} data-testid="pc-card" onClick={() => openComputer(key)}>
+              <button key={key} type="button" className={cn("pc-card", healthState(m)==="alert" && "machine-health-alert", !m.online && !updating(m) && "is-away")} data-testid="pc-card" onClick={() => openComputer(key)}>
                 <span className="pc-card-top">
                   <span className="tp-icon"><Icon /></span>
                   <span className="pc-card-text">
@@ -282,6 +284,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
                 <span className="pc-card-foot">
                   {agents.length > 0 && <AvatarStack agents={agents.map((r) => r.st.agent)} size={20} max={4} />}
                   <span className="pc-card-count">
+                    {healthState(m)==="alert" && <span className="dot failed" title={L("机器负载需要关注", "Machine needs attention")} />}
                     {agents.length || terminals.length
                       ? [agents.length ? L(`${agents.length} 个 agent`, `${agents.length} agent${agents.length === 1 ? "" : "s"}`) : "", terminals.length ? L(`${terminals.length} 个终端`, `${terminals.length} terminal${terminals.length === 1 ? "" : "s"}`) : ""].filter(Boolean).join(" · ")
                       : L("上面还没有 agent", "Nothing on it yet")}

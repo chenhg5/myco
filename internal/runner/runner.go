@@ -16,10 +16,14 @@ import (
 
 	"github.com/myco-ai/myco/internal/api"
 	"github.com/myco-ai/myco/internal/harness"
+	"github.com/myco-ai/myco/internal/processwatch"
 )
 
 // Options tunes the runner.
 type Options struct {
+	Processes        *processwatch.Manager
+	ProcessWorkspace string
+	ProcessMember    string
 	// Self is this agent's name (used in prompts).
 	Self   string
 	HubURL string // used in permanent credential rejection diagnostics
@@ -343,6 +347,7 @@ func (r *Runner) releaseWithContext(ctx context.Context, log *slog.Logger, m api
 // Run processes messages until ctx is cancelled (or after one batch if Once).
 // In-flight work is cancelled on shutdown, with bounded cleanup time.
 func (r *Runner) Run(ctx context.Context) error {
+	defer r.opts.Processes.StopAgent(r.opts.ProcessWorkspace, r.opts.Self)
 	if r.opts.OnStop != nil {
 		defer func() {
 			if ctx.Err() != nil {
@@ -636,6 +641,8 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		}
 		runCtx, cancelCause := context.WithCancelCause(ctx)
 		runCtx, cancelDeadline := context.WithDeadline(runCtx, deadline)
+		processOwner := processwatch.Owner{Workspace: r.opts.ProcessWorkspace, Member: r.opts.ProcessMember, Agent: r.opts.Self, Session: key}
+		runCtx = processwatch.WithOwner(runCtx, r.opts.Processes, processOwner)
 		r.setRunCancel(m.ID, cancelCause)
 		watchCtx, stopWatch := context.WithCancel(runCtx)
 		if m.Type == "task" && !executor {
@@ -715,6 +722,9 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		}
 		r.postUsage(ctx, usage)
 		steered := errors.Is(context.Cause(runCtx), errSteered)
+		if runCtx.Err() != nil {
+			r.opts.Processes.StopSession(processOwner)
+		}
 		switch cause := context.Cause(runCtx); {
 		case runErr == nil:
 		case errors.Is(cause, errIdle):

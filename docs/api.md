@@ -1867,3 +1867,50 @@ Background discovery never generates completions. MiniMax HTTP 401 failures use
 `provider_region_or_key` and a suggestion to check the selected region and key.
 Neither errors nor responses contain the request key. No Hub API or vendor id
 changes are required; region choice is stored in the existing address fields.
+### Machine health and verified process termination
+
+New runners sample once per minute per runner process and may include optional
+`machine_health` in `PUT /v1/me/runtime`. It contains `at`, `runner_instance`, `owner_id` (bound to the reporting agent owner),
+`complete`, `alert`, `load_ratio`, `load_metric` (`load1_per_core` on Unix,
+`cpu_busy` on Windows), `cores`, `memory_total`, `memory_available`, and at most
+20 `processes`. Process fields are `name` (basename only), `pid`, `created`
+(an OS creation identity), `cpu` (percent of one core), `memory`, optional
+`agent`, `suspicious`, and an optional short-lived `ref`. No argv, environment,
+working directory or executable path is included. Samples older than two minutes
+or incomplete samples are unknown and cannot authorize process termination.
+
+Load above 70% of cores or available memory below 10% for ten continuous minutes
+raises an alert. A verified agent descendant whose parent has exited or has been
+replaced by an init/subreaper, consuming at least 80% of one core for thirty
+continuous minutes, is a suspected orphan. Sampling gaps break continuity.
+Unknown-source processes contribute to aggregate pressure but never receive a
+termination reference. Alerts never automatically terminate a process.
+
+`GET /v1/machines` and overview machine entries include optional `machine_health`
+and `can_stop_process`. Reports from a former owner are refused after an ownership transfer. Only the machine owner and workspace administrators
+receive process details or process controls. Per-agent runtime projections expose
+aggregate health only. Coordinators of affected projects receive a deduplicated
+note on an alert and another on recovery.
+
+The machine owner or administrator can POST to `/v1/machines/{id}/spawn` with
+`{"cli":"process-stop","process_ref":"<current ref>"}`. This is a typed control
+operation, never a shell command. The machine runner checks the current machine
+and agent ownership, reference freshness, and OS process creation identity again.
+Unknown, expired, reused or unowned processes are refused. A successful response
+has `stopped_process: {name, pid, created, ...}`. Audit action
+`machine.process.stop` records only name, PID and creation identity in its detail,
+plus the standard audit actor and machine target. It records no command line.
+Older runners refuse this special CLI instead of executing an unrelated command;
+older hubs reject the unknown report field, which new clients specifically omit
+on retry without suppressing authentication failures.
+
+Harness children live in Unix process groups or Windows Jobs. A normal turn keeps
+background children and their ownership records. Explicit stop, session/profile
+replacement, and runner shutdown terminate owned groups, with a bounded grace
+period before forced termination. Windows launches suspended, assigns its Job,
+then resumes; Job assignment failure aborts the launch. Windows Jobs disallow
+breakaway and terminate members on final handle close. Unix children that escape
+with setsid before their ancestry is observed cannot be reliably attributed by a
+process group alone. Local ownership registries contain metadata only, with
+owner-only permissions; unknown historical processes are never retroactively
+claimed or offered a terminate button.

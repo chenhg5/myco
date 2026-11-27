@@ -22,6 +22,7 @@ import (
 	"github.com/myco-ai/myco/internal/harness"
 	"github.com/myco-ai/myco/internal/harness/codex"
 	"github.com/myco-ai/myco/internal/machineid"
+	"github.com/myco-ai/myco/internal/processwatch"
 	"github.com/myco-ai/myco/internal/provider"
 	"github.com/myco-ai/myco/internal/quota"
 	"github.com/myco-ai/myco/internal/runner"
@@ -505,5 +506,25 @@ func (r *runtimeReporter) watchSlots(ctx context.Context, p *runner.SlotPool, ow
 		case <-tick.C:
 		}
 		r.Slots(p.Snapshot(owner))
+	}
+}
+
+// watchHealth reads the shared sampler; there is no per-profile OS sampling.
+func (r *runtimeReporter) watchHealth(ctx context.Context, m *processwatch.Manager, workspace, owner string) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		h := m.Snapshot(workspace, owner)
+		r.mu.Lock()
+		if r.base != nil {
+			r.base.MachineHealth = h
+		}
+		r.mu.Unlock()
+		r.flushLater()
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }

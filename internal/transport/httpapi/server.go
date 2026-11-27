@@ -1273,7 +1273,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 			where = w
 			out.Machines = make([]api.Machine, 0, len(views))
 			for _, v := range views {
-				out.Machines = append(out.Machines, s.machineDTO(v))
+				out.Machines = append(out.Machines, s.machineDTOFor(r, v))
 			}
 		}
 	}
@@ -1760,7 +1760,7 @@ func (s *Server) listMachines(w http.ResponseWriter, r *http.Request) {
 	}
 	out := api.MachineList{Machines: make([]api.Machine, 0, len(views))}
 	for _, v := range views {
-		out.Machines = append(out.Machines, s.machineDTO(v))
+		out.Machines = append(out.Machines, s.machineDTOFor(r, v))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -1822,6 +1822,13 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(in.CLI) == api.UpgradeCLI {
 		// Upgrading its myco: the release, nothing else.
 		in = api.SpawnRequest{CLI: api.UpgradeCLI, Version: strings.TrimSpace(in.Version)}
+	}
+	if strings.TrimSpace(in.CLI) == api.StopProcessCLI {
+		if in.ProcessRef == "" || len(in.ProcessRef) > 128 {
+			writeError(w, domain.Errf(domain.CodeInvalidArgument, "a current process reference is required"))
+			return
+		}
+		in = api.SpawnRequest{CLI: api.StopProcessCLI, ProcessRef: in.ProcessRef}
 	}
 	if in.JoinLink != "" {
 		// Joining another workspace, nothing else: a machine whose myco
@@ -1892,6 +1899,21 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.Errf(domain.CodePermissionDenied, "%s", res.Error))
 	case res.Error != "":
 		writeError(w, domain.Errf(domain.CodeInvalidState, "%s", res.Error))
+	case in.CLI == api.StopProcessCLI:
+		if res.StoppedProcess == nil {
+			writeError(w, domain.Errf(domain.CodeInvalidState, "runner did not confirm process identity"))
+			return
+		}
+		p := res.StoppedProcess
+		// Audit detail is intentionally limited to name, PID and creation identity;
+		// the audit actor supplies the fourth field (who requested it).
+		detail, _ := json.Marshal(struct {
+			Name    string `json:"name"`
+			PID     int    `json:"pid"`
+			Created string `json:"created"`
+		}{p.Name, p.PID, p.Created})
+		s.record(r, "machine.process.stop", r.PathValue("id"), string(detail))
+		writeJSON(w, http.StatusOK, res)
 	case in.CLI == api.InfoCLI:
 		// Only looking: nothing to record.
 		writeJSON(w, http.StatusOK, res)
@@ -1957,6 +1979,15 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		Plugins  []api.ToolPlugin `json:"plugins,omitempty"`
 		Warnings []string         `json:"tool_warnings,omitempty"`
 	}{in.MCP, in.Skills, in.Plugins, in.ToolWarnings})
+	health := ""
+	if in.MachineHealth != nil {
+		if err := in.MachineHealth.Validate(); err != nil {
+			writeError(w, err)
+			return
+		}
+		b, _ := json.Marshal(in.MachineHealth)
+		health = string(b)
+	}
 	slots := ""
 	if in.RunnerSlots != nil {
 		v := in.RunnerSlots
@@ -1973,7 +2004,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		b, _ := json.Marshal(v)
 		slots = string(b)
 	}
-	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{Account: in.Account, RunnerInstance: in.RunnerInstance, RestartingUntil: in.RestartingUntil, RunnerSlots: slots, CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
+	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{MachineHealth: health, Account: in.Account, RunnerInstance: in.RunnerInstance, RestartingUntil: in.RestartingUntil, RunnerSlots: slots, CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
 		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource, ProviderHost: in.ProviderHost, Providers: encodeProviderOptions(in.Providers),
 		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota),
 		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env, Models: domain.EncodeModels(modelsFromAPI(in.Models)), ModelsFrom: modelsFrom(in.ModelsFrom, in.Models), ModelsAt: modelsAt(in.ModelsAt, in.Models), Tools: string(toolJSON)}); err != nil {

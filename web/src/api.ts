@@ -118,6 +118,7 @@ export interface RunnerSlots {
   queue?: { message_id: string; position: number }[];
 }
 export interface Runtime {
+ machine_health?: MachineHealth;
   runner_instance?: string;
   restarting_until?: string;
   runner_slots?: RunnerSlots;
@@ -255,7 +256,11 @@ export interface AgentResume {
   last_used_env?: string;
 }
 /** A real computer (or server) that runs nodes. Cloud sessions are not machines. */
+export interface MachineProcess { pid: number; name: string; created: string; cpu: number; memory: number; agent?: string; suspicious: boolean; ref?: string }
+export interface MachineHealth { owner_id?: string; incident?: string; at: string; runner_instance: string; complete: boolean; alert: boolean; load_ratio: number; load_metric: "load1_per_core" | "cpu_busy" | ""; cores: number; memory_total: number; memory_available: number; processes: MachineProcess[] }
 export interface Machine {
+ machine_health?: MachineHealth;
+ can_stop_process?: boolean;
   updating?: boolean;
   id: string; name: string; hostname: string;
   os: "darwin" | "linux" | "windows" | "cloud";

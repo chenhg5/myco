@@ -58,6 +58,13 @@ func (s *Server) agentDTO(r *http.Request, a *domain.Agent) api.Agent {
 		out.Runtime = &api.Runtime{Account: s.visibleAccount(r, a), CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
 			Provider: rt.Provider, ProviderSource: rt.ProviderSource, ProviderHost: rt.ProviderHost, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: s.visibleQuota(r, a),
 			RunnerInstance: rt.RunnerInstance, RestartingUntil: rt.RestartingUntil, Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList()), ModelsFrom: rt.ModelsFrom, ModelsAt: timePtr(rt.ModelsAt)}
+		if rt.MachineHealth != "" {
+			var health api.MachineHealth
+			if json.Unmarshal([]byte(rt.MachineHealth), &health) == nil {
+				health.Processes = nil
+				out.Runtime.MachineHealth = &health
+			}
+		}
 		if rt.RunnerSlots != "" {
 			var slots api.RunnerSlots
 			if json.Unmarshal([]byte(rt.RunnerSlots), &slots) == nil {
@@ -102,7 +109,7 @@ func (s *Server) agentDTO(r *http.Request, a *domain.Agent) api.Agent {
 func (s *Server) machineDTO(v *app.MachineView) api.Machine {
 	out := api.Machine{ID: v.ID, Name: v.Name, Hostname: v.Hostname, OS: v.OS, Arch: v.Arch, MycoVersion: v.MycoVersion,
 		Updating: v.Updating, Online: v.Online, LastSeenAt: timePtr(v.LastSeenAt), CanSpawn: v.SpawnNode != "", Node: string(v.SpawnNode), Legacy: v.Legacy, Agents: []string{},
-		OwnerID: v.Owner, Owner: s.ownerName(v.Owner)}
+		OwnerID: v.Owner, Owner: s.ownerName(v.Owner), Health: v.Health, CanStopProcess: v.CanStopProcess}
 	for _, a := range v.Agents {
 		out.Agents = append(out.Agents, string(a))
 	}
@@ -353,4 +360,18 @@ func (s *Server) visibleAccount(r *http.Request, a *domain.Agent) string {
 		return a.Runtime.Account
 	}
 	return ""
+}
+
+func (s *Server) machineDTOFor(r *http.Request, v *app.MachineView) api.Machine {
+	out := s.machineDTO(v)
+	actor := s.actorOf(r)
+	if !actor.Owns(v.Owner) {
+		out.CanStopProcess = false
+		if out.Health != nil {
+			h := *out.Health
+			h.Processes = nil
+			out.Health = &h
+		}
+	}
+	return out
 }

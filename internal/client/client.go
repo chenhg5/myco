@@ -931,7 +931,7 @@ func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 		}
 	}
 	var err error
-	for attempt := 0; attempt < 7; attempt++ {
+	for attempt := 0; attempt < 8; attempt++ {
 		err = c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
 		// Older hubs reject unknown JSON fields. Retry only that specific schema
 		// rejection, leaving authentication and other validation failures intact.
@@ -954,6 +954,10 @@ func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 		}
 		if (r.RunnerInstance != "" || !r.RestartingUntil.IsZero()) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "runner_instance"`) || strings.Contains(apiErr.Message, `unknown field "restarting_until"`)) {
 			r.RunnerInstance, r.RestartingUntil = "", time.Time{}
+			continue
+		}
+		if r.MachineHealth != nil && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "machine_health"`) {
+			r.MachineHealth = nil
 			continue
 		}
 		if r.RunnerSlots != nil && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "runner_slots"`) {

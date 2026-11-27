@@ -6542,6 +6542,18 @@ async function runMatrix(browser, size, scheme) {
       await detail.locator(".pc-row").first().waitFor({ timeout: 10_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "computer-detail");
+      const health = detail.getByTestId("machine-health");
+      await health.getByText("来源未知", { exact: false }).first().waitFor();
+      const unknownProcess = health.locator(".app-row", { hasText: "legacy-worker" });
+      if (await unknownProcess.getByRole("button").count()) throw new Error("Unknown process must not have an End button");
+      const suspect = health.locator(".app-row", { hasText: "demo-worker" });
+      // Use real pointer clicks so an unexpectedly disabled control cannot hide a regression.
+      const endBox = await suspect.getByRole("button", { name: "结束", exact: true }).boundingBox();
+      if (!endBox) throw new Error("Verified suspect lacks an End button");
+      await page.mouse.click(endBox.x + endBox.width / 2, endBox.y + endBox.height / 2);
+      await page.getByRole("dialog", { name: "结束这个进程？" }).waitFor();
+      await shot(page, size, scheme, "computer-process-confirm");
+      await clickVisible(page, page.getByRole("dialog", { name: "结束这个进程？" }).getByRole("button", { name: "取消", exact: true }));
       await back();
       await clickVisible(page, page.locator(".pc-card", { hasText: "VPS 东京" }));
       // What it allows and its AIs are tabs of its page.

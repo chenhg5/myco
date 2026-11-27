@@ -1970,6 +1970,14 @@ function overviewFor(h) {
     // Real machines only; cloud sessions are not machines.
     machines: (h.machines || []).map((m) => ({
       ...m,
+      ...(m.id === "m_studio" ? { can_stop_process: true, machine_health: {
+        at: new Date().toISOString(), runner_instance: "demo-runner", incident: "demo-incident", complete: true, alert: true,
+        cores: 8, load_metric: "load1_per_core", load_ratio: 0.86, memory_total: 16 * 1024 ** 3, memory_available: 2 * 1024 ** 3,
+        processes: [
+          { pid: 4101, name: "demo-worker", created: "demo-birth-1", cpu: 99, memory: 8388608, agent: "demo-coder", suspicious: true, ref: "demo-suspect" },
+          { pid: 4102, name: "legacy-worker", created: "demo-birth-2", cpu: 95, memory: 8388608, suspicious: false },
+        ],
+      } } : {}),
       agents: h.agents.filter((a) => a.kind !== "machine" && a.machine_id === m.id).map((a) => a.name),
     })),
     recent: h.recent,
@@ -4897,6 +4905,10 @@ const server = http.createServer(async (req, res) => {
           "它的 myco 版本太旧，或者 runner 没在运行。");
       }
       const body = await readBody(req);
+      if (body?.cli === "process-stop") {
+        if (machine.id !== "m_studio" || body.process_ref !== "demo-suspect") return fail(res, 403, "permission_denied", "Process identity changed");
+        return send(res, 200, { cli: "process-stop", stopped_process: { name: "demo-worker", pid: 4101, created: "demo-birth-1" } });
+      }
       if (body && body.cli === "exec") {
         const dir = typeof body.dir === "string" ? body.dir.trim() : "";
         if (!Array.isArray(body.allow_from) || body.allow_from.length === 0) return fail(res, 400, "invalid_argument", "a shell node needs at least one agent allowed to send it commands");
