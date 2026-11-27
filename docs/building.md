@@ -123,8 +123,21 @@ explicitly, or place the locked checkout at `.cache/apps-source`. They never rea
 retired main-repository app copies; incomplete resources fail with setup guidance.
 The host UI CI prepares its own exact pinned checkout and release artifacts.
 
-Install Playwright 1.57.0 with Chromium and ffmpeg as in the `app-contract` CI
-job. Without `APPS_TEST_ROOT`, only these optional cross-repository tests skip;
+The `app-contract` CI job compiles the same seven Go fixtures on Ubuntu 24.04,
+then executes the six integration/console fixtures with Node, Chromium and
+CJK fonts inside the same digest-pinned Playwright 1.57.0 image used by UI smoke.
+The real SSH parser fixture stays on the Ubuntu host with its installed sshd
+and Node; it does not need a browser. The job installs no apt packages and
+downloads no browser at runtime. The current fixture set does not
+invoke external ffmpeg. Each named fixture must execute and pass; missing or
+skipped cases fail the job. Source and app pins remain unchanged, and the helper
+comes from the immutable workflow commit for older frozen sources. Raw JSON
+outcomes and a seven-case result map are retained as `app-contract-results-*`
+artifacts for seven days.
+
+For local execution outside that image, install Playwright 1.57.0 and its
+Chromium/system dependencies yourself. Without `APPS_TEST_ROOT`, only these
+optional cross-repository tests skip;
 an explicitly supplied incomplete checkout fails. Application business, typing,
 localization and browser regression suites run in the apps repository's CI.
 
