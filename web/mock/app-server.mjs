@@ -3665,7 +3665,9 @@ const server = http.createServer(async (req, res) => {
       if (body.type === "note") {
         // (in the thread of the message it names, when it names one)
         const of = typeof body.of === "string" ? Object.values(hub.threads || {}).flat().find((m) => m.id === body.of) : null;
-        const note = makeMessage({ thread_id: of ? of.thread_id : threadId, from: CONSOLE, to, type: "note", status: "done", body: text, created_at: iso(0), updated_at: iso(0) });
+        const note = makeMessage({ thread_id: of ? of.thread_id : threadId, from: CONSOLE, to, type: "note", status: "done", body: text, created_at: iso(0), updated_at: iso(0),
+          // (a run's end, as a workflow tells whoever started it)
+          ...(typeof body.workflow === "string" && body.workflow ? { workflow: body.workflow } : {}) });
         if (!hub.threads) hub.threads = {};
         (hub.threads[note.thread_id] ||= []).push(note);
         return send(res, 201, note);

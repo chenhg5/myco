@@ -6058,6 +6058,40 @@ async function runMatrix(browser, size, scheme) {
     // no computer to read a quota on; its session reports it
     // (myco agent runtime quota: source_kind cloud_session, no machine_id).
     // The member card, its card's 额度 and the composer all show it.
+    // A workflow's run ended: the note it sends whoever started it is a card
+    // (which workflow, how it ended, a way to the run), its steps folded.
+    await step("单聊 · 工作流结束的消息", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      const runs = await (await fetch(`http://${HOST}:${mockPort()}/app/hubs/hub_studio/workflow-runs?limit=5`)).json();
+      const run = (runs.runs || [])[0];
+      if (!run) throw new Error("mock 里应有工作流的运行");
+      const steps = ["select（wsl-shell）：退出码 0", "notify_failure（wsl-shell）：退出码 0", "draft（wsl-shell）：退出码 0",
+        "publish（发版-DeepSeek）：Fixed node completed", "verify（发版-DeepSeek）：Published notes and Mac archive checksums verified",
+        "润色中英发布说明（Codex · myco 后端）：将五个 candidate 整理为五条具体且中英文一致的发布说明", "notes_failure（wsl-shell）：超时了（3m）",
+        "notes_update（wsl-shell）：退出码 0"];
+      const body = `[工作流「myco-release」完成了]\n运行 ${run.id}\n${steps.map((x) => `- ${x}`).join("\n")}\n详情：myco workflow run show --id ${run.id}`;
+      // (into this chat's thread, as the other notes here: the mock starts a
+      // new thread otherwise, which an open chat picks up on its next read)
+      const anchor = await page.locator(".conv-detail .conv-msg[data-msg]").last().getAttribute("data-msg");
+      const note = await sendFromElsewhere("hub_studio", "review-cloud", body, { type: "note", workflow: run.id, of: anchor });
+      const card = page.locator(`.conv-detail [data-msg="${note.id}"] [data-testid=workflow-note]`);
+      await card.waitFor({ timeout: 15_000 });
+      const head = await card.locator(".wfn-head").innerText();
+      if (!head.includes("myco-release") || !head.includes("完成了") || !head.includes("打开这次运行")) throw new Error(`工作流结束的消息应写出名字、结果和打开运行，实际「${head}」`);
+      if (await page.locator(`.conv-detail [data-msg="${note.id}"] .conv-tag`, { hasText: "备注" }).count()) throw new Error("工作流结束的消息不该再标「备注」");
+      if (await card.locator(".wfn-steps").count()) throw new Error("步骤应先收起来");
+      const fold = card.locator("[data-testid=workflow-note-steps]");
+      if (!(await fold.innerText()).includes("8 步") || !(await fold.innerText()).includes("1 步没顺利完成")) throw new Error(`收起时应写几步、几步没顺利，实际「${await fold.innerText()}」`);
+      await settle(page, 150);
+      await shot(page, size, scheme, "chat-workflow-note");
+      await clickVisible(page, fold);
+      if ((await card.locator(".wfn-steps li").count()) !== 8) throw new Error("展开后应列出 8 步");
+      await settle(page, 150);
+      await shot(page, size, scheme, "chat-workflow-note-open");
+      await clickVisible(page, card.locator("[data-testid=workflow-note-open]"));
+      await page.locator("[data-testid=workflow-run]").waitFor({ timeout: 15_000 });
+    });
+
     // A narrow box you write in (a side pane, a small window): the model,
     // access and quota pills give way; the mic and Send never leave the box.
     await step("单聊 · 窄的输入框", async () => {
