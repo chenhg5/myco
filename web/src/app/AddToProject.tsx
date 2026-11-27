@@ -162,8 +162,8 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
   const hereId = ov ? thisComputerId(ov, local) : undefined;
   const isHere = (m: Machine) => m.id === hereId;
   const hereMachine = machines.find(isHere);
-  const elsewhere = machines.filter((m) => !isHere(m))
-    .sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
+  const elsewhere = machines.filter((m) => m.online && !isHere(m))
+    .sort((a, b) => a.name.localeCompare(b.name));
   // Agents of this workspace not in the project yet (in others, or none):
   // online first.
   function others(): AgentRow[] {
