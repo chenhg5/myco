@@ -677,3 +677,5 @@ export interface BrowserReplayResult {
  steps: {node:string;state:"ok"|"failed"|"skipped";ms:number;error?:string}[];
  output: Record<string, unknown>;url:string;tabs:{id:string;url:string;title:string;active:boolean}[];
 }
+
+export type { PerfReport, PerfStat, DatabasePoolStats } from "@/lib/perf";

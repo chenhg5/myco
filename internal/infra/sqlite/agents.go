@@ -109,6 +109,13 @@ func (r *AgentRepo) Touch(ctx context.Context, name domain.AgentName, at time.Ti
 	return internal(err)
 }
 
+// TouchIfOlder checks the stored timestamp, not an authentication snapshot:
+// concurrent requests that read the same old agent must not all write it.
+func (r *AgentRepo) TouchIfOlder(ctx context.Context, name domain.AgentName, at, cutoff time.Time) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE agents SET last_seen_at=? WHERE name=? AND last_seen_at<=?`, ms(at), name, ms(cutoff))
+	return internal(err)
+}
+
 func (r *AgentRepo) FindBySession(ctx context.Context, harness, sessionID string) (*domain.Agent, error) {
 	a, err := scanAgent(r.db.QueryRowContext(ctx, `SELECT `+agentCols+` FROM agents WHERE session_id=? AND harness=? LIMIT 1`, sessionID, harness))
 	if errors.Is(err, sql.ErrNoRows) {

@@ -401,7 +401,7 @@ func (s *AgentService) Authenticate(ctx context.Context, token string) (*domain.
 	// Seen again: written at most once per touchEvery, so a request that
 	// only reads (or starts a long-poll) does not also write to the database.
 	if now := s.clock.Now(); now.Sub(a.LastSeenAt) >= s.touchEvery() {
-		if err := s.agents.Touch(ctx, a.Name, now); err != nil {
+		if err := s.agents.TouchIfOlder(ctx, a.Name, now, now.Add(-s.touchEvery())); err != nil {
 			return nil, err
 		}
 		a.LastSeenAt = now
