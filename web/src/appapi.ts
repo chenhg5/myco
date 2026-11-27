@@ -1,5 +1,5 @@
 import type { UsageResponse } from "@/lib/usage";
-import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList, Goal, GoalList, GoalStartRequest, GoalPatchRequest } from "@/api";
+import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList, Goal, GoalList, GoalStartRequest, GoalPatchRequest, ModelProvider } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -197,6 +197,16 @@ export interface ProfileInput {
 /** An agent CLI to start a session with, or "exec": a shell node that runs the commands it is sent. */
 export type SpawnCli = "claude" | "codex" | "pi" | "kiro" | "cursor" | "gemini" | "opencode" | "exec"
   | "qoder" | "qwen" | "kimi" | "goose" | "copilot" | "auggie" | "codebuddy" | "kilo" | "cline" | "grok" | "antigravity" | "atomcode";
+/** The App's form for a model provider (i115): the key only when it is new or changes. */
+export interface ModelProviderInput {
+  name: string;
+  vendor: string;
+  anthropic_base?: string;
+  openai_base?: string;
+  small_model?: string;
+  api_key?: string;
+}
+
 export interface SpawnInput {
   cli: SpawnCli;
   /** Directory on that machine; `~/...` is that machine's home directory. */
@@ -207,6 +217,8 @@ export interface SpawnInput {
   access?: RuntimeAccess;
   /** A shell node's allowed senders (cli "exec"): agents that may send it commands. */
   allow_from?: string[];
+  /** one of the member's model providers (i115): sealed for that computer by this App */
+  provider?: string;
   /** copy this session (same CLI, on that machine) instead of starting an empty one */
   fork_from?: string;
   display_name?: string;
@@ -1063,6 +1075,25 @@ export const appApi = {
     request<AgentProvider>("GET", `app/local/agents/${enc(name)}/provider?hub_id=${enc(hubId)}`),
   setRemoteAgentProvider: (hubId: string, name: string, manual: ManualProvider) =>
     request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/provider`, { manual }),
+  // The member's model providers (i115). Keys go only to this App's own
+  // backend, which seals them for the member's devices.
+  modelProviders: (hubId: string) =>
+    request<{ e2e: boolean; providers: ModelProvider[] }>("GET", `app/hubs/${enc(hubId)}/providers`),
+  createModelProvider: (hubId: string, input: ModelProviderInput) =>
+    request<ModelProvider>("POST", `app/hubs/${enc(hubId)}/providers`, input),
+  updateModelProvider: (hubId: string, id: string, input: Partial<ModelProviderInput>) =>
+    request<ModelProvider>("PATCH", `app/hubs/${enc(hubId)}/providers/${enc(id)}`, input),
+  deleteModelProvider: (hubId: string, id: string) =>
+    request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/providers/${enc(id)}`),
+  /** Reads the vendor's models once with the key: a saved provider's (id), or the form's. */
+  testModelProvider: (hubId: string, id: string | null, input?: Partial<ModelProviderInput>) =>
+    request<{ models: RuntimeModel[] }>("POST", id ? `app/hubs/${enc(hubId)}/providers/${enc(id)}/test` : `app/hubs/${enc(hubId)}/providers/test`, input || {}),
+  /** Sends a provider's current key to every agent that has an older one. */
+  pushModelProvider: (hubId: string, id: string) =>
+    request<{ pushed: string[]; failed: { agent: string; error: string }[] }>("POST", `app/hubs/${enc(hubId)}/providers/${enc(id)}/push`),
+  /** Gives an agent one of the member's model providers, with the model it runs. */
+  useModelProvider: (hubId: string, name: string, id: string, model: string) =>
+    request<Agent>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/provider`, { workspace: id, model }),
   setAgentProvider: (name: string, hubId: string, body: { provider?: string; manual?: ManualProvider }) =>
     request<AgentProvider>("PUT", `app/local/agents/${enc(name)}/provider?hub_id=${enc(hubId)}`, body),
   /** Starts this computer's runner service, or restarts it when running. */

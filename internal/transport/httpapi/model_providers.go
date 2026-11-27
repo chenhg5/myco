@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/myco-ai/myco/internal/api"
 	"github.com/myco-ai/myco/internal/app"
@@ -25,12 +26,14 @@ func (s *Server) providerMember(w http.ResponseWriter, r *http.Request) (string,
 		writeError(w, domain.Errf(domain.CodePermissionDenied, "model providers are managed by their member only"))
 		return "", false
 	}
-	_, member := s.consoleIdentity(r)
-	if member == "" {
-		writeError(w, domain.Errf(domain.CodePermissionDenied, "model providers belong to members: sign in as one"))
+	// A member's own device only: not the hub's administrator token, nor a
+	// device token that belongs to no member (they would stand for the
+	// owner, whose keys they cannot open anyway).
+	if a.Member == nil {
+		writeError(w, domain.Errf(domain.CodePermissionDenied, "model providers belong to members: use one of your own devices"))
 		return "", false
 	}
-	return member, true
+	return a.Member.ID, true
 }
 
 func (s *Server) listModelProviders(w http.ResponseWriter, r *http.Request) {
@@ -119,9 +122,20 @@ func (s *Server) checkSpawnProvider(w http.ResponseWriter, r *http.Request, in *
 		return false
 	}
 	actor := s.actorOf(r)
-	name, member := s.consoleIdentity(r)
-	if actor.Agent != nil || actor.Via != nil || member == "" {
-		writeError(w, domain.Errf(domain.CodePermissionDenied, "only a person may send a provider with a new session"))
+	if actor.Agent != nil || actor.Via != nil || actor.Member == nil {
+		writeError(w, domain.Errf(domain.CodePermissionDenied, "only a person, from one of their own devices, may send a provider with a new session"))
+		return false
+	}
+	name, member := actor.Member.Name, actor.Member.ID
+	// The key ends up on that computer: its owner's call only (as for an
+	// agent's provider), not an administrator's.
+	m, err := s.machines.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, err)
+		return false
+	}
+	if !(m.Owner == member || (m.Owner == "" && actor.IsOwner())) {
+		writeError(w, domain.Errf(domain.CodePermissionDenied, "only the owner of this computer may send it a provider"))
 		return false
 	}
 	if in.ProviderRef != nil && in.ProviderRef.ID != "" {
@@ -165,10 +179,16 @@ func (s *Server) checkSpawnProvider(w http.ResponseWriter, r *http.Request, in *
 }
 
 // markSpawnedProvider records on a new agent that its provider is the
-// custom one written on its computer, from this model provider.
-func (s *Server) markSpawnedProvider(r *http.Request, name domain.AgentName, ref *api.ProviderRef) {
+// custom one written on its computer, from this model provider. Only the
+// agent this spawn made: the machine's answer names it, and is not taken
+// on its word (spawnedHere).
+func (s *Server) markSpawnedProvider(r *http.Request, name domain.AgentName, ref *api.ProviderRef, res api.SpawnResult, since time.Time) {
 	cur, err := s.agents.Get(r.Context(), string(name))
 	if err != nil {
+		return
+	}
+	m, err := s.machines.Get(r.Context(), r.PathValue("id"))
+	if err != nil || !spawnedHere(cur, res, since, m.Owner) {
 		return
 	}
 	rs := cur.RunSettings
@@ -178,4 +198,12 @@ func (s *Server) markSpawnedProvider(r *http.Request, name domain.AgentName, ref
 		rs.ProviderRef = domain.ProviderRef{ID: ref.ID, KeyVersion: ref.KeyVersion}
 	}
 	_, _ = s.agents.SetRunSettings(r.Context(), name, rs)
+}
+
+// spawnedHere: a is the agent a spawn just made, as its machine answered:
+// joined since the request, with the session the machine started, and the
+// computer's owner's.
+func spawnedHere(a *domain.Agent, res api.SpawnResult, since time.Time, machineOwner string) bool {
+	return a != nil && string(a.Name) == res.Agent && !a.CreatedAt.Before(since) &&
+		res.SessionID != "" && a.Binding.SessionID == res.SessionID && a.Owner == machineOwner
 }

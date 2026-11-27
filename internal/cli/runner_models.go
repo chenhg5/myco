@@ -73,8 +73,11 @@ func (r *runtimeReporter) startModels(ctx context.Context, dir string, target fu
 	r.mu.Lock()
 	r.refresh = make(chan struct{}, 1)
 	refresh := r.refresh
+	done := make(chan struct{})
+	r.modelsDone = done
 	r.mu.Unlock()
 	go func() {
+		defer close(done)
 		tick := time.NewTicker(modelsEvery)
 		defer tick.Stop()
 		force := false

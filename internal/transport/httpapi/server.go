@@ -1845,6 +1845,7 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 	if wait <= 0 {
 		wait = 5 * time.Minute
 	}
+	since := time.Now().Add(-time.Second)
 	reply, err := s.machines.Spawn(r.Context(), r.PathValue("id"), body, wait)
 	if err != nil {
 		writeError(w, err)
@@ -1886,7 +1887,7 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		if in.ProviderEncrypted != nil && res.Agent != "" {
 			// The new agent's provider was written on its computer: it is
 			// a custom one, from the member's model provider.
-			s.markSpawnedProvider(r, domain.AgentName(res.Agent), in.ProviderRef)
+			s.markSpawnedProvider(r, domain.AgentName(res.Agent), in.ProviderRef, res, since)
 		}
 		writeJSON(w, http.StatusOK, res)
 	}

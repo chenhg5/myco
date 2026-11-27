@@ -86,6 +86,10 @@ export interface ModelProvider {
   key_hint?: string;
   /** this device sealed the key again for the member's devices now */
   rewrapped?: boolean;
+  /** the workspace's copy of its vendor, addresses or small model is not what was sealed with the key (the sealed ones are shown and used) */
+  settings_changed?: boolean;
+  /** saved before its addresses were sealed with its key: used only once saved again with the key */
+  seal_again?: boolean;
   created_at: string;
   updated_at: string;
 }

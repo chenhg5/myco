@@ -75,10 +75,18 @@ func TestAnAgentOnAnotherVendorReportsItsModels(t *testing.T) {
 	ch := providerChoice{settings: &harness.ProviderSettings{Env: env}, name: "opencode.ai", source: "env_file", model: "deepseek-v4.1-flash"}
 	rep := &runtimeReporter{c: c, log: slog.New(slog.NewTextHandler(io.Discard, nil)), base: &api.Runtime{CLI: "claude"}, choice: ch}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	rep.startModels(ctx, t.TempDir(), func(ch providerChoice) (providerTarget, bool) {
 		return providerTargetOf("claude", home, map[string]string{}, ch)
 	}, func() providerChoice { return ch })
+	// (the loop writes its cache in the test's directories: it stops, and
+	// is waited for, before they are removed)
+	t.Cleanup(func() {
+		cancel()
+		rep.mu.Lock()
+		done := rep.modelsDone
+		rep.mu.Unlock()
+		<-done
+	})
 
 	waitFor(t, func() bool {
 		mu.Lock()

@@ -1671,13 +1671,20 @@ optional `small_model`, the models last read with the key (`models`,
 
 **The key.** `key_sealed` is an e2e envelope (`e2e.Seal`) with header
 `e2e.ProviderKeyHeader(member id, provider id, key_version)`; its payload is
-`{"api_key": "..."}`. The hub keeps it only when it is signed by one of the
+`{"api_key", "vendor", "anthropic_base", "openai_base", "small_model"}`: the key
+and everything that says where it is sent. The App uses only what it opens; the
+plain fields on the hub are for showing, and the App says so when they differ
+(`settings_changed`). A `PATCH` that changes the vendor, an address or the small
+model must bring `key_sealed` at the next `key_version` (sealed again with them);
+the name alone may change without it. An envelope from before the addresses were
+sealed is not used until the provider is saved again with its key. The hub keeps it only when it is signed by one of the
 member's device keys and readable by those devices alone
 (`e2e.VerifySealedFor`); it cannot open it, and it never logs it (the audit log
 says `provider.create`, `provider.key key_version=N`, `provider.delete`). New
 providers need the workspace's end-to-end encryption on (`e2e_required`, HTTP
 409, otherwise). Agents, superagents and other members get `permission_denied`
-or `not_found`.
+or `not_found`, and so do the hub's administrator token and device tokens
+that belong to no member: only a member's own devices manage their providers.
 
 **A new device.** A device added after a key was sealed cannot open it. Any of
 the member's devices that can (the App, at its next look at the list) sees that
@@ -1697,11 +1704,18 @@ ignore it.
 
 **A new agent.** `POST /v1/machines/{id}/spawn` takes `provider_encrypted`
 (sealed for that machine's node, by one of the person's devices; checked like an
-agent's) and `provider_ref`, for `claude` and `codex` sessions only. A machine
+agent's) and `provider_ref`, for `claude` and `codex` sessions only, from that
+computer's owner only (as an agent's provider; not an administrator). A machine
 node with the `sealed_spawn` feature opens it, runs the session's first turn
 with it and writes it to the new agent's env file (with the machine node's own
 variables besides, mode 0600); the hub then records the new agent's provider as
-`custom` with that `provider_ref`. `GET /v1/machines` names each machine's node
+`custom` with that `provider_ref`, on the agent the machine names only when it
+joined since the request, with the session the machine reported, and is the
+computer owner's. A machine node takes a provider only when a person's device
+sealed it (`@console:<member>`), that member owns the computer, and it was sent
+by them or by the hub for them (`@admin`, after the checks above): one an agent
+sealed, or sent on a person's behalf, is refused. A runner takes a custom
+provider only when its agent's owner sealed it. `GET /v1/machines` names each machine's node
 (`node`) for this. An older machine node (no `sealed_spawn`, or no key
 registered yet) is sent the request without a provider; the App sends the
 provider to the new agent once its runner has registered its key, before
