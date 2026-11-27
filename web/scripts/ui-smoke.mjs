@@ -593,6 +593,7 @@ async function runMatrix(browser, size, scheme) {
       // but not failing the run; a second failure is the real thing.
       const where = String(first?.stack || "").split("\n").find((l) => l.includes("ui-smoke.mjs:"))?.trim().replace(/^at\s+/, "") || "";
       log(`    ⚠ 第一次失败，重新加载后再试一次：${String(first?.message || first).split("\n")[0]}${where ? `（${where.replace(/^.*\//, "")}）` : ""}`);
+      log(String(first?.stack || first));
       await page.screenshot({ path: path.join(OUT, `flaky-${size.width}x${size.height}-${scheme}-${no}.png`) }).catch(() => undefined);
       await page.keyboard.press("Escape").catch(() => undefined);
       await page.goto(`${r.base}/?lang=zh`, { waitUntil: "domcontentloaded" });
@@ -6472,6 +6473,7 @@ async function runMatrix(browser, size, scheme) {
       await page.getByText("累计统计暂不可用", { exact: true }).waitFor({ timeout: 12_000 });
       const overview = await page.locator("[data-testid=workflow-overview]").innerText();
       if (!overview.includes("升级工作区") || !overview.includes("—")) throw new Error("旧工作区应明确累计统计未知");
+      await filters.getByLabel("工作流排序", { exact: true }).selectOption("recent");
       await page.unroute(empty);
       await liveRow.waitFor({ state: "detached", timeout: 12_000 });
       await list.locator(".au-row", { hasText: "写-审-改" }).waitFor();
@@ -6523,8 +6525,7 @@ async function runMatrix(browser, size, scheme) {
       await navBackClick(page);
       const row = list.locator(".au-row", { hasText: name });
       await row.waitFor({ timeout: 10_000 });
-      await row.click({ button: "right", position: { x: 120, y: 12 } });
-      await clickVisible(page, page.getByRole("menuitem", { name: "删除" }));
+      await menuPick(page, row, "删除");
       await clickVisible(page, page.locator(".app-modal.app-confirm").getByRole("button", { name: "删除" }));
       await row.waitFor({ state: "detached", timeout: 10_000 });
       // Have an agent write one: it goes to that agent as a task.
