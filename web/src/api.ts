@@ -120,6 +120,8 @@ export interface Runtime {
   runner_slots?: RunnerSlots;
   cli: string;
   cli_version?: string;
+  /** Private account email; returned only to its owner and workspace admins. */
+  account?: string;
   model?: string;
   model_source?: ModelSource;
   /** reasoning effort (low/medium/high/... depends on the CLI) */

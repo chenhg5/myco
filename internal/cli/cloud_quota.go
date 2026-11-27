@@ -208,6 +208,7 @@ func reportSessionQuota(ctx context.Context, c *client.Client, getenv func(strin
 	if rt.CLI == "" {
 		rt.CLI = me.Binding.Harness
 	}
+	rt.Account = runtimeAccount(me.Binding.Harness, accountHome(getenv), getenv)
 	_ = c.ReportRuntime(ctx, rt)
 }
 

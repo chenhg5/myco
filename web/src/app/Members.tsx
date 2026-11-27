@@ -286,11 +286,11 @@ function WhoItIs({ row, now }: { row: AgentRow; now: number }) {
   const here = !!machine && thisComputerId(row.hub, local) === machine.id;
   const ws = isWorkspace(a);
   const where = isCloud(a) ? cloudLabel(a)
-    : [machine ? (here ? L("这台电脑", "This computer") : machine.name) : "", a.binding.workdir ? shortDir(a.binding.workdir) : ""].filter(Boolean).join(" · ") || "—";
+    : [machine ? (here ? L("这台电脑", "This computer") : machine.name) : "", a.binding.workdir ? shortDir(a.binding.workdir) : "", a.runtime?.account].filter(Boolean).join(" · ") || "—";
   const model = a.runtime?.model;
   const mine = !a.owner || row.hub.me?.member?.id === a.owner_id || isMe(a.owner, row.hub);
   const rows: [string, string, string?][] = [
-    [L("在哪", "Where"), where, a.binding.workdir || undefined],
+    [L("在哪", "Where"), where, [a.binding.workdir, a.runtime?.account].filter(Boolean).join(" · ") || undefined],
     ...(!ws ? [[L("用的", "Runs"), [cliName(a), model].filter(Boolean).join(" · ")] as [string, string]] : []),
     ...(session ? [[L("会话", "Session"), L(`「${session.title || folderOfDir(session.workdir)}」· ${timeAgo(session.last_active, now)}用过`, `“${session.title || folderOfDir(session.workdir)}” · used ${timeAgo(session.last_active, now)}`), session.title] as [string, string, string?]]
       : isInbox(a) ? [[L("会话", "Session"), L("只在它的会话开着时收消息", "Receives only while its session is open")] as [string, string]] : []),
@@ -304,7 +304,7 @@ function WhoItIs({ row, now }: { row: AgentRow; now: number }) {
         {rows.map(([k, v, full]) => (
           <div key={k} className="ms-fact">
             <span className="ms-fact-k">{k}</span>
-            <span className="ms-fact-v" title={full || v}>{v}</span>
+            <span className={`ms-fact-v${a.runtime?.account && k === L("在哪", "Where") ? " ms-fact-account" : ""}`} title={full || v}>{v}</span>
           </div>
         ))}
       </div>

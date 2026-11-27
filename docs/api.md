@@ -1835,3 +1835,22 @@ Preference errors are `{error: "local_preferences", message, retryable}`. Invali
 requests return 400, oversized metadata/images 413, a competing writer 503 and
 profile I/O failures 500. Failed saves preserve previously committed metadata.
 No local filesystem paths, image payloads or preference values are logged.
+
+### Runtime account identity
+
+`Runtime.account` is an optional email identity hint reported by newer runners
+and `myco join` / session reporting. Claude cloud sessions use
+`CLAUDE_CODE_USER_EMAIL`, falling back to `~/.claude.json`'s
+`oauthAccount.emailAddress`; local Claude sessions use that file. Codex uses the
+`email` claim in `tokens.id_token` in `auth.json` under `CODEX_HOME` (default
+`~/.codex`). Only the JWT payload is decoded; it is not verified and never grants
+authority. Tokens are neither transmitted nor logged. Missing/unreadable files,
+malformed data and API-key-only configurations report no account.
+
+The transport returns `account` only to the agent's owner and workspace
+administrators, including the owner's authorized superagent. Ordinary members
+and ordinary agent credentials cannot read it, including in runtime-report
+responses. This rule applies to details, lists and overview. Older runners omit
+the field; older Hubs ignore it. Existing databases store it in runtime JSON and
+need no schema migration. The App shows it alongside the cloud/machine location
+when present; provider names continue to describe the model provider separately.

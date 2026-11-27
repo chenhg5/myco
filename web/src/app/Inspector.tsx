@@ -1221,7 +1221,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                       className="app-kv-link"
                       onClick={() => onOpenMachine(hubId, machineObj.id)}
                     >
-                      {machineObj.name}<span className="app-chev">›</span>
+                      {machineObj.name}<span className="app-chev">›</span>{ag.runtime?.account && ` · ${ag.runtime.account}`}
                     </button>
                   ) : isCloud(ag) ? (
                     cloudLabel(ag)

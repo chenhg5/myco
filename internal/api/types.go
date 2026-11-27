@@ -137,6 +137,9 @@ type RunnerQueuedTask struct {
 }
 
 type Runtime struct {
+	// Account is a private, locally reported email identity hint (not authentication).
+	Account string `json:"account,omitempty"`
+
 	// RunnerInstance identifies a runner process; RestartingUntil is a
 	// short lease for planned restarts, cleared by the next instance.
 	RunnerInstance  string       `json:"runner_instance,omitempty"`

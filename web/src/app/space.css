@@ -1455,6 +1455,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ms-fact-account { white-space: normal; overflow-wrap: anywhere; }
 /* Lately: three numbers, then the last few tasks. */
 .ms-stats {
   display: flex;

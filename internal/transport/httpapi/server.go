@@ -1963,7 +1963,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		b, _ := json.Marshal(v)
 		slots = string(b)
 	}
-	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{RunnerInstance: in.RunnerInstance, RestartingUntil: in.RestartingUntil, RunnerSlots: slots, CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
+	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{Account: in.Account, RunnerInstance: in.RunnerInstance, RestartingUntil: in.RestartingUntil, RunnerSlots: slots, CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
 		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource, ProviderHost: in.ProviderHost, Providers: encodeProviderOptions(in.Providers),
 		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota),
 		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env, Models: domain.EncodeModels(modelsFromAPI(in.Models)), ModelsFrom: modelsFrom(in.ModelsFrom, in.Models), ModelsAt: modelsAt(in.ModelsAt, in.Models), Tools: string(toolJSON)}); err != nil {
@@ -1971,6 +1971,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		return
 	}
 	in.RunnerInstance, in.RestartingUntil, in.Away = a.Runtime.RunnerInstance, a.Runtime.RestartingUntil, a.Runtime.Away
+	in.Account = s.visibleAccount(r, a)
 	in.Quota = s.visibleQuota(r, a)
 	writeJSON(w, http.StatusOK, in)
 }

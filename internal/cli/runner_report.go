@@ -61,7 +61,8 @@ type runtimeReporter struct {
 	stopped   bool
 	// models lists the models the CLI offers, read again for each report
 	// (its list changes as the CLI updates); nil when it does not say.
-	models func() []api.RuntimeModel
+	models  func() []api.RuntimeModel
+	account func() string
 	// provModels is the list of the provider the agent uses with an API
 	// key (startModels), target where that provider is; refresh* follow
 	// the App's requests to list again.
@@ -83,6 +84,21 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 	// may take seconds on a busy computer). Enrich the same base later.
 	base := api.Runtime{RunnerInstance: runnerInstance, CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess), Features: runnerFeatures(h), Env: runnerEnv()}
 	rep := &runtimeReporter{restartPath: runnerRestartPath(e.defaultPath), c: c, log: log, cfg: rc.Model, choice: choice, models: cliModels(h.Name()), base: &base}
+	rep.account = func() string {
+		vars, _ := config.ReadEnvFile(rc.EnvFile)
+		env := map[string]string{}
+		for _, kv := range vars {
+			k, v, _ := strings.Cut(kv, "=")
+			env[k] = v
+		}
+		get := func(key string) string {
+			if value, ok := env[key]; ok {
+				return value
+			}
+			return e.in.Getenv(key)
+		}
+		return runtimeAccount(h.Name(), accountHome(get), get)
+	}
 	rep.flushLater() // clear any prior restart lease before slow CLI/tool discovery
 	go func() {
 		ctx, cancel := context.WithTimeout(e.in.Ctx, 30*time.Second)
@@ -293,6 +309,9 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		rt.RunnerSlots = r.slots
 		if r.maxAccess != "" {
 			rt.MaxAccess = r.maxAccess
+		}
+		if r.account != nil {
+			rt.Account = r.account()
 		}
 		if reflect.DeepEqual(rt, r.last) {
 			r.mu.Unlock()

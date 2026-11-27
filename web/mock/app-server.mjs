@@ -813,7 +813,7 @@ const state = {
           kind: "agent", machine_id: "m_studio",
           // Its 5-hour window is nearly used (amber), the weekly one is not.
           runtime: {
-            cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
+            account: "alice@example.com", cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
             effort: "high", effort_source: "app", access: "workspace", max_access: "workspace", models: CODEX_MODELS,
             // a custom address (Settings: 自定义地址)
             provider: "api.example-llm.com", provider_host: "api.example-llm.com", provider_source: "env_file",
@@ -932,7 +932,7 @@ const state = {
           name: "release-cloud", owner: "alice", owner_id: "mem_alice", display_name: "Release (Claude 云端)", description: "在 claude.ai 上整理发布说明。",
           // It has not said which model it runs on (an older myco in that session).
           // No supported usage source on its connection: lists say nothing.
-          kind: "agent", runtime: { cli: "claude-cloud", access: "readonly",
+          kind: "agent", runtime: { cli: "claude-cloud", account: "alice@example.com", access: "readonly",
             quota: { source: "claude", provider: "unknown", status: "unsupported", at: "0001-01-01T00:00:00Z", checked_at: iso(300), windows: [] } },
           status_text: "正在整理发布说明", status_at: iso(60),
           labels: ["group=release"], binding: { harness: "claude-cloud", environment: "claude.ai" },

@@ -5290,6 +5290,41 @@ async function runMatrix(browser, size, scheme) {
       } finally { await change(""); }
     });
 
+    await step("成员 · 登录账号", async () => {
+      await go(page, "成员", narrow);
+      await clickVisible(page, page.locator(".mb-card", { hasText: "Release (Claude 云端)" }).first());
+      const profile = page.locator(".ms");
+      await profile.waitFor({ timeout: 10_000 });
+      const where = profile.locator(".ms-fact", { has: page.locator(".ms-fact-k", { hasText: /^在哪$/ }) });
+      if (!(await where.innerText()).includes("云端（claude.ai · alice@example.com）")) throw new Error("Cloud profile must identify its account");
+      await shot(page, size, scheme, "member-account");
+      // Keep shareable 2x captures isolated from the smoke's navigation and preferences.
+      if (size.width === 1200) {
+        for (const language of ["zh", "en"]) {
+          const preview = await browser.newContext({ viewport: size, colorScheme: scheme, deviceScaleFactor: 2, storageState: await context.storageState() });
+          try {
+            await preview.addInitScript(({ language, scheme }) => { localStorage.setItem("myco-lang", language); localStorage.setItem("myco-theme", scheme); }, { language, scheme });
+            const capture = await preview.newPage();
+            const url = new URL(page.url()); url.searchParams.set("lang", language);
+            await capture.goto(url.href);
+            await capture.locator(".app-shell").waitFor();
+            await go(capture, language === "zh" ? "成员" : "Members", false);
+            await clickVisible(capture, capture.locator(".mb-card", { hasText: "Release (Claude 云端)" }).first());
+            await capture.locator(".ms .ms-fact-v", { hasText: "alice@example.com" }).waitFor();
+            await settle(capture, 200);
+            await shot(capture, size, scheme, `member-account-${language}`);
+          } finally { await preview.close(); }
+        }
+      }
+
+      await page.keyboard.press("Escape");
+      await clickVisible(page, page.locator(".mb-card", { hasText: "PM (Codex)" }).first());
+      const localWhere = page.locator(".ms .ms-fact", { has: page.locator(".ms-fact-k", { hasText: /^在哪$/ }) });
+      await localWhere.getByText(/alice@example\.com/).waitFor({ timeout: 10_000 });
+      if ((await localWhere.innerText()).includes("claude.ai")) throw new Error("Local account must stay beside its computer location");
+      await page.keyboard.press("Escape");
+    });
+
     await step("成员 · 离线原因", async () => {
       await go(page, "成员", narrow);
       await clickVisible(page, page.locator(".mb-card", { hasText: "docs-claude" }).first());

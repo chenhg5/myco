@@ -601,6 +601,18 @@ Safe to re-run: the same session gets the same agent back.`,
 				}
 				return e.dryRun(d)
 			}
+			if account := runtimeAccount(b.Harness, accountHome(e.in.Getenv), e.in.Getenv); account != "" {
+				if c, err := client.New(hub, res.Token); err == nil {
+					ctx, cancel := context.WithTimeout(e.in.Ctx, 5*time.Second)
+					rt := api.Runtime{CLI: b.Harness}
+					if res.Agent.Runtime != nil {
+						rt = *res.Agent.Runtime
+					}
+					rt.Account = account
+					_ = c.ReportRuntime(ctx, rt)
+					cancel()
+				}
+			}
 			// Into the project as well: the joining is done either way, so a
 			// project it may not join is said, not failed.
 			projectErr := ""

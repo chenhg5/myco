@@ -55,7 +55,7 @@ func (s *Server) agentDTO(r *http.Request, a *domain.Agent) api.Agent {
 	out.Kind, out.MachineID = a.Kind(), a.MachineID
 	out.OwnerID, out.Owner = a.Owner, s.ownerName(a.Owner)
 	if rt := a.Runtime; rt != (domain.Runtime{}) {
-		out.Runtime = &api.Runtime{CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
+		out.Runtime = &api.Runtime{Account: s.visibleAccount(r, a), CLI: rt.CLI, CLIVersion: rt.CLIVersion, Model: rt.Model, ModelSource: rt.ModelSource, Access: rt.Access,
 			Provider: rt.Provider, ProviderSource: rt.ProviderSource, ProviderHost: rt.ProviderHost, Effort: rt.Effort, EffortSource: rt.EffortSource, MaxAccess: rt.MaxAccess, Quota: s.visibleQuota(r, a),
 			RunnerInstance: rt.RunnerInstance, RestartingUntil: rt.RestartingUntil, Features: rt.FeatureList(), Away: rt.Away, Env: rt.Env, Models: modelsDTO(rt.ModelList()), ModelsFrom: rt.ModelsFrom, ModelsAt: timePtr(rt.ModelsAt)}
 		if rt.RunnerSlots != "" {
@@ -340,4 +340,17 @@ func modelsAt(at *time.Time, models []api.RuntimeModel) time.Time {
 		return time.Time{}
 	}
 	return at.UTC()
+}
+
+// Account identity is visible only to its owner and workspace administrators.
+// Ordinary agent credentials cannot read it, even in a runtime-report reply.
+func (s *Server) visibleAccount(r *http.Request, a *domain.Agent) string {
+	if _, agent := r.Context().Value(callerAgentKey{}).(*domain.Agent); agent && superOf(r) == nil {
+		return ""
+	}
+	actor := s.actorOf(r)
+	if actor.Manages() || actor.Member != nil && a.Owner != "" && actor.Member.ID == a.Owner {
+		return a.Runtime.Account
+	}
+	return ""
 }
