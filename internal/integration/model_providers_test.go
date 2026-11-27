@@ -420,20 +420,43 @@ func TestModelProviderFromTheMacOntoAnAgentOnWSL(t *testing.T) {
 
 	// A machine whose myco cannot take a sealed provider: the agent is
 	// started without it, and gets it as soon as it has joined, before
-	// anything is sent to it.
+	// anything is sent to it. The node here is a current one, which reports
+	// sealed_spawn again whenever it reports anything (a run ending is
+	// enough): the hub hears its reports as an older node's, without it.
 	nodeCfg, err := config.Load(config.ProfilePath(filepath.Join(home, ".myco", "config.yaml"), "wsl-machine"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := h.client(nodeCfg.Token).ReportRuntime(c, api.Runtime{CLI: "machine", Features: []string{"usage"}}); err != nil {
+	older := func(r *http.Request) {
+		if r.Method != http.MethodPut || r.URL.Path != "/v1/me/runtime" || r.Header.Get("Authorization") != "Bearer "+nodeCfg.Token {
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		var rt map[string]any
+		if json.Unmarshal(body, &rt) == nil {
+			if fs, ok := rt["features"].([]any); ok {
+				rt["features"] = slices.DeleteFunc(fs, func(f any) bool { return f == "sealed_spawn" })
+				body, _ = json.Marshal(rt)
+			}
+		}
+		r.Body, r.ContentLength = io.NopCloser(bytes.NewReader(body)), int64(len(body))
+	}
+	h.rewrite.Store(&older)
+	if err := h.client(nodeCfg.Token).ReportRuntime(c, api.Runtime{CLI: "machine", Features: []string{"usage", "sealed_spawn"}}); err != nil {
 		t.Fatal(err)
 	}
+	if node, err := admin.GetAgent(c, "wsl-machine"); err != nil || node.Runtime == nil || slices.Contains(node.Runtime.Features, "sealed_spawn") {
+		t.Fatalf("the node still reads as one that takes a sealed provider: %v %+v", err, node.Runtime)
+	}
+	before := len(logLines(t, claudeLog))
 	code, m, raw = mac.do("POST", "/app/hubs/"+mac.hub+"/machines/"+mid+"/spawn", map[string]any{
 		"cli": "claude", "dir": filepath.Join(home, "proj"), "name": "mm2", "model": "MiniMax-M2", "provider": pid})
 	if code != 200 || m["agent"] != "wsl-mm2" {
 		t.Fatalf("spawn on an older machine: %d %s", code, raw)
 	}
-	if runs := logLines(t, claudeLog); strings.Contains(runs[len(runs)-1], vendor.URL) || !strings.Contains(runs[len(runs)-1], "model=MiniMax-M2") {
+	// its first turn (a new session) is the one line since
+	waitUntil(t, 30*time.Second, func() bool { return len(logLines(t, claudeLog)) > before })
+	if runs := logLines(t, claudeLog)[before:]; len(runs) != 1 || strings.Contains(runs[0], vendor.URL) || !strings.Contains(runs[0], "model=MiniMax-M2") || !strings.HasSuffix(runs[0], "resume=") {
 		t.Fatalf("an older machine's first turn got a provider it cannot take: %q", runs)
 	}
 	a, err = admin.GetAgent(c, "wsl-mm2")

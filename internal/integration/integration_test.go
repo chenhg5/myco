@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -46,6 +47,9 @@ type hub struct {
 	url string
 	srv *httptest.Server
 	h   *hubserver.Hub
+	// rewrite, when set, may change a request before the hub sees it
+	// (to play an older client that the test cannot run).
+	rewrite atomic.Pointer[func(*http.Request)]
 }
 
 func startHub(t *testing.T, db string, p app.MessagePolicy) *hub {
@@ -61,8 +65,14 @@ func startHub(t *testing.T, db string, p app.MessagePolicy) *hub {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(h.Handler)
-	x := &hub{t: t, db: db, url: srv.URL, srv: srv, h: h}
+	x := &hub{t: t, db: db, h: h}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if f := x.rewrite.Load(); f != nil {
+			(*f)(r)
+		}
+		h.Handler.ServeHTTP(w, r)
+	}))
+	x.url, x.srv = srv.URL, srv
 	t.Cleanup(x.stop)
 	return x
 }
