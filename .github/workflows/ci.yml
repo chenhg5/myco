@@ -337,6 +337,7 @@ jobs:
           path: |
             web/ui-smoke/flakes.json
             web/ui-smoke/timings.json
+            web/ui-smoke/*workflow-catalog-*.png
           retention-days: 7
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4

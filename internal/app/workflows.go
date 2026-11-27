@@ -238,9 +238,10 @@ func (s *WorkflowService) NameOf(ctx context.Context, id string) string {
 
 // WorkflowOut is a workflow with how its runs are going.
 type WorkflowOut struct {
-	Workflow *domain.Workflow
-	Active   int
-	LastRun  *domain.WorkflowRun
+	Workflow  *domain.Workflow
+	Active    int
+	RunCounts map[string]int
+	LastRun   *domain.WorkflowRun
 }
 
 // List returns the workflows the caller may see.
@@ -258,9 +259,12 @@ func (s *WorkflowService) List(ctx context.Context, c Caller) ([]*WorkflowOut, e
 		if runs, err := s.repo.ListRuns(ctx, domain.RunFilter{WorkflowID: w.ID, Limit: 1}); err == nil && len(runs) > 0 {
 			o.LastRun = runs[0]
 		}
-		if runs, err := s.repo.ListRuns(ctx, domain.RunFilter{WorkflowID: w.ID, Active: true}); err == nil {
-			o.Active = len(runs)
+		counts, err := s.repo.RunCounts(ctx, w.ID)
+		if err != nil {
+			return nil, err
 		}
+		o.RunCounts = counts
+		o.Active = counts["running"] + counts["waiting"]
 		out = append(out, o)
 	}
 	return out, nil
@@ -272,11 +276,11 @@ func (s *WorkflowService) Get(ctx context.Context, c Caller, ref string) (*Workf
 	if err != nil {
 		return nil, err
 	}
-	o := &WorkflowOut{Workflow: w}
-	if runs, err := s.repo.ListRuns(ctx, domain.RunFilter{WorkflowID: w.ID, Active: true}); err == nil {
-		o.Active = len(runs)
+	counts, err := s.repo.RunCounts(ctx, w.ID)
+	if err != nil {
+		return nil, err
 	}
-	return o, nil
+	return &WorkflowOut{Workflow: w, RunCounts: counts, Active: counts["running"] + counts["waiting"]}, nil
 }
 
 // SetEnabled turns a workflow on or off (off: it cannot be started).

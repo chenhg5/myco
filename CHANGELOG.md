@@ -4,6 +4,16 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.4
+
+- App: a short name people write for an agent (cloud-7 for cloud-7-claude-rmv6) now links like the full name, showing the agent's name and opening its chat, when the prefix is cut at a dash, contains a digit, belongs to that one agent and is no other agent's name.
+- App: pressing send while the previous message is still on its way is no longer lost — it is remembered and sent once that one goes through, if the box still says the same — and Edit and Withdraw wait while a message is on its way, so withdrawing one no longer lets a message still being sent go.
+
+**中文**
+
+- 桌面应用：人们给 agent 写的短名（cloud-7 指 cloud-7-claude-rmv6）现在和全名一样会变成链接、显示该 agent 的名字并可点开对话——前提是短名在短横线处截断、带数字，只属于这一个 agent，且不是别的 agent 的名字。
+- 桌面应用：上一条消息还在发送途中时再按发送不会再丢——会先记住，等那条发出后若输入框内容没变就补发；消息在途时编辑和撤回会暂时等待，撤回前一条也不再让还在发送的消息被丢掉。
+
 ## v0.23.3
 
 - CLI: a runner's first handshake with a Hub is now time-limited, so a Hub that does not answer no longer stalls startup indefinitely; once startup succeeds, runtime reporting and inbox polling keep running as before.

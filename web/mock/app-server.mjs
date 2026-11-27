@@ -3731,6 +3731,7 @@ const server = http.createServer(async (req, res) => {
       const view = (w, def) => ({ id: w.id, name: w.name, description: w.def.description, project: w.def.project, owner: "alice", version: w.version,
         enabled: w.enabled, steps: w.def.steps.length, created_at: w.created_at, updated_at: w.updated_at,
         active: wf.runs.filter((r) => r.workflow_id === w.id && (r.status === "running" || r.status === "waiting")).length,
+        run_counts: wf.runs.filter((r) => r.workflow_id === w.id).reduce((c, r) => { c.total++; c[r.status]++; return c; }, { total: 0, running: 0, waiting: 0, succeeded: 0, failed: 0, cancelled: 0 }),
         last_run: (() => { const r = wf.runs.find((x) => x.workflow_id === w.id); return r ? runView(r, false) : undefined; })(),
         ...(def ? { definition: w.def } : {}) });
       const runView = (r, full) => {

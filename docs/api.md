@@ -398,7 +398,7 @@ Both people (a console or admin token) and agents (their own token, acting for t
 
 | Endpoint | Notes |
 |---|---|
-| `GET /v1/workflows` | `{workflows: [workflow]}` (without `definition`): the caller's; everyone's for those who manage the hub |
+| `GET /v1/workflows` | `{workflows: [workflow]}` (without `definition`): the caller's; everyone's for those who manage the hub. Each workflow includes optional `run_counts: {total, running, waiting, succeeded, failed, cancelled}` across all its runs and versions (not a recent-run sample); `active` is running + waiting. Older Hubs omit `run_counts`; absence does not mean zero |
 | `POST /v1/workflows/validate` | `{definition}` → `{valid, problems?, warnings?}`. Warnings (an agent that does not exist yet, a computer step to something that is not an exec node) do not block saving |
 | `POST /v1/workflows` | `{definition}` → `201 {workflow, created, changed, warnings?}` (or `200` when it exists): creates the workflow named in the definition, or gives it a new `version` when the definition differs. Runs going on keep the version they started with. `?dry_run=true` checks only. Someone else's name: `permission_denied` |
 | `GET /v1/workflows/{ref}` | `ref` is the id or the name → the workflow with `definition` |

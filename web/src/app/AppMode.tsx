@@ -1554,7 +1554,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
 
         {page === "workflows" && hub && (
           <div className="app-scroll">
-            <WorkflowsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now} open={wfOpen} onOpened={() => setWfOpen(undefined)}
+            <WorkflowsPage key={`${hub.id}/${again}`} hubId={hub.id} rows={rows} now={now} projects={hubProjects.map((x) => x.p)} open={wfOpen} onOpened={() => setWfOpen(undefined)}
               onOpenMessage={(agent, message) => { const r = rows.find((x) => x.hub.id === hub.id && x.st.agent.name === agent); if (r) openAtMessage(r, message); }} />
           </div>
         )}

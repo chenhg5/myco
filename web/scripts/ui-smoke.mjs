@@ -6380,9 +6380,91 @@ async function runMatrix(browser, size, scheme) {
       if (!narrow && !(await badge.count())) throw new Error("工作流导航上应标出有几个决定在等你");
       await settle(page, 300);
       await shot(page, size, scheme, "workflows");
+      // The catalog keeps live runs visible even when a newer run completed,
+      // including after disabling the workflow. Counts are not a recent sample.
+      let catalogRows;
+      await page.route(empty, async (route) => {
+        if (route.request().method() !== "GET") return route.continue();
+        const response = await route.fetch();
+        const json = await response.json();
+        if (!catalogRows) {
+          const base = json.workflows[0];
+          const counts = { total: 1200, running: 1, waiting: 1, succeeded: 1100, failed: 90, cancelled: 8 };
+          const make = (id, title, enabled, active, run_counts, status, project) => ({ ...base, id, title, name: id, enabled, active, run_counts, project, last_run: status ? { ...base.last_run, status } : undefined });
+          catalogRows = [
+            make("wf_live_demo", "运行中的发布流程", false, 2, counts, "succeeded", "demo"),
+            make("wf_failed_demo", "失败的检查流程", true, 0, { ...counts, total: 1, running: 0, waiting: 0, succeeded: 0, failed: 1, cancelled: 0 }, "failed", "demo"),
+            make("wf_new_demo", "还没运行的流程", true, 0, { total: 0, running: 0, waiting: 0, succeeded: 0, failed: 0, cancelled: 0 }, undefined),
+          ];
+        }
+        await route.fulfill({ json: { workflows: catalogRows } });
+      });
+      const liveRow = list.locator(".au-row", { hasText: "运行中的发布流程" });
+      await liveRow.waitFor({ timeout: 12_000 });
+      if (!(await liveRow.locator("[data-testid=workflow-active]").innerText()).includes("2 次进行中")) throw new Error("较早且已停用的运行仍应显示进行中");
+      const tally = await liveRow.locator("[data-testid=workflow-counts]").innerText();
+      if (!tally.includes("1,200") || !tally.includes("1,100") || !tally.includes("90") || !tally.includes("8")) throw new Error("累计次数不能只数最近一页运行");
+      const filters = page.locator("[data-testid=workflow-filters]");
+      const chips = page.getByRole("group", { name: "工作流状态", exact: true });
+      await chips.getByRole("button", { name: /^进行中/ }).click();
+      if (await list.locator(".au-row").count() !== 1) throw new Error("进行中筛选应保留已停用但仍有活动运行的工作流");
+      await chips.getByRole("button", { name: /^等决定/ }).click();
+      if (await list.locator(".au-row").count() !== 1) throw new Error("等待决定计数应独立于最近成功记录");
+      await chips.getByRole("button", { name: /^最近失败/ }).click();
+      await list.locator(".au-row", { hasText: "失败的检查流程" }).waitFor();
+      await chips.getByRole("button", { name: /^未运行/ }).click();
+      await list.locator(".au-row", { hasText: "还没运行的流程" }).waitFor();
+      await chips.getByRole("button", { name: /^已停用/ }).click();
+      await liveRow.waitFor();
+      await chips.getByRole("button", { name: /^全部/ }).click();
+      await filters.getByRole("searchbox").fill("失败的检查");
+      if (await list.locator(".au-row").count() !== 1) throw new Error("工作流搜索应按名称过滤");
+      await filters.getByRole("searchbox").fill("");
+      await filters.getByLabel("工作流项目", { exact: true }).selectOption("!none");
+      await list.locator(".au-row", { hasText: "还没运行的流程" }).waitFor();
+      if (await list.locator(".au-row").count() !== 1) throw new Error("无项目筛选不应混入项目工作流");
+      await filters.getByLabel("工作流项目", { exact: true }).selectOption("");
+      await filters.getByLabel("工作流排序", { exact: true }).selectOption("active");
+      if (!(await list.locator(".au-row").first().innerText()).includes("运行中的发布流程")) throw new Error("进行中优先排序");
+      await shot(page, size, scheme, "workflow-catalog");
+      // Export this user-visible change in both languages at 2x, using a
+      // separate mock-only context so the suite's navigation stays untouched.
+      if (size.width === 1200) {
+        for (const language of ["zh", "en"]) {
+          const preview = await browser.newContext({ viewport: size, colorScheme: scheme, deviceScaleFactor: 2, storageState: await context.storageState() });
+          try {
+            await preview.addInitScript(({ language, scheme }) => { localStorage.setItem("myco-lang", language); localStorage.setItem("myco-theme", scheme); }, { language, scheme });
+            const capture = await preview.newPage();
+            const titles = ["Release pipeline", "Checks to investigate", "New workflow"];
+            const translated = catalogRows.map((w, i) => ({ ...w, title: language === "en" ? titles[i] : w.title, description: language === "en" ? "Create, review and deliver with your agents." : "让 agent 协作完成编写、审查和交付。", last_run: w.last_run ? { ...w.last_run, inputs: { task: language === "en" ? "Export conversations from Settings" : "设置页加一个导出对话按钮" } } : undefined }));
+            await capture.route(empty, (r) => r.fulfill({ json: { workflows: translated } }));
+            await capture.route(/\/app\/hubs\/[^/]+\/workflow-decisions$/, (r) => r.fulfill({ json: { decisions: [] } }));
+            const previewURL = new URL(page.url()); previewURL.searchParams.set("lang", language);
+            await capture.goto(previewURL.href);
+            await capture.locator(".app-shell").waitFor();
+            await go(capture, "工作流", false);
+            await capture.locator("[data-testid=workflow-counts]").first().waitFor();
+            await capture.getByRole("searchbox", { name: language === "en" ? "Search workflows" : "搜索工作流" }).waitFor();
+            await shot(capture, size, scheme, `workflow-catalog-${language}`);
+          } finally { await preview.close(); }
+        }
+      }
+
+      await filters.getByRole("searchbox").fill("no-such-workflow");
+      await page.locator("[data-testid=workflows-no-results]").waitFor();
+      await page.getByRole("button", { name: "清除筛选", exact: true }).click();
+      await liveRow.waitFor();
+      // Older Hubs have no counters. Never turn missing data into zero runs.
+      catalogRows = [{ ...catalogRows[0], run_counts: undefined }];
+      await page.getByText("累计统计暂不可用", { exact: true }).waitFor({ timeout: 12_000 });
+      const overview = await page.locator("[data-testid=workflow-overview]").innerText();
+      if (!overview.includes("升级工作区") || !overview.includes("—")) throw new Error("旧工作区应明确累计统计未知");
+      await page.unroute(empty);
+      await liveRow.waitFor({ state: "detached", timeout: 12_000 });
+      await list.locator(".au-row", { hasText: "写-审-改" }).waitFor();
       // A ready-made one (新建工作流 offers them): pick who does what, see it drawn, save it.
       if (await page.locator(".wf-row-last").count() < 1) throw new Error("每个工作流应写出最近一次运行");
-      if (!(await list.locator(".au-row", { hasText: "写-审-改" }).getByRole("button", { name: "运行" }).isVisible())) throw new Error("每行应有看得见的「运行」");
+      if (!(await list.locator(".au-row", { hasText: "写-审-改" }).getByRole("button", { name: "运行", exact: true }).isVisible())) throw new Error("每行应有看得见的「运行」");
       if (await page.locator(".pc > [data-testid=workflow-templates]").count()) throw new Error("有工作流时列表页不该再列一遍模板");
       await clickVisible(page, page.locator(".ph").getByRole("button", { name: "新建工作流" }));
       await page.locator("[data-testid=workflow-new]").waitFor({ timeout: 10_000 });
@@ -6409,7 +6491,7 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, det.locator("[data-testid=workflow-tabs]").getByRole("tab", { name: /运行记录/ }));
       await det.locator("[data-testid=workflow-no-runs]").waitFor({ timeout: 10_000 });
       // Run it: the form asks for what it takes; the run opens at once.
-      await clickVisible(page, det.locator(".pcd-head").getByRole("button", { name: "运行" }));
+      await clickVisible(page, det.locator(".pcd-head").getByRole("button", { name: "运行", exact: true }));
       const form = page.locator("[data-testid=workflow-start]");
       await form.waitFor({ timeout: 10_000 });
       if (!(await form.getByRole("button", { name: "开始运行" }).isDisabled())) throw new Error("没填要改什么时不该能开始");

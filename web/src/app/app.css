@@ -10694,3 +10694,20 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .md a.md-agent { color: var(--accent); text-decoration: none; cursor: pointer; border-radius: 4px; }
 .md a.md-agent:hover { text-decoration: underline; text-underline-offset: 2px; }
 .md a.md-agent:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Workflow catalog: live state is independent of the latest run. */
+.wf-catalog-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.wf-catalog-note { margin: 8px 0 12px; color: var(--muted); font-size: 11.5px; }
+.wf-catalog-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.wf-catalog-search { position: relative; flex: 1 1 240px; min-width: 0; }
+.wf-catalog-search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
+.wf-catalog-search .app-input { width: 100%; padding-left: 32px; }
+.wf-catalog-tools > select { flex: 0 1 160px; width: auto; min-width: 0; }
+.wf-row-counts { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 3px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wf-row-counts .is-bad { color: var(--red); }
+@media (max-width: 900px) {
+  .wf-catalog-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wf-catalog-stats .au-stat:last-child { grid-column: auto; }
+  .wf-catalog-search { flex-basis: 100%; }
+  .wf-catalog-tools > select { flex: 1; }
+}

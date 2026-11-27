@@ -1243,7 +1243,7 @@ export const appApi = {
   automationRun: (hubId: string, id: string, run: string) => request<AutomationRun>("GET", `app/hubs/${enc(hubId)}/automations/${enc(id)}/runs/${enc(run)}`),
   runAutomation: (hubId: string, id: string) => request<AutomationRun>("POST", `app/hubs/${enc(hubId)}/automations/${enc(id)}/run`, {}),
   // Workflows (hubs from v0.21; older ones answer 404)
-  workflows: (hubId: string) => request<{ workflows: Workflow[] }>("GET", `app/hubs/${enc(hubId)}/workflows`),
+  workflows: (hubId: string, signal?: AbortSignal) => request<{ workflows: Workflow[] }>("GET", `app/hubs/${enc(hubId)}/workflows`, undefined, signal),
   workflow: (hubId: string, ref: string) => request<Workflow>("GET", `app/hubs/${enc(hubId)}/workflows/${enc(ref)}`),
   applyWorkflow: (hubId: string, definition: WorkflowDef) => request<WorkflowApplyResponse>("POST", `app/hubs/${enc(hubId)}/workflows`, { definition }),
   validateWorkflow: (hubId: string, definition: WorkflowDef) => request<WorkflowCheck>("POST", `app/hubs/${enc(hubId)}/workflows/validate`, { definition }),
@@ -1264,7 +1264,7 @@ export const appApi = {
   retryWorkflowRun: (hubId: string, id: string, from?: string) => request<WorkflowRun>("POST", `app/hubs/${enc(hubId)}/workflow-runs/${enc(id)}/retry`, from ? { from } : {}),
   decideWorkflowRun: (hubId: string, id: string, step: string, choice: string, note?: string) =>
     request<WorkflowRun>("POST", `app/hubs/${enc(hubId)}/workflow-runs/${enc(id)}/decide`, { step, choice, ...(note ? { note } : {}) }),
-  workflowDecisions: (hubId: string) => request<{ decisions: WorkflowDecision[] }>("GET", `app/hubs/${enc(hubId)}/workflow-decisions`),
+  workflowDecisions: (hubId: string, signal?: AbortSignal) => request<{ decisions: WorkflowDecision[] }>("GET", `app/hubs/${enc(hubId)}/workflow-decisions`, undefined, signal),
   /** hubs from v0.21.1: your superagent, and what it asks you to approve */
   superagent: (hubId: string) => request<SuperagentState>("GET", `app/hubs/${enc(hubId)}/superagent`),
   setSuperagent: (hubId: string, agent: string) => request<SuperagentState>("PUT", `app/hubs/${enc(hubId)}/superagent`, { agent }),
