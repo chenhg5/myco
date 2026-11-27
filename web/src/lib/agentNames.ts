@@ -30,6 +30,30 @@ export function linkableName(name: string): boolean {
   return name.length >= 3 && /[-_0-9]/.test(name) && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name);
 }
 
+/** Short names people write for an agent: a prefix of its own name cut at
+ *  a dash (cloud-7 for cloud-7-claude-rmv6), with a digit in it, that is
+ *  no other agent's name and starts no other agent's name. By short name,
+ *  the full one. */
+const aliasCache = new WeakMap<Map<string, string>, Map<string, string>>();
+export function shortNames(names: Map<string, string>): Map<string, string> {
+  const had = aliasCache.get(names);
+  if (had) return had;
+  const count = new Map<string, string[]>();
+  for (const name of names.keys()) {
+    const parts = name.split("-");
+    for (let k = 2; k < parts.length; k++) {
+      const p = parts.slice(0, k).join("-");
+      count.set(p, [...(count.get(p) || []), name]);
+    }
+  }
+  const out = new Map<string, string>();
+  for (const [p, owners] of count) {
+    if (owners.length === 1 && !names.has(p) && /\d/.test(p) && linkableName(p)) out.set(p, owners[0]);
+  }
+  aliasCache.set(names, out);
+  return out;
+}
+
 const SKIP = new Set(["A", "CODE", "PRE", "KBD", "BUTTON", "TEXTAREA", "SCRIPT", "STYLE", "SVG"]);
 
 /** The HTML with each agent name in its text (not in code, links, paths
@@ -37,7 +61,8 @@ const SKIP = new Set(["A", "CODE", "PRE", "KBD", "BUTTON", "TEXTAREA", "SCRIPT",
  *  hover. "@cloud-7" goes the same way. */
 export function linkAgentNames(html: string, an: AgentNames | null): string {
   if (!an || !an.names.size || typeof document === "undefined") return html;
-  const list = [...an.names.keys()].filter(linkableName).sort((a, b) => b.length - a.length);
+  const short = shortNames(an.names);
+  const list = [...an.names.keys(), ...short.keys()].filter(linkableName).sort((a, b) => b.length - a.length);
   if (!list.length || !list.some((n) => html.includes(n))) return html;
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   // (not inside a word, a path, an address or @console:x; a full stop
@@ -63,7 +88,7 @@ export function linkAgentNames(html: string, an: AgentNames | null): string {
     for (const m of s.matchAll(re)) {
       const start = m.index ?? 0;
       if (start > at) frag.append(s.slice(at, start));
-      const name = m[1];
+      const name = an.names.has(m[1]) ? m[1] : short.get(m[1]) || m[1];
       const a = document.createElement("a");
       a.className = "md-agent";
       a.setAttribute("role", "link");
