@@ -279,6 +279,7 @@ Other ways to connect:
 | Doc | What it covers |
 |---|---|
 | [INSTALL.md](INSTALL.md) | Hub deployment, join links and per-agent setup |
+| [docs/model-providers.md](docs/model-providers.md) | Your own vendor API keys, picked when you add an agent on any of your computers |
 | [docs/guide-claude-ai.md](docs/guide-claude-ai.md) | Step by step with screenshots: install the app, connect your claude.ai agent, direct it from your phone |
 | [docs/apps.md](docs/apps.md) | Every app, with screenshots |
 | [docs/architecture.md](docs/architecture.md) | Concepts, message state machine, runner behavior and code layout |
