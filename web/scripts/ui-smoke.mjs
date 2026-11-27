@@ -4676,6 +4676,83 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
+    // A click on a queued row's Edit works the first time, even while the
+    // message is still on its way to the hub (a slow workspace) and the
+    // input box has the focus: it waits for the message, then takes it back
+    // into the box. Withdraw the same. (A real mouse click: a greyed-out
+    // button would swallow it, as it did before.)
+    await step("单聊 · 排队一行点一次就编辑", async () => {
+      await openMember(page, narrow, "聊天", "Review (Codex 云端)");
+      await noRound(page);
+      const box = page.locator(".conv-detail .conv-compose-input");
+      const rows = page.locator(".conv-detail .conv-queue-row");
+      const slowNext = async (ms) => {
+        const r = await fetch(`http://${HOST}:${mockPort()}/app/mock/message-delay`, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ms }),
+        });
+        if (!r.ok) throw new Error(`没能让下一条消息慢下来：HTTP ${r.status}`);
+      };
+      // This round is ended by the step (handFinished), also on the way out
+      // of a failed try: the retry then finds the chat free.
+      const task = "这条先跑着";
+      let taskId = null;
+      const finish = async () => {
+        if (!taskId) return false;
+        const r = await fetch(`http://${HOST}:${mockPort()}/app/mock/finish`, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: taskId }),
+        }).catch(() => null);
+        const ok = !!r?.ok;
+        taskId = null;
+        return ok;
+      };
+      try {
+        await box.fill(task);
+        await box.press("Enter");
+        await page.locator(".conv-msg.is-me", { hasText: task }).last().waitFor({ timeout: 20_000 });
+        taskId = await page.locator(".conv-detail .conv-msg.is-me[data-msg]", { hasText: task }).last().getAttribute("data-msg");
+        await page.waitForFunction(() => /排到下一条/.test(document.querySelector(".conv-detail .conv-compose-input")?.getAttribute("placeholder") || ""), null, { timeout: 20_000 });
+        // Edit: one click while the message is on its way, the box focused.
+        const editText = "点一次就编辑";
+        await slowNext(1500);
+        await box.fill(editText);
+        await box.press(NEXT_KEY);
+        await rows.first().waitFor({ timeout: 10_000 });
+        const onItsWay = await rows.first().getAttribute("data-queue-row");
+        if (onItsWay !== "pending") throw new Error(`排队的那条应还在去工作区的路上（data-queue-row=pending），实际「${onItsWay}」`);
+        if (!(await page.evaluate(() => document.activeElement?.classList.contains("conv-compose-input")))) throw new Error("点之前输入框应有焦点");
+        const edit = rows.first().getByRole("button", { name: "编辑" });
+        const editAt = await edit.boundingBox();
+        if (!editAt) throw new Error("找不到排队行的「编辑」");
+        await page.mouse.click(editAt.x + editAt.width / 2, editAt.y + editAt.height / 2);
+        await page.waitForFunction((t) => {
+          const input = document.querySelector(".conv-detail .conv-compose-input");
+          return input?.value === t && document.querySelectorAll(".conv-detail .conv-queue-row").length === 0;
+        }, editText, { timeout: 15_000 });
+        if ((await box.inputValue()) !== editText) throw new Error(`点一次「编辑」应把内容放回输入框，实际「${await box.inputValue()}」`);
+        if (!(await page.evaluate(() => document.activeElement?.classList.contains("conv-compose-input")))) throw new Error("编辑之后输入框应获得焦点");
+        // Withdraw: one click, also while it is on its way.
+        const dropText = "点一次就撤回";
+        await slowNext(1500);
+        await box.fill(dropText);
+        await box.press(NEXT_KEY);
+        await rows.first().waitFor({ timeout: 10_000 });
+        const withdraw = rows.first().getByRole("button", { name: "撤回" });
+        const withdrawAt = await withdraw.boundingBox();
+        if (!withdrawAt) throw new Error("找不到排队行的「撤回」");
+        await page.mouse.click(withdrawAt.x + withdrawAt.width / 2, withdrawAt.y + withdrawAt.height / 2);
+        await page.waitForFunction(() => document.querySelectorAll(".conv-detail .conv-queue-row").length === 0, null, { timeout: 15_000 });
+        await page.waitForTimeout(500);
+        if (await page.locator(".conv-msg.is-me", { hasText: dropText }).count()) throw new Error("点一次「撤回」之后，排队的消息不该发出");
+        await settle(page, 300);
+        await shot(page, size, scheme, "conversation-queue-once");
+        // No queue is left, so ending this round sends nothing.
+        if (!(await finish())) throw new Error(`没能让「${task}」那一轮结束`);
+        await clickVisible(page, page.locator(".conv-head button").first());
+      } finally {
+        await finish();
+      }
+    });
+
     // Two queued behind a round go out one after another, each after the
     // answer before it (not both at once, not in the middle); taking out
     // the first does not let the second go early. ↑ / ↓ from an empty box

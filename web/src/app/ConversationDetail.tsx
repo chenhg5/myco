@@ -444,6 +444,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // (One put after the running round, ⌘↩, shows in the queue above the box
   // at once instead: it is queued, not sending.)
   const [pending, setPending] = useState<{ body: string; files: { id: string; name: string; size: number; preview?: string }[]; queued?: boolean; at?: number } | null>(null);
+  // The queued message the hub just took: a click on its row while it is
+  // still on its way acts on that one once it is there (a files-only
+  // message is worded differently once sent, so its words do not find it).
+  const queuedLanded = useRef<Message | null>(null);
   // Files going with the next message (pasted, dropped or picked).
   const att = useAttachments(target.hubId, draftKey);
   // Messages put after the running one, while the workspace cannot hold
@@ -961,6 +965,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const hiddenMessage = (m: Message): boolean => withdrawn.has(m.id) || afterOpen(m) || neverSent(m) || hiddenIds.has(m.id)
     || ((m.type === "progress" || m.type === "steer") && !!m.reply_to && hiddenIds.has(m.reply_to));
   const hubQueue = (messages || []).filter((m) => afterOpen(m) && !withdrawn.has(m.id));
+  // What unqueue re-chains from: awaited queue actions act on the latest
+  // list, not the one of the click (a message may have landed meanwhile).
+  const hubQueueRef = useRef(hubQueue);
+  hubQueueRef.current = hubQueue;
 
   // Everything shown: in the exchange view, older pages before the newest.
   const alsoSet = new Set(others || []);
@@ -1681,6 +1689,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         if (queueOnHub) {
           // Behind the last one already waiting: they go one after another.
           m = await sendNew(threadId, hubQueue[hubQueue.length - 1]?.id || openTask!.id);
+          queuedLanded.current = m;
         } else {
           // This hub cannot hold it: keep it here and send it when the
           // round ends (queued.ts).
@@ -1732,10 +1741,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (draft.trim() === sendLater.text) void send(sendLater.mode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sending, sendLater]);
-  // While a message is on its way into the queue (or waits to go), the
-  // queue's rows are not changed: taking one out needs all of them on the
-  // hub, or one still on its way would be let go behind it.
-  const queueSettling = sending || !!sendLater;
+  // A queue row's buttons stay usable while a message is on its way: a
+  // click waits for it, then acts. Taking one out re-chains those behind it
+  // from what is on the hub, and one still on its way has no id to take out
+  // yet (once it is there, it does).
+  const queueWaiters = useRef<(() => void)[]>([]);
+  const queueSettled = () => (sending || sendLater)
+    ? new Promise<void>((resolve) => { queueWaiters.current.push(resolve); })
+    : Promise.resolve();
+  useEffect(() => {
+    if (sending || sendLater) return;
+    const waiters = queueWaiters.current;
+    queueWaiters.current = [];
+    waiters.forEach((resolve) => resolve());
+  }, [sending, sendLater]);
   /** A message of yours with this text, sent since then, if the hub has it. */
   const landed = async (body: string, since: number): Promise<Message | null> => {
     await new Promise((r) => setTimeout(r, 1500));
@@ -1935,9 +1954,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const queueRows: QueueItem[] = [
     ...localQueue.map((q) => ({ key: q.id, body: q.body, local: q })),
     ...hubQueue.map((m) => ({ key: m.id, body: m.body, server: m })),
-    // (on its way to the hub's queue: in it at once, its buttons once it is there)
+    // (on its way to the hub's queue: in it at once; a click on its buttons
+    // waits until it is there, then acts)
     ...(pending?.queued ? [{ key: "pending", body: pending.body || pending.files.map((f) => f.name).join("、"), sending: true }] : []),
   ];
+  const queueRowsRef = useRef(queueRows);
+  queueRowsRef.current = queueRows;
+  // One row acted on at a time: two take-outs re-chain the same messages.
+  const queueActing = useRef(false);
+  // The row a click meant, once anything on its way is through: a row that
+  // was still on its way is the hub's copy now (same words), with an id.
+  const queueRowNow = (item: QueueItem): QueueItem | undefined => {
+    if (item.sending && queuedLanded.current) {
+      const landed = queueRowsRef.current.find((r) => r.key === queuedLanded.current!.id);
+      if (landed) return landed;
+    }
+    return queueRowsRef.current.find((r) => r.key === item.key)
+      ?? [...queueRowsRef.current].reverse().find((r) => !!r.server && r.body === item.body);
+  };
   const dropLocal = (id: string) => {
     writeQueue(localQueue.filter((x) => x.id !== id));
     setFlushStalled(false);
@@ -1948,7 +1982,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const unqueue = async (gone: Message) => {
     const chain: Message[] = [];
     for (let cur = gone.id; ;) {
-      const next = hubQueue.find((x) => x.after === cur);
+      const next = hubQueueRef.current.find((x) => x.after === cur);
       if (!next || chain.includes(next)) break;
       chain.push(next);
       cur = next.id;
@@ -1971,13 +2005,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const withdrawQueueItem = async (item: QueueItem) => {
     setQueueError(null);
     if (item.local) { dropLocal(item.local.id); return; }
-    if (!item.server || queueBusy) return;
+    if (queueActing.current) return;
+    queueActing.current = true;
     setQueueBusy(item.key);
     try {
-      await unqueue(item.server);
+      let row = item;
+      if (sending || sendLater) {
+        await queueSettled();
+        row = queueRowNow(item) || item;
+        if (row !== item) setQueueBusy(row.key);
+      }
+      if (row.server) await unqueue(row.server);
     } catch (e) {
       setQueueError(e);
     } finally {
+      queueActing.current = false;
       setQueueBusy(null);
     }
   };
@@ -1994,13 +2036,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       inputRef.current?.focus();
       return;
     }
-    if (!item.server || queueBusy) return;
+    if (queueActing.current) return;
+    queueActing.current = true;
     setQueueError(null);
     setQueueBusy(item.key);
     try {
-      await unqueue(item.server);
-      const files = item.server.attachments || [];
-      writeDraft(filesOnly(item.body, files.length) ? "" : item.body);
+      let row = item;
+      if (sending || sendLater) {
+        await queueSettled();
+        row = queueRowNow(item) || item;
+        if (row !== item) setQueueBusy(row.key);
+      }
+      if (!row.server) return;
+      await unqueue(row.server);
+      const files = row.server.attachments || [];
+      writeDraft(filesOnly(row.body, files.length) ? "" : row.body);
       att.restore(files.map((a) => ({
         id: a.file_id, name: a.name, size: a.size,
         preview: /^image\//.test(a.content_type || "") ? appApi.attachmentUrl(target.hubId, a.file_id) : undefined,
@@ -2009,6 +2059,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     } catch (e) {
       setQueueError(e);
     } finally {
+      queueActing.current = false;
       setQueueBusy(null);
     }
   };
@@ -2860,11 +2911,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                   <span className="conv-queue-label">{L("排队中：", "Queued: ")}</span>
                   {item.body.split("\n")[0].trim() || L("（附件）", "(files)")}
                 </span>
-                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key || item.sending || queueSettling}
+                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key}
                   onClick={(e) => { e.stopPropagation(); void editQueueItem(item); }}>
                   {L("编辑", "Edit")}
                 </button>
-                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key || item.sending || queueSettling}
+                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key}
                   onClick={(e) => { e.stopPropagation(); void withdrawQueueItem(item); }}>
                   {L("撤回", "Withdraw")}
                 </button>

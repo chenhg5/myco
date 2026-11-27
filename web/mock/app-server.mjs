@@ -1275,7 +1275,7 @@ const heldForOther = makeMessage({
 // Tasks the UI smoke ends itself (POST /app/mock/finish {id}), when it has
 // done what it does while they run ("单聊 · 排队依次发"): a slow runner
 // cannot let the mock's own clock end them first.
-const handFinished = new Set(["先列一下要改的页面", "第一条排队：改首页标题"]);
+const handFinished = new Set(["先列一下要改的页面", "第一条排队：改首页标题", "这条先跑着"]);
 const finishers = new Map();
 
 function scheduleReply(hub, threadId, agent, taskId, restart = false) {
@@ -2120,6 +2120,9 @@ function rawBody(req) {
 }
 
 const cacheStore = new Map(); // key -> {key, hub, data}, oldest first
+// /app/mock/message-delay: the next message takes this long to reach the
+// hub (a slow workspace, for the UI smoke).
+let nextMessageDelay = 0;
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
@@ -2130,6 +2133,11 @@ const server = http.createServer(async (req, res) => {
   // MOCK_DELAY=ms: answers about a hub take this long (a hub far away).
   if (process.env.MOCK_DELAY && parts[1] === "hubs" && parts.length > 3) {
     await new Promise((r) => setTimeout(r, Number(process.env.MOCK_DELAY)));
+  }
+  if (nextMessageDelay && method === "POST" && parts[1] === "hubs" && parts[3] === "messages") {
+    const ms = nextMessageDelay;
+    nextMessageDelay = 0;
+    await new Promise((r) => setTimeout(r, ms));
   }
 
   // /app/pending-link — a link the App was opened with, read once.
@@ -2153,6 +2161,13 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { path: `/Users/alice/Downloads/${b.name}` });
   }
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "last-export" && method === "GET") return send(res, 200, state.lastExport || {});
+  // /app/mock/message-delay — the next message takes this long to reach the
+  // hub: the UI smoke clicks its queued row while it is on its way.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "message-delay" && parts.length === 3 && method === "POST") {
+    const body = await readBody(req);
+    nextMessageDelay = Math.max(0, Number(body?.ms) || 0);
+    return send(res, 200, { ms: nextMessageDelay });
+  }
   // /app/mock/finish — answers a task the UI smoke ends itself (handFinished).
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "finish" && method === "POST") {
     const body = await readBody(req);
