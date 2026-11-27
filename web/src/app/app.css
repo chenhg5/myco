@@ -1584,6 +1584,9 @@ textarea.app-input {
 /* The words under a dialog's title stand apart from what follows (a field,
    a list, a note): 14px at least, whatever comes next. */
 .app-modal > p { margin-bottom: 14px; }
+/* A dialog with no words under its title (they are there for screen
+   readers only): what follows keeps the same distance from the title. */
+.app-modal > h3:has(+ .app-sr-only) { margin-bottom: 14px; }
 .app-modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -3636,6 +3639,11 @@ textarea.app-input {
   padding-top: 1px;
   white-space: nowrap;
   pointer-events: none;
+}
+/* The last message, yours: room under it for its floating time and
+   buttons, before the box or the read-only note at the foot. */
+.conv-timeline > .conv-msg.is-me:last-child {
+  margin-bottom: 18px;
 }
 /* What comes right after your bubble in the middle or across the chat (a
    handoff card, a line saying what ended) keeps clear of that floating

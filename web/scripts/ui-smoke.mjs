@@ -1878,6 +1878,21 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "project-member-handoffs");
       await clickVisible(page, note);
       await right.locator(".conv-head h2", { hasText: "PM" }).waitFor({ timeout: 10_000 });
+      // Their exchange, read-only: the last message's time (shown with the
+      // pointer on it) keeps clear of the note at the foot.
+      const lastMine = right.locator(".conv-timeline > .conv-msg.is-me:last-child");
+      if (await lastMine.count()) {
+        await lastMine.locator(".conv-bubble").first().hover();
+        await settle(page, 250);
+        const foot = await right.evaluate((el) => {
+          const meta = el.querySelector(".conv-timeline > .conv-msg.is-me:last-child .conv-msg-meta");
+          const below = el.querySelector(".conv-observe");
+          return meta && below ? Math.round(below.getBoundingClientRect().top - meta.getBoundingClientRect().bottom) : null;
+        });
+        if (foot !== null && foot < 8) throw new Error(`最后一条消息的时间行离下面太近：${foot}px`);
+        await shot(page, size, scheme, "project-exchange-foot");
+        await page.mouse.move(0, 0);
+      }
       await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
@@ -2354,6 +2369,25 @@ async function runMatrix(browser, size, scheme) {
       await memory.getByText("首页截图统一 2x").waitFor({ timeout: 10_000 });
       await settle(page);
       await shot(page, size, scheme, "project-notes");
+      // A dialog with no words under its title: what follows stands apart
+      // from the title (项目设置: its choices).
+      const settingsBtn = page.locator(".app-page").getByRole("button", { name: "项目设置" }).first();
+      if (await settingsBtn.count()) {
+        await clickVisible(page, settingsBtn);
+        const dlg = page.getByRole("dialog", { name: "项目设置" });
+        await dlg.waitFor({ timeout: 5_000 });
+        const gap = await dlg.evaluate((el) => {
+          const h = el.querySelector(":scope > h3");
+          let next = h?.nextElementSibling;
+          while (next && (next.classList.contains("app-sr-only") || getComputedStyle(next).position === "absolute")) next = next.nextElementSibling;
+          return h && next ? Math.round(next.getBoundingClientRect().top - h.getBoundingClientRect().bottom) : null;
+        });
+        if (gap === null || gap < 12) throw new Error(`弹框标题和下面的内容应隔开至少 12px，实际 ${gap}px`);
+        await settle(page, 200);
+        await shot(page, size, scheme, "project-settings-dialog");
+        await page.keyboard.press("Escape");
+        await dlg.waitFor({ state: "hidden", timeout: 5_000 });
+      }
       await navBackClick(page);
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
@@ -3120,6 +3154,18 @@ async function runMatrix(browser, size, scheme) {
       if (!text.includes("~/code/review-cloud/x")) throw new Error(`路径里的名字不该替换，实际「${text}」`);
       if ((await bubble.locator("code").innerText()) !== "review-cloud") throw new Error("代码里的名字不该替换");
       if (text.includes("@pm-codex") || text.includes("@PM")) throw new Error(`@名字应整个换成链接，实际「${text}」`);
+      // (the last message, yours: its time, shown with the pointer on it,
+      // keeps clear of what is below)
+      if (await page.locator(`.conv-timeline > .conv-msg.is-me:last-child[data-msg="${note.id}"]`).count()) {
+        await bubble.locator(".conv-bubble").first().hover();
+        await settle(page, 250);
+        const foot = await bubble.evaluate((el) => {
+          const meta = el.querySelector(".conv-msg-meta");
+          const below = el.closest(".conv-detail")?.querySelector(".conv-compose, .conv-observe");
+          return meta && below ? Math.round(below.getBoundingClientRect().top - meta.getBoundingClientRect().bottom) : null;
+        });
+        if (foot !== null && foot < 8) throw new Error(`最后一条消息的时间行离下面太近：${foot}px`);
+      }
       await settle(page, 200);
       await shot(page, size, scheme, "chat-agent-name-links");
       await links.first().click();
