@@ -32,6 +32,9 @@ members. Fixtures include team and private agents, a shared project and private
 projects. Initial and final probes verify device ownership and, when there are
 at least three users, cross-member private-resource denial. The recent-list
 workload rotates through thread, node/pair, project and ownership filters.
+The recent-operation suffixes identify those variants: `[0]` ungrouped threads,
+`[1]` pairs involving the caller, `[2]` other pairs, `[3]` the shared project,
+`[4]` the caller's private project and `[5]` the ownership filter.
 
 Each user tier and repetition gets its own Hub process and database. The tool
 creates identities through the real API, stops the Hub, seeds closed historical
@@ -100,7 +103,8 @@ child; parent pipe EOF also shuts the child down.
   scheduling lag, errors, SLO failures, database sizes and permission checks.
 - `users-NNN-run-NN/report.json`: the individual report, including partial runs.
 - `progress.json`: current phase and cumulative counters, updated every five
-  seconds during a tier.
+  seconds during a tier. The final `unfinished` count is computed at run end;
+  current outstanding tasks are `scheduled - completed - failed`.
 - `samples.jsonl`: UTC-stamped client interval histograms, server perf snapshots,
   active polls, database/WAL size, and Linux process/system/disk samples.
 - `hub.log`: structured server logs, including SQL/COMMIT and request warnings.
@@ -127,7 +131,8 @@ use client phase counters and exact timestamps for comparison.
 
 The first version tests one workspace over local HTTP. It does not cover TLS,
 reverse proxies, independent load hosts, multiple workspaces, attachments,
-workflow/automation bursts, simultaneous reconnect storms or a two-hour soak.
+workflow/automation bursts, dedicated exec-node fixtures, simultaneous reconnect
+storms or a two-hour soak.
 It also does not instrument HTTP payload byte counts or generate a production
 capacity guarantee. Those scenarios require separate follow-up measurements.
 Retain the hardware, seed, traffic schedule, build SHA and limitations with every
