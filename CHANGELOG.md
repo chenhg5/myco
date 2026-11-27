@@ -4,6 +4,32 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.8
+
+Brief release notes, generated from commit titles. Formal notes will follow.
+- CLI: ` Publish machine health without racing runtime discovery ` (5b57ff22)
+- App, CLI, Hub: ` Preserve current ownership and transport behavior during process health integration ` (b2e0c6af)
+- App, Runner, CLI, Hub: ` Contain runner processes and expose verified machine health controls ` (67e04a2d)
+- App: ` Hide offline computers in the Add agent dialog ` (ac8d612d)
+- App: ` App: adding a model provider picks the vendor from a select ` (cf6cf4ce)
+- App: ` App: the mic and Send stay inside a narrow box you write in ` (781789e2)
+- App: ` Observe delayed first-character rendering in latency diagnostics ` (7b904063)
+- App, Runner, CLI, Hub: ` Measure message startup and first-text delivery stages ` (b892ba85)
+
+**中文**
+
+简要说明，直接列出提交原标题；正式说明稍后补充。
+- 命令行：` Publish machine health without racing runtime discovery ` (5b57ff22)
+- 桌面应用、命令行、Hub：` Preserve current ownership and transport behavior during process health integration ` (b2e0c6af)
+- 桌面应用、任务执行器、命令行、Hub：` Contain runner processes and expose verified machine health controls ` (67e04a2d)
+- 桌面应用：` Hide offline computers in the Add agent dialog ` (ac8d612d)
+- 桌面应用：` App: adding a model provider picks the vendor from a select ` (cf6cf4ce)
+- 桌面应用：` App: the mic and Send stay inside a narrow box you write in ` (781789e2)
+- 桌面应用：` Observe delayed first-character rendering in latency diagnostics ` (7b904063)
+- 桌面应用、任务执行器、命令行、Hub：` Measure message startup and first-text delivery stages ` (b892ba85)
+
+https://github.com/myco-ai/myco/compare/06f778050761ab1cf9f59c6a4ffb30e94f40b228...5b57ff228dd2c937554217dd490b4dcb69ef44c3
+
 ## v0.23.7
 
 - App and CLI: each chat-app bot can have its own instructions for the front desk, separate from voice chats — how it should talk, what it may answer and what it must not do — written under Instructions next to the bot, or read from a file with `myco im set --prompt-file` (an empty file clears them); at most 8000 characters, and work handed over for anyone other than the owner carries them too. They guide the model without being a permission boundary — someone may talk the model past them.
