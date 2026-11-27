@@ -1,7 +1,7 @@
 VERSION ?= $(shell sh scripts/build-version.sh)
 LDFLAGS := -s -w -X github.com/myco-ai/myco/internal/cli.Version=$(VERSION)
 
-.PHONY: build test test-integration smoke check vet cross clean web prepare-apps app
+.PHONY: build test test-integration smoke check vet cross clean web prepare-apps app coord-eval
 
 build: prepare-apps
 	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS)' -o bin/myco ./cmd/myco
@@ -17,6 +17,14 @@ test-integration:
 # Build the real binary and drive it end to end as separate processes (scripts/smoke.sh).
 smoke: build
 	MYCO_BIN=$(CURDIR)/bin/myco scripts/smoke.sh
+
+# The coordination test against a real Claude Code or Codex session
+# (internal/coordeval, docs/coord-eval.md). It spends tokens: not in CI.
+# make coord-eval CLI=claude|codex [COORD_EVAL_FLAGS="-scenario priority -unit 10s"]
+CLI ?= claude
+coord-eval:
+	CGO_ENABLED=0 go build -o bin/myco-coordeval ./cmd/myco
+	go run ./internal/coordeval/cmd/coordeval -cli $(CLI) -myco $(CURDIR)/bin/myco-coordeval $(COORD_EVAL_FLAGS)
 
 # Everything CI runs for Go: formatting, vet, unit + integration tests, smoke test.
 check: vet test smoke
