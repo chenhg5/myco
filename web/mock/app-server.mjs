@@ -845,7 +845,8 @@ const state = {
           kind: "agent", machine_id: "m_studio",
           // Its runner lets the App switch its provider from here (remote_provider)
           // and lists the cc-switch providers on its computer (never a key).
-          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools", "remote_provider", "models_refresh"],
+          // (live_max_access: allowing Full here reaches it within seconds)
+          runtime: { cli: "claude", cli_version: "2.1.240", model: "sonnet", access: "workspace", max_access: "workspace", features: ["mcp_tools", "remote_provider", "models_refresh", "live_max_access"],
             // On DeepSeek with an API key: its runner lists DeepSeek's models
             // with that key on its computer (10 minutes ago).
             models: [{ id: "deepseek-v4", name: "DeepSeek V4" }, { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" }, { id: "deepseek-reasoner" }],
@@ -3274,7 +3275,15 @@ const server = http.createServer(async (req, res) => {
     if (parts.length === 3 && parts[2] === "shell-access" && method === "POST") {
       const body = await readBody(req);
       local.shell_allowed = !!body.allow;
-      return send(res, 200, { shell_allowed: local.shell_allowed });
+      // Its runners read machine.yaml again: those that can (live_max_access)
+      // report the new limit a moment later; older ones only after a restart.
+      const max = local.shell_allowed ? "full" : "workspace";
+      setTimeout(() => {
+        for (const h of state.hubs || []) for (const a of h.agents || []) {
+          if (a.machine_id === "m_studio" && a.kind === "agent" && a.runtime?.features?.includes("live_max_access")) a.runtime.max_access = max;
+        }
+      }, 1_200);
+      return send(res, 200, { shell_allowed: local.shell_allowed, max_access: max });
     }
 
     // /app/local/ssh-hosts and /app/local/wsl: computers this one can reach

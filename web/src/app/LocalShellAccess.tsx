@@ -14,23 +14,44 @@ import { L } from "@/lib/i18n";
  * computer, the app can switch that on here, after the person confirms;
  * for any other machine it says where to do it.
  */
-export function LocalShellAccess({ machine, hub, what, onlyLocal, onChange, shell }: {
+/** Restarting the background runner on this computer (an older runner
+ *  reads spawn.max_access only when it starts). */
+export const RESTART_RUNNER_COMMAND = "myco runner service restart";
+
+export function LocalShellAccess({ machine, hub, what, onlyLocal, onChange, shell, agent }: {
   machine?: Machine; what: "shell" | "full"; onlyLocal?: boolean; onChange?: () => Promise<void>;
   /** the workspace the machine is in: tells exactly whether it is this computer */
   hub?: AgentRow["hub"];
   /** whether that computer allows it, as it reported (machineShell) */
   shell?: "yes" | "no" | "unknown";
+  /** for one agent's Full access (run settings): its name, and whether its
+   *  runner picks a new limit up by itself ("live_max_access"). Once
+   *  allowed, this waits for the runner to say so (the caller stops showing
+   *  this when it does), or says to restart myco here. */
+  agent?: { name: string; live: boolean };
 }) {
   const [local, setLocal] = useState<LocalState | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  // Allowed for an agent's Full access: since when, and a tick to re-read.
+  const [since, setSince] = useState(() => Date.now());
+  const [tick, setTick] = useState(0);
+  const [restarting, setRestarting] = useState<"" | "busy" | "done">("");
 
   useEffect(() => {
     let off = false;
     appApi.local().then((l) => { if (!off) setLocal(l); }).catch(() => {});
     return () => { off = true; };
   }, []);
+  // Allowed, and it still runs under less: ask again every 2s (for a minute)
+  // until its runner reports the new limit, which takes this away.
+  const waiting = what === "full" && !!agent && !!local?.shell_allowed;
+  useEffect(() => {
+    if (!waiting || Date.now() - since > 60_000) return;
+    const t = window.setTimeout(() => { void onChange?.(); setTick((n) => n + 1); }, 2_000);
+    return () => window.clearTimeout(t);
+  }, [waiting, tick, since]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const here = !!machine && !!local && (hub ? thisComputerId(hub, local) === machine.id
     : (local.machines || []).includes(machine.name) || (!!local.hostname && machine.hostname === local.hostname));
@@ -39,6 +60,11 @@ export function LocalShellAccess({ machine, hub, what, onlyLocal, onChange, shel
     : L("完全权限可以让它读写那台电脑上的任何文件、运行任何命令。", "Full access lets it read and write any file and run any command on that computer.");
 
   if (!here) {
+    // (an agent's Full access on another computer: that computer decides)
+    if (onlyLocal && what === "full" && agent) {
+      return <span>{L("要更高，在那台电脑上把 ~/.myco/machine.yaml 里的 spawn.max_access 设成 full，或在它的 myco App 里允许。",
+        "For more, set spawn.max_access: full in ~/.myco/machine.yaml on that computer, or allow it in the myco app there.")}</span>;
+    }
     if (onlyLocal) return null;
     // Another computer decides for itself: the App can only say how.
     if (shell === "yes") {
@@ -74,6 +100,8 @@ export function LocalShellAccess({ machine, hub, what, onlyLocal, onChange, shel
       const r = await appApi.shellAccess(allow);
       setLocal({ ...local!, shell_allowed: r.shell_allowed });
       setConfirming(false);
+      setSince(Date.now());
+      setTick(0);
       await onChange?.();
     } catch (e) {
       setError(e);
@@ -81,6 +109,64 @@ export function LocalShellAccess({ machine, hub, what, onlyLocal, onChange, shel
       setBusy(false);
     }
   };
+
+  // Allowed for this agent's Full access, and it does not run under it yet:
+  // a runner that reloads gets a few seconds; an older one (or one still
+  // without it after half a minute) needs myco here restarted, said plainly.
+  if (local!.shell_allowed && what === "full" && agent) {
+    const late = !agent.live || Date.now() - since > 30_000;
+    const restart = async () => {
+      setRestarting("busy");
+      setError(null);
+      try {
+        const r = await appApi.restartRunner();
+        if (r.runner !== "running") throw new Error(r.runner);
+        setRestarting("done");
+        setSince(Date.now());
+        setTick(0);
+      } catch (e) {
+        setError(e);
+        setRestarting("");
+      }
+    };
+    if (!late) {
+      return (
+        <div className="app-small-note app-full-pending" style={{ marginTop: 6 }} data-testid="full-access-pending">
+          <span className="app-spinner" aria-hidden />
+          {L(`已允许。${agent.name} 正在换上新的权限，几秒后这里就能选「完全放开」。`,
+            `Allowed. ${agent.name} is picking up the new limit; Full can be chosen here in a few seconds.`)}
+        </div>
+      );
+    }
+    return (
+      <div className="app-notice" style={{ alignItems: "flex-start" }} data-testid="full-access-restart">
+        <ShieldCheck />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span>{restarting === "done"
+            ? L(`已重启这台电脑上的 myco，${agent.name} 重新上线后就能选「完全放开」。`, `myco restarted on this computer; Full can be chosen once ${agent.name} is back online.`)
+            : agent.live
+              ? L(`已允许，但 ${agent.name} 还没换上新的权限。重启这台电脑上的 myco 后台就能生效：`,
+                `Allowed, but ${agent.name} has not picked up the new limit yet. Restart myco on this computer to apply it:`)
+              : L(`已允许，但 ${agent.name} 用的 myco 版本要重启后才生效。重启这台电脑上的 myco 后台：`,
+                `Allowed, but ${agent.name}'s myco applies it only after a restart. Restart myco on this computer:`)}</span>
+          {restarting !== "done" && (
+            <>
+              <div style={{ marginTop: 8 }}>
+                <button type="button" className="app-btn app-btn-small" onClick={() => void restart()} disabled={restarting === "busy"} data-testid="full-access-restart-now">
+                  {restarting === "busy" ? L("正在重启…", "Restarting…") : L("重启 myco 后台", "Restart myco")}
+                </button>
+              </div>
+              <div className="app-command" style={{ marginTop: 8 }}>
+                <code>{RESTART_RUNNER_COMMAND}</code>
+                <CopyButton value={RESTART_RUNNER_COMMAND} />
+              </div>
+            </>
+          )}
+          <ErrorText error={error} />
+        </div>
+      </div>
+    );
+  }
 
   if (local!.shell_allowed) {
     return (

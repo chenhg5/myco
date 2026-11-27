@@ -60,5 +60,17 @@ func (b *Backend) postShellAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _, allowed := b.Local.localMachine()
-	writeJSON(w, http.StatusOK, map[string]bool{"shell_allowed": allowed})
+	// max_access is what this computer's agents now run under: their runners
+	// read the same file again on every turn (runner.Options.MaxAccessFunc)
+	// and report it within seconds, with no restart.
+	writeJSON(w, http.StatusOK, map[string]any{"shell_allowed": allowed, "max_access": b.Local.maxAccess()})
+}
+
+// maxAccess is spawn.max_access as written now ("workspace" when unset).
+func (l *Local) maxAccess() string {
+	m, err := config.LoadMachine(l.configPath())
+	if err != nil || m == nil || m.Spawn.MaxAccess == "" {
+		return "workspace"
+	}
+	return m.Spawn.MaxAccess
 }
