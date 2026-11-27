@@ -9,17 +9,24 @@ import (
 	"time"
 )
 
+func fixtureBirth(n int) string {
+	if runtime.GOOS == "windows" {
+		return fmt.Sprintf("%020d", n)
+	}
+	return fmt.Sprintf("%d:0", n)
+}
+
 func fixture() (*Manager, time.Time, Owner) {
 	m := New("test-runner")
 	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	owner := Owner{Workspace: "test-workspace", Member: "owner", Agent: "agent", Session: "session"}
-	scope := &Scope{manager: m, owner: owner, root: Process{PID: 40, Birth: "root"}}
+	scope := &Scope{manager: m, owner: owner, root: Process{PID: 40, Birth: fixtureBirth(100)}}
 	m.scopes = []*Scope{scope}
-	m.previous[50] = &observed{process: Process{PID: 50, Birth: "child"}, scope: scope}
+	m.previous[50] = &observed{process: Process{PID: 50, Birth: fixtureBirth(200)}, scope: scope}
 	return m, at, owner
 }
 func observation(at time.Time, minutes int) Sample {
-	return Sample{At: at.Add(time.Duration(minutes) * time.Minute), Complete: true, Cores: 8, Total: 1000, Available: 500, LoadMetric: "load1_per_core", Processes: []Process{{PID: 50, Parent: 1, Group: 40, Birth: "child", Name: "worker", User: true, CPUTime: float64(minutes) * 60}}}
+	return Sample{At: at.Add(time.Duration(minutes) * time.Minute), Complete: true, Cores: 8, Total: 1000, Available: 500, LoadMetric: "load1_per_core", Processes: []Process{{PID: 50, Parent: 1, Group: 40, Birth: fixtureBirth(200), Name: "worker", User: true, CPUTime: float64(minutes) * 60}}}
 }
 func TestOrphanNeedsThirtyMinutesAndProvenOwnership(t *testing.T) {
 	m, at, _ := fixture()
@@ -121,7 +128,7 @@ func TestLiveParentAndLowCPUAreNotSuspects(t *testing.T) {
 				s := observation(at, i)
 				if kind == "parent" {
 					s.Processes[0].Parent = 40
-					s.Processes = append(s.Processes, Process{PID: 40, Birth: "root", Name: "harness"})
+					s.Processes = append(s.Processes, Process{PID: 40, Birth: fixtureBirth(100), Name: "harness"})
 				} else {
 					s.Processes[0].CPUTime = float64(i) * 10
 				}

@@ -109,6 +109,9 @@ func fakeAgent(scenario string) {
 			switch scenario {
 			case "cancel":
 				chunk(sid, "agent_message_chunk", "working on it")
+				// Text steps flush on the next update: publish that step before
+				// waiting for the test's protocol cancellation barrier.
+				chunk(sid, "agent_thought_chunk", "")
 				for {
 					c := read()
 					note("call %v", c["method"])
@@ -191,10 +194,14 @@ func newFake(t *testing.T, scenario string, opts harness.Options, spec Spec) *fa
 }
 
 func (f *fake) run(ctx context.Context, req harness.Request) (harness.Result, error) {
+	onEvent := req.OnEvent
 	req.OnEvent = func(e harness.Event) {
 		f.mu.Lock()
 		f.events = append(f.events, e)
 		f.mu.Unlock()
+		if onEvent != nil {
+			onEvent(e)
+		}
 	}
 	return f.h.Run(ctx, req)
 }
@@ -319,12 +326,17 @@ func TestRunContinuesTheSession(t *testing.T) {
 
 func TestRunCancelsOverTheProtocol(t *testing.T) {
 	f := newFake(t, "cancel", harness.Options{}, Spec{})
-	ctx, cancel := context.WithCancelCause(context.Background())
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		cancel(errors.New("interrupted by a steer"))
-	}()
-	res, err := f.run(ctx, harness.Request{Prompt: "long job"})
+	parent, stop := context.WithTimeout(t.Context(), 10*time.Second)
+	defer stop()
+	ctx, cancel := context.WithCancelCause(parent)
+	defer cancel(nil)
+	// A fixed wall-clock delay can cancel initialization on a busy host.
+	// Test protocol cancellation only after the prompt has actually started.
+	res, err := f.run(ctx, harness.Request{Prompt: "long job", OnEvent: func(e harness.Event) {
+		if e.Kind == "text" && strings.Contains(e.Text, "working on it") {
+			cancel(errors.New("interrupted by a steer"))
+		}
+	}})
 	if err == nil || !strings.Contains(err.Error(), "interrupted by a steer") {
 		t.Fatalf("err = %v", err)
 	}

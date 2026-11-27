@@ -131,6 +131,9 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 			}
 		}
 		rep.mu.Lock()
+		// Health may arrive while CLI/tool discovery is running. Keep that
+		// latest observation when publishing the enriched immutable base.
+		rt.MachineHealth = rep.base.MachineHealth
 		rep.base = &rt
 		rep.mu.Unlock()
 		rep.flush(ctx)
@@ -517,7 +520,11 @@ func (r *runtimeReporter) watchHealth(ctx context.Context, m *processwatch.Manag
 		h := m.Snapshot(workspace, owner)
 		r.mu.Lock()
 		if r.base != nil {
-			r.base.MachineHealth = h
+			// The discovery goroutine still holds the initial base value.
+			// Publish a copy instead of mutating that shared value in place.
+			next := *r.base
+			next.MachineHealth = h
+			r.base = &next
 		}
 		r.mu.Unlock()
 		r.flushLater()
