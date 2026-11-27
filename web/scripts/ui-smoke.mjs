@@ -6107,6 +6107,25 @@ async function runMatrix(browser, size, scheme) {
         named: [...el.querySelectorAll(":scope > .conv-msg-name")].map((x) => x.textContent).join(""),
       }));
       if (!sys.system || sys.named.includes("你")) throw new Error(`工作流发出的消息应算系统发的，不该写「你」（${JSON.stringify(sys)}）`);
+      // Its time and buttons: at the card's right, shown on hover only.
+      // (focus in it shows them too, as for any message: dropped first,
+      // the fold above had it)
+      await page.evaluate(() => (document.activeElement instanceof HTMLElement) && document.activeElement.blur());
+      await page.mouse.move(2, page.viewportSize().height - 2);
+      await page.waitForTimeout(300);
+      const meta = await page.locator(`.conv-detail [data-msg="${note.id}"]`).evaluate((el) => {
+        const m = el.querySelector(":scope > .conv-msg-meta");
+        const b = el.querySelector(":scope > .conv-bubble");
+        if (!m || !b) return null;
+        const mr = m.getBoundingClientRect(), br = b.getBoundingClientRect();
+        return { opacity: Number(getComputedStyle(m).opacity), rightGap: Math.round(br.right - mr.right) };
+      });
+      if (!meta || meta.opacity > 0.05) throw new Error(`工作流消息下面的时间和按钮应悬停才出现（${JSON.stringify(meta)}）`);
+      if (meta.rightGap < 0 || meta.rightGap > 12) throw new Error(`工作流消息下面的时间和按钮应靠右（${JSON.stringify(meta)}）`);
+      if ((await fold.getAttribute("aria-expanded")) === "true") await clickVisible(page, fold);
+      await page.locator(`.conv-detail [data-msg="${note.id}"] .conv-bubble`).hover();
+      await settle(page, 250);
+      await shot(page, size, scheme, "chat-workflow-note-hover");
       // A task an agent gave up on ("task failed: why", the hub's own line):
       // said in words, quietly, not a red alarm.
       const ev = await sendFromElsewhere("hub_studio", "review-cloud", "task failed: Fixed release-first node failed; inspect workflow diagnostics", { type: "event", of: note.id });

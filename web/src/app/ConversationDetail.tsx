@@ -2412,7 +2412,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
           {/* The time and copy stay out of the way until the pointer is on the
               message; a failure or an encryption mark is always shown. */}
-          <div className={cn("conv-msg-meta", (failedNote || receipt || m.automation || m.workflow) && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
+          <div className={cn("conv-msg-meta", (failedNote || (!bySystem && (receipt || m.automation || m.workflow))) && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", !bySystem && (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
             {m.e2e && <Lock className="conv-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
             {usage && <span className="conv-usage">{usage}</span>}

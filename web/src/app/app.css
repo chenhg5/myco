@@ -3499,9 +3499,13 @@ textarea.app-input {
   max-width: min(640px, 100%);
   width: 100%;
 }
+/* (its time, tag and buttons at the card's right, shown on hover: the
+   card's own top line already says which workflow) */
+.conv-msg.is-me.is-system .conv-msg-meta:not(.is-shown) { right: 4px; left: auto; }
 .conv-msg.is-me.is-system .conv-bubble {
   --md-fade: var(--bg);
   align-self: stretch;
+  max-width: 100%;
   background: none;
   box-shadow: inset 0 0 0 1px var(--line);
   border-radius: 12px;
