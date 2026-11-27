@@ -5235,17 +5235,27 @@ async function runMatrix(browser, size, scheme) {
       if (!text.includes("在等 PM (Codex) 回答")) throw new Error(`对话里应说明在等谁回答，实际「${text}」`);
       await settle(page, 300);
       await shot(page, size, scheme, "conversation-open-elsewhere");
-      await clickVisible(page, note.getByRole("button", { name: "查看并处理" }));
-      const row = page.locator(".app-msg-wrap", { hasText: "给官网首页写三条 slogan 候选" });
-      await row.waitFor({ timeout: 20_000 });
-      if (!compactText(await row.innerText()).includes("在等 PM (Codex) 回答")) throw new Error("当前工作里应写在等谁回答");
-      await row.hover();
-      await settle(page, 200);
-      await shot(page, size, scheme, "profile-open-work");
-      await clickVisible(page, row.getByRole("button", { name: "停止" }));
-      await row.waitFor({ state: "detached", timeout: 15_000 });
+      // Its face or name in the head: its profile, over the chat.
+      await clickVisible(page, page.locator(".conv-detail:visible [data-testid=chat-head-name]").first());
+      await page.locator(".ms").waitFor({ timeout: 10_000 });
+      if (!(await page.locator(".conv-detail:visible").count())) throw new Error("点会话顶部的名字应在会话上面打开资料，不该离开会话");
       await clickVisible(page, page.locator(".ms-close"));
       await page.locator(".ms-scrim").waitFor({ state: "detached", timeout: 10_000 });
+      // 查看并处理: settled here, in a small dialog, not on its profile.
+      await clickVisible(page, note.getByRole("button", { name: "查看并处理" }));
+      const list = page.locator("[data-testid=elsewhere-list]");
+      await list.waitFor({ timeout: 10_000 });
+      if (await page.locator(".ms").count()) throw new Error("查看并处理应在会话里打开，不该跳到资料页");
+      const row = list.locator("[data-testid=elsewhere-item]", { hasText: "给官网首页写三条 slogan 候选" });
+      await row.waitFor({ timeout: 20_000 });
+      if (!compactText(await row.innerText()).includes("在等 PM (Codex) 回答")) throw new Error("应写在等谁回答");
+      for (const b of ["催一下", "标记完成", "停止"]) if (!(await row.getByRole("button", { name: b }).count())) throw new Error(`每条应能「${b}」`);
+      await settle(page, 200);
+      await shot(page, size, scheme, "conversation-elsewhere-dialog");
+      await clickVisible(page, row.getByRole("button", { name: "停止" }));
+      await row.waitFor({ state: "detached", timeout: 15_000 });
+      await clickVisible(page, page.locator(".app-modal").getByRole("button", { name: "好了" }));
+      await list.waitFor({ state: "detached", timeout: 5_000 });
       } finally {
         await held(false);
       }

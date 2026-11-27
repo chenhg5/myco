@@ -22,7 +22,7 @@ import { forkAgent } from "@/app/Fork";
 import { HandoffCard, handoffsFrom, withStale } from "@/app/Handoff";
 import { TurnRail, type Turn } from "@/app/TurnRail";
 import { summarize } from "@/app/summary";
-import { ErrorText } from "@/app/dialogs";
+import { ErrorText, Modal } from "@/app/dialogs";
 import { recall, remember as rememberMemo } from "@/lib/memo";
 import { useCopy } from "@/app/copy";
 import { cn, timeAgo } from "@/lib/utils";
@@ -1866,6 +1866,28 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
   };
 
+  // Its open work from elsewhere, handled here (查看并处理): a small dialog
+  // listing it, each with the ways to settle it, instead of a trip to its
+  // profile. What is settled leaves the list at once.
+  const [elsewhereOpen, setElsewhereOpen] = useState(false);
+  const [settled, setSettled] = useState<Set<string>>(new Set());
+  const settle = async (task: Message, how: "done" | "stop") => {
+    setStopError(null);
+    setResending(task.id);
+    try {
+      if (how === "done") await appApi.dismissMessage(target.hubId, task.id);
+      else await appApi.stop(target.hubId, task.id);
+      setSettled((s) => new Set(s).add(task.id));
+      onRefresh?.();
+    } catch (e) {
+      setStopError(e);
+    } finally {
+      setResending(null);
+    }
+  };
+  // Its profile, over this page (the head's face or name): nothing moves.
+  const openProfileHere = () => window.dispatchEvent(new CustomEvent("myco-open-profile", { detail: { hubId: target.hubId, name: target.agent, stay: true } }));
+
   // Commands other nodes sent to the computer in view. The terminal shows
   // only your own conversation with it, so these have no row there: the
   // overview knows what it is on, and which of it may have gone quiet.
@@ -2590,14 +2612,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </button>
         )}
         {/* Who this is with: their faces, their names, and what they do. */}
-        <span className="conv-head-faces">
+        <span className={cn("conv-head-faces", !observed && agent && "is-link")} {...(!observed && agent ? {
+          role: "button", tabIndex: 0, title: L("看它的资料", "See its profile"), "data-testid": "chat-head-profile",
+          onClick: openProfileHere, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openProfileHere(); } },
+        } : {})}>
           {(observed ? parties : [target.agent]).map((n) => {
             const r = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === n);
             return r ? <Avatar key={n} agent={r.st.agent} size={30} badge={false} /> : null;
           })}
         </span>
         <div className="conv-head-titles">
-          <h2 title={headWhat || undefined}>{observed ? parties.map(nameOf).join(" 和 ") : agentName}</h2>
+          {!observed && agent
+            ? <h2 title={headWhat || undefined}><button type="button" className="conv-head-name" onClick={openProfileHere} data-testid="chat-head-name">{agentName}</button></h2>
+            : <h2 title={headWhat || undefined}>{observed ? parties.map(nameOf).join(" 和 ") : agentName}</h2>}
           {/* 清爽 keeps the head to one line: the description goes (it
               stays on hover over the name); a hub it cannot reach still
               says so. */}
@@ -2908,11 +2935,50 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 `; ${askingOthers.length} wait${askingOthers.length > 1 ? "" : "s"} on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question`)}
               {L("。", ".")}
             </span>
-            <button type="button" className="conv-steer-btn"
-              onClick={() => window.dispatchEvent(new CustomEvent("myco-open-profile", { detail: { hubId: target.hubId, name: target.agent } }))}>
+            <button type="button" className="conv-steer-btn" onClick={() => setElsewhereOpen(true)} data-testid="open-elsewhere-handle">
               {L("查看并处理", "See and handle")}
             </button>
           </div>
+        )}
+        {elsewhereOpen && (
+          <Modal open onOpenChange={(o) => !o && setElsewhereOpen(false)} wide title={L(`${agentName} 手上别处来的任务`, `${agentName}'s open work from elsewhere`)}
+            description={L("别的成员或 agent 交给它、还没做完的任务。可以催一下，做完了就标记完成，不用再做就停掉。", "Tasks other members or agents gave it that are not done yet. Ask where one stands, mark it done, or stop it.")}>
+            <div className="app-list conv-elsewhere" data-testid="elsewhere-list">
+              {elsewhere.filter((m) => !settled.has(m.id)).length === 0 && <div className="app-empty-note">{L("都处理完了。", "All settled.")}</div>}
+              {elsewhere.filter((m) => !settled.has(m.id)).map((m) => {
+                const quiet = staleTasks.has(m.id);
+                const fromAgent = (row?.hub.overview?.agents || []).some((y) => y.agent.name === m.from);
+                return (
+                  <div key={m.id} className="app-msg-wrap" data-testid="elsewhere-item">
+                    <div className="app-msg is-static">
+                      <span className="meta">
+                        <span className={cn("app-msg-status", m.status, quiet && "is-stuck")}>{m.status === "held" && m.asking
+                          ? L(`在等 ${whoIs(m.from)} 回答`, `Waiting on ${whoIs(m.from)} to answer`) : quiet ? L("好一阵没动静", "Quiet for a while") : m.status === "held" ? L("暂挂", "On hold") : L("在做", "In progress")}</span>
+                        <span className="who">{L(`${whoIs(m.from)} 交来`, `from ${whoIs(m.from)}`)}</span>
+                        <span className="time">{timeAgo(m.active_at || m.updated_at, now)}</span>
+                      </span>
+                      <span className="body">{m.body}</span>
+                    </div>
+                    <span className="app-msg-actions">
+                      {fromAgent && onOpenExchange && (
+                        <button type="button" className="app-msg-dismiss" onClick={() => { setElsewhereOpen(false); onOpenExchange(target.agent, m.from, m.id); }}>{L("看对话", "Open")}</button>
+                      )}
+                      <button type="button" className="app-msg-dismiss" disabled={resending === m.id || nudged.has(m.id)} onClick={() => void nudge(m)}
+                        title={L("问它这条现在怎么样了（它会接着做或回复结果）", "Ask where it stands (it carries on or replies)")}>{nudged.has(m.id) ? L("已催", "Asked") : L("催一下", "Ask")}</button>
+                      {canClose && <button type="button" className="app-msg-dismiss" disabled={resending === m.id} onClick={() => void settle(m, "done")}
+                        title={L("不回复，直接关掉：已经做完了，或者不用再做", "Close it without a reply: it is done, or no longer needed")}>{L("标记完成", "Mark done")}</button>}
+                      {canClose && <button type="button" className="app-msg-dismiss" disabled={resending === m.id} onClick={() => void settle(m, "stop")}
+                        title={L("停止这条任务（交来的一方会收到「已停止」）", "Stop it (whoever gave it is told it was stopped)")}>{L("停止", "Stop")}</button>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <ErrorText error={stopError} />
+            <div className="app-modal-actions">
+              <button type="button" className="app-btn" onClick={() => setElsewhereOpen(false)}>{L("好了", "Done")}</button>
+            </div>
+          </Modal>
         )}
         {!busy && offline && (
           <div className="conv-busy">

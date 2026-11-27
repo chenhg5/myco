@@ -300,8 +300,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // An agent's profile (its open work), from anywhere: { hubId, name }.
   useEffect(() => {
     const on = (e: Event) => {
-      const d = (e as CustomEvent<{ hubId: string; name: string }>).detail;
+      const d = (e as CustomEvent<{ hubId: string; name: string; stay?: boolean }>).detail;
       if (!d) return;
+      // (from a chat's head: its profile over the page you are on)
+      if (d.stay) { setProfile({ hubId: d.hubId, name: d.name, details: false }); return; }
       setNavChat(null);
       setPage("members");
       // Its details open: where its open work is.
