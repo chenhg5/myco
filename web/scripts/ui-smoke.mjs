@@ -6122,6 +6122,13 @@ async function runMatrix(browser, size, scheme) {
       });
       if (!meta || meta.opacity > 0.05) throw new Error(`工作流消息下面的时间和按钮应悬停才出现（${JSON.stringify(meta)}）`);
       if (meta.rightGap < 0 || meta.rightGap > 12) throw new Error(`工作流消息下面的时间和按钮应靠右（${JSON.stringify(meta)}）`);
+      // ...on a line of its own: what comes next (an agent's progress) is
+      // below it, never under it.
+      const clear = await page.locator(`.conv-detail [data-msg="${note.id}"]`).evaluate((el) => {
+        const m = el.querySelector(":scope > .conv-msg-meta");
+        return m ? Math.round(el.getBoundingClientRect().bottom - m.getBoundingClientRect().bottom) : null;
+      });
+      if (clear === null || clear < 0) throw new Error(`工作流消息下面那一行应占自己的位置，不该伸到下一条上（${clear}）`);
       if ((await fold.getAttribute("aria-expanded")) === "true") await clickVisible(page, fold);
       await page.locator(`.conv-detail [data-msg="${note.id}"] .conv-bubble`).hover();
       await settle(page, 250);

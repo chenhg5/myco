@@ -3500,8 +3500,18 @@ textarea.app-input {
   width: 100%;
 }
 /* (its time, tag and buttons at the card's right, shown on hover: the
-   card's own top line already says which workflow) */
-.conv-msg.is-me.is-system .conv-msg-meta:not(.is-shown) { right: 4px; left: auto; }
+   card's own top line already says which workflow. In the flow, on a line
+   of their own, not floating: what follows a card (an agent's progress, a
+   line of its own) does not keep clear of a floating row, and would sit
+   under it) */
+.conv-msg.is-me.is-system .conv-msg-meta:not(.is-shown) {
+  position: static;
+  align-self: flex-end;
+  margin-top: 3px;
+  padding: 0 4px 0 0;
+  pointer-events: auto;
+}
+.conv-msg.is-me.is-system .conv-msg-meta.is-shown { align-self: flex-end; padding-right: 4px; }
 .conv-msg.is-me.is-system .conv-bubble {
   --md-fade: var(--bg);
   align-self: stretch;
