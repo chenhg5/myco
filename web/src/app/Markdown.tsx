@@ -12,6 +12,7 @@ import { Lightbox, type Picture } from "@/app/lightbox";
 import { colourCode, diagramPicture, drawDiagrams, onThemeChange, redrawDiagrams } from "@/app/mdRich";
 import { splitUi } from "@/app/ui/spec";
 import { UiBlock } from "@/app/ui/UiBlock";
+import { linkAgentNames, openAgentLink, useAgentNames } from "@/lib/agentNames";
 
 /** Rough line budget for one message before it starts collapsed. */
 const COLLAPSE_LINES = 30;
@@ -227,11 +228,13 @@ function doingItems(text: string): string {
  *  zoom false: the page around it opens pictures itself (the user guide). */
 export function Markdown({ text, files, growing, zoom = true }: { text: string; files?: InlineFiles; growing?: boolean; zoom?: boolean }) {
   const filesKey = files ? `${files.hubId}\u0000${files.items.map((a) => a.file_id).join(",")}` : "";
+  // Agents' own names in it: their names for people, links to their chats.
+  const agents = useAgentNames();
   const html = useMemo(() => {
     parsing = files;
-    try { return sanitize(mediaRows(md.parse(doingItems(text), { async: false }) as string)); } finally { parsing = undefined; }
+    try { return linkAgentNames(sanitize(mediaRows(md.parse(doingItems(text), { async: false }) as string)), agents); } finally { parsing = undefined; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, filesKey]);
+  }, [text, filesKey, agents]);
   const ref = useRef<HTMLDivElement>(null);
   // Diagrams and code colours (mdRich), after the HTML is in; diagrams
   // again in the other theme's colours when it changes.
@@ -246,6 +249,8 @@ export function Markdown({ text, files, growing, zoom = true }: { text: string; 
   // A picture or a diagram, clicked: large, with the message's others.
   const [big, setBig] = useState<{ items: Picture[]; index: number } | null>(null);
   const onClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const agent = (e.target as HTMLElement).closest<HTMLElement>("a.md-agent");
+    if (agent) { e.preventDefault(); openAgentLink(agent); return; }
     onCopyClick(e);
     const t = e.target as HTMLElement;
     const el = ref.current;
@@ -313,7 +318,11 @@ export function Markdown({ text, files, growing, zoom = true }: { text: string; 
   }, [html]);
   return (
     <>
-      <div ref={ref} className="md" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
+      <div ref={ref} className="md" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }}
+        onKeyDown={(e) => {
+          const agent = e.key === "Enter" ? (e.target as HTMLElement).closest<HTMLElement>("a.md-agent") : null;
+          if (agent) { e.preventDefault(); openAgentLink(agent); }
+        }} />
       {big && <Lightbox items={big.items} index={big.index} onIndex={(i) => setBig({ ...big, index: i })} onClose={() => setBig(null)} />}
     </>
   );

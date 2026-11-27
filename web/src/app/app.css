@@ -10681,4 +10681,8 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 /* An error's request id (ErrorText): faint, selectable, to look it up in
    the logs. */
 .app-error-id { margin-top: 2px; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; user-select: text; }
-
+/* An agent's own name in a message (cloud-7): its name for people, a link
+   to its chat (Markdown, lib/agentNames); its own name on hover. */
+.md a.md-agent { color: var(--accent); text-decoration: none; cursor: pointer; border-radius: 4px; }
+.md a.md-agent:hover { text-decoration: underline; text-underline-offset: 2px; }
+.md a.md-agent:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
