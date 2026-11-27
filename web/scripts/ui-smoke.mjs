@@ -5266,14 +5266,24 @@ async function runMatrix(browser, size, scheme) {
       const face = page.locator(".app-modal.av-modal");
       await face.waitFor({ timeout: 5_000 });
       await face.locator(".av-color").nth(2).click();
-      await face.locator(".av-cell").nth(5).click();
+      await face.locator("[data-group=face] .av-cell").nth(5).click();
+      // a shape and something to wear: the flat cap and a bow
+      await face.locator("[data-group=shape] .av-cell").nth(2).click();
+      await face.locator("[data-group=acc] .av-cell", { hasNot: page.locator(":disabled") }).nth(3).click();
+      // (a sprout needs room on top: the cone has none)
+      await face.locator("[data-group=shape] .av-cell").nth(1).click();
+      if (!(await face.locator("[data-group=acc] .av-cell").nth(1).isDisabled())) throw new Error("尖顶的菌盖上不该还能选小芽");
+      await face.locator("[data-group=shape] .av-cell").nth(2).click();
+      const preview = face.locator(".av-top .pa-sprite");
+      if ((await preview.getAttribute("data-shape")) !== "2" || (await preview.getAttribute("data-acc")) !== "3") throw new Error(`预览应是扁平菌盖戴蝴蝶结，实际形状 ${await preview.getAttribute("data-shape")}、配饰 ${await preview.getAttribute("data-acc")}`);
       await settle(page, 200);
       await shot(page, size, scheme, "member-face");
       await face.getByRole("button", { name: "用这个头像" }).click();
       await face.waitFor({ state: "hidden", timeout: 5_000 });
       await page.waitForFunction(() => {
         const cap = document.querySelector(".ms .ms-face .pa")?.style.getPropertyValue("--av-cap");
-        return cap && cap.toLowerCase() === "#e7a33e";
+        const sprite = document.querySelector(".ms .ms-face .pa-sprite");
+        return cap && cap.toLowerCase() === "#e7a33e" && sprite?.getAttribute("data-shape") === "2" && sprite?.getAttribute("data-acc") === "3";
       // at once: the saved agent comes back with the save (not the next refresh)
       }, null, { timeout: 2_000 });
       await clickVisible(page, page.locator(".ms .ms-face-btn"));
@@ -5297,6 +5307,74 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms .ms-face .pa-pic").waitFor({ state: "detached", timeout: 2_000 });
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
+    });
+
+    // Faces: six cap shapes and a few things to wear, from each agent's id;
+    // in one workspace no two drawn faces share a colour and a shape while
+    // a free one is left. A sheet of 24 at a list's size and a card's.
+    await step("成员 · 头像的形状和配饰", async () => {
+      const N = 24;
+      const routeURL = /\/app\/overview(\?|$)/;
+      await page.route(routeURL, async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        const hub = (json.hubs || []).find((h) => h.id === "hub_studio");
+        const list = hub?.overview?.agents;
+        const model = list?.find((x) => x.agent?.kind === "agent" && !x.agent.avatar);
+        if (list && model) {
+          for (let i = 0; i < N; i++) {
+            const id = `ag_face_${(i * 7919 + 17).toString(36)}`;
+            list.push({ ...model, agent: { ...model.agent, id, name: `face-${i}`, display_name: `样张 ${i + 1}`, avatar: undefined, created_at: new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString() } });
+          }
+        }
+        await route.fulfill({ response, json });
+      });
+      try {
+        await go(page, "成员", narrow);
+        const cards = page.locator(".mb-card", { hasText: "样张" });
+        await page.waitForFunction((n) => document.querySelectorAll(".mb-card .pa-sprite").length >= n, N, { timeout: 15_000 });
+        const faces = await cards.evaluateAll((els) => els.map((el) => {
+          const pa = el.querySelector(".pa");
+          const sprite = el.querySelector(".pa-sprite");
+          return { cap: pa?.style.getPropertyValue("--av-cap"), shape: sprite?.getAttribute("data-shape"), acc: sprite?.getAttribute("data-acc") };
+        }));
+        if (faces.length !== N) throw new Error(`应有 ${N} 张样张，实际 ${faces.length}`);
+        const pairs = new Set(faces.map((f) => `${f.cap}/${f.shape}`));
+        const shapes = new Set(faces.map((f) => f.shape));
+        const accs = new Set(faces.map((f) => f.acc));
+        if (pairs.size !== N) throw new Error(`同一工作区里颜色加形状应各不相同，${N} 个里只有 ${pairs.size} 种`);
+        if (shapes.size < 5 || accs.size < 5) throw new Error(`形状和配饰应多样：形状 ${shapes.size} 种，配饰 ${accs.size} 种`);
+        // The sheet: the same faces (the App's own drawing), small and large.
+        await page.evaluate((n) => {
+          const src = [...document.querySelectorAll(".mb-card")].filter((c) => c.textContent.includes("样张")).map((c) => c.querySelector(".pa"));
+          const sheet = document.createElement("div");
+          sheet.className = "smoke-face-sheet";
+          // (in the shell, where the colours are; a card's own background)
+          const card = getComputedStyle(document.querySelector(".mb-card"));
+          sheet.style.cssText = `position:fixed;inset:0;z-index:9999;background:${card.backgroundColor === "rgba(0, 0, 0, 0)" ? getComputedStyle(document.body).backgroundColor : card.backgroundColor};color:${card.color};font-size:12px;padding:24px;display:flex;flex-direction:column;gap:12px;overflow:auto`;
+          for (const [size, gap] of [[22, 8], [48, 12]]) {
+            const label = document.createElement("div");
+            label.textContent = `${size}px`;
+            sheet.append(label);
+            const row = document.createElement("div");
+            row.style.cssText = `display:flex;flex-wrap:wrap;gap:${gap}px;align-items:center`;
+            for (const pa of src.slice(0, n)) {
+              const c = pa.cloneNode(true);
+              c.style.width = c.style.height = `${size}px`;
+              c.querySelector(".pa-badge")?.remove();
+              c.querySelector(".pa-state")?.remove();
+              row.append(c);
+            }
+            sheet.append(row);
+          }
+          (document.querySelector(".app-shell") || document.body).append(sheet);
+        }, N);
+        await settle(page, 200);
+        await shot(page, size, scheme, "avatar-sheet");
+        await page.evaluate(() => document.querySelector(".smoke-face-sheet")?.remove());
+      } finally {
+        await page.unroute(routeURL);
+      }
     });
 
     await step("成员 · 重新接入", async () => {

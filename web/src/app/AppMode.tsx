@@ -34,7 +34,7 @@ import { useSimpleMode } from "@/app/simpleMode";
 import { isLocalUrl, localWorkspaces } from "@/app/localHubs";
 import { NewWorkspaceDialog } from "@/app/NewWorkspaceDialog";
 import { ComputersPage } from "@/app/Computers";
-import { Avatar, isWorkspace, rememberAgentHubs, rememberMachines, whereOf } from "@/app/persona";
+import { Avatar, isWorkspace, rememberAgentHubs, rememberWorkspaceFaces, rememberMachines, whereOf } from "@/app/persona";
 import { agentKind, isMe, machinesOfHub, nodeName, stuckCounts } from "@/app/nodes";
 import { setAgentNames } from "@/lib/agentNames";
 import { prefetchMachineInfos } from "@/app/machineInfoCache";
@@ -476,6 +476,12 @@ export default function AppMode({ initialHubs, initialInfo }: {
     rememberMachines(namedOv.hubs.flatMap((h) => h.overview?.machines || []));
     const out = namedOv.hubs.filter((h) => h.ok && h.overview).flatMap((h) => h.overview!.agents.map((st) => ({ hub: h, st })));
     rememberAgentHubs(out.map((r) => ({ hubId: r.hub.id, agentId: r.st.agent.id })));
+    // In each workspace, faces drawn from ids that would share a colour and
+    // a shape are spread apart (persona).
+    for (const h of namedOv.hubs) {
+      if (!h.ok || !h.overview) continue;
+      rememberWorkspaceFaces(h.overview.agents.map((st) => st.agent).filter((a) => agentKind(a) === "agent"));
+    }
     return out;
   }, [namedOv]);
   setPageMe((hid) => namedOv?.hubs.find((h) => h.id === hid)?.me?.member?.name || "");

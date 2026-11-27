@@ -3,13 +3,13 @@ import { Check, ImagePlus, RotateCcw } from "lucide-react";
 import type { Agent } from "@/api";
 import { appApi } from "@/appapi";
 import { ErrorText, Modal } from "@/app/dialogs";
-import { Avatar, isWorkspace, LOOK_PARTS, lookOfSeed, lookWord, MushroomFace, parseLook, pictureOf, type Look } from "@/app/persona";
+import { accessoryFits, Avatar, isWorkspace, LOOK_PARTS, lookOf, lookWord, MushroomFace, parseLook, pictureOf, type Look } from "@/app/persona";
 import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
- * Choosing a face. An agent can have a mushroom of its own (a colour and a
- * shape picked from a grid, a sprout or not) or a picture; a computer or a
+ * Choosing a face. An agent can have a mushroom of its own (a colour, a
+ * shape, spots and a face picked from grids, one thing to wear) or a picture; a computer or a
  * person a picture. The face is kept on the workspace, so everyone there
  * sees the same one. A picture is cut to a square from its middle and made
  * small here, before it is sent.
@@ -145,9 +145,20 @@ export function AvatarDialog({ open, onOpenChange, hubId, agent, onSaved }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // The parts the grid builds on: the chosen ones, else its own.
-  const base = choice.kind === "look" ? choice.look : lookOfSeed(seed);
-  const pick = (l: Partial<Look>) => setChoice({ kind: "look", look: { ...base, ...l } });
+  // The parts the grid builds on: the chosen ones, else the face it has.
+  const base = choice.kind === "look" ? choice.look : lookOf(seed);
+  // (what it wears comes off when the new shape has no room for it)
+  const pick = (l: Partial<Look>) => {
+    const next = { ...base, ...l };
+    if (!accessoryFits(next.acc, next.shape)) next.acc = 0;
+    next.sprout = next.acc === 1;
+    setChoice({ kind: "look", look: next });
+  };
+  const cell = (look: Look) => (
+    <span className="pa" style={{ width: 40, height: 40, ["--av-cap" as string]: LOOK_PARTS.caps[look.cap] }}>
+      <MushroomFace seed={seed} avatar={lookWord(look)} />
+    </span>
+  );
   const unchanged = (wordOf(choice, agent) || "") === (agent.avatar || "");
 
   const save = async () => {
@@ -197,26 +208,47 @@ export function AvatarDialog({ open, onOpenChange, hubId, agent, onSaved }: {
               );
             })}
           </div>
-          <div className="av-grid" role="radiogroup" aria-label={L("样子", "Shape")}>
-            {Array.from({ length: LOOK_PARTS.patterns * LOOK_PARTS.faces }, (_, k) => {
-              const pattern = Math.floor(k / LOOK_PARTS.faces);
-              const face = k % LOOK_PARTS.faces;
-              const look = { ...base, pattern, face };
-              const on = choice.kind === "look" && base.pattern === pattern && base.face === face;
+          <div className="av-label">{L("形状", "Shape")}</div>
+          <div className="av-grid" role="radiogroup" aria-label={L("形状", "Shape")} data-group="shape">
+            {Array.from({ length: LOOK_PARTS.shapes }, (_, shape) => {
+              const on = choice.kind === "look" && base.shape === shape;
+              const acc = accessoryFits(base.acc, shape) ? base.acc : 0;
               return (
-                <button key={k} type="button" role="radio" aria-checked={on} className={cn("av-cell", on && "is-on")}
-                  aria-label={L(`样子 ${k + 1}`, `Shape ${k + 1}`)} onClick={() => pick({ pattern, face })}>
-                  <span className="pa" style={{ width: 40, height: 40, ["--av-cap" as string]: LOOK_PARTS.caps[look.cap] }}>
-                    <MushroomFace seed={seed} avatar={lookWord(look)} />
-                  </span>
+                <button key={shape} type="button" role="radio" aria-checked={on} className={cn("av-cell", on && "is-on")}
+                  aria-label={L(`形状 ${shape + 1}`, `Shape ${shape + 1}`)} onClick={() => pick({ shape })}>
+                  {cell({ ...base, shape, acc, sprout: acc === 1 })}
                 </button>
               );
             })}
           </div>
-          <label className="av-sprout">
-            <input type="checkbox" checked={base.sprout} onChange={(e) => pick({ sprout: e.target.checked })} />
-            {L("头上长一棵小芽", "A sprout on top")}
-          </label>
+          <div className="av-label">{L("花纹和表情", "Spots and face")}</div>
+          <div className="av-grid" role="radiogroup" aria-label={L("花纹和表情", "Spots and face")} data-group="face">
+            {Array.from({ length: LOOK_PARTS.patterns * LOOK_PARTS.faces }, (_, k) => {
+              const pattern = Math.floor(k / LOOK_PARTS.faces);
+              const face = k % LOOK_PARTS.faces;
+              const on = choice.kind === "look" && base.pattern === pattern && base.face === face;
+              return (
+                <button key={k} type="button" role="radio" aria-checked={on} className={cn("av-cell", on && "is-on")}
+                  aria-label={L(`花纹和表情 ${k + 1}`, `Spots and face ${k + 1}`)} onClick={() => pick({ pattern, face })}>
+                  {cell({ ...base, pattern, face })}
+                </button>
+              );
+            })}
+          </div>
+          <div className="av-label">{L("戴点什么（最多一件）", "Something to wear (one at most)")}</div>
+          <div className="av-grid is-acc" role="radiogroup" aria-label={L("配饰", "Accessory")} data-group="acc">
+            {LOOK_PARTS.accessories.map((name, acc) => {
+              const fits = accessoryFits(acc, base.shape);
+              const on = choice.kind === "look" && base.acc === acc;
+              return (
+                <button key={name} type="button" role="radio" aria-checked={on} disabled={!fits} className={cn("av-cell", on && "is-on")}
+                  aria-label={accessoryLabel(name)} title={fits ? accessoryLabel(name) : L(`${accessoryLabel(name)}：这个形状戴不上`, `${accessoryLabel(name)}: does not fit this shape`)}
+                  onClick={() => pick({ acc })}>
+                  {cell({ ...base, acc, sprout: acc === 1 })}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -229,4 +261,19 @@ export function AvatarDialog({ open, onOpenChange, hubId, agent, onSaved }: {
       </div>
     </Modal>
   );
+}
+
+/** What an accessory is called. */
+function accessoryLabel(name: string): string {
+  switch (name) {
+    case "none": return L("不戴", "Nothing");
+    case "sprout": return L("小芽", "A sprout");
+    case "leaf": return L("小叶子", "A leaf");
+    case "bow": return L("蝴蝶结", "A bow");
+    case "headphones": return L("耳机", "Headphones");
+    case "scarf": return L("围巾", "A scarf");
+    case "star": return L("小星星", "A star");
+    case "flower": return L("小花", "A flower");
+    default: return name;
+  }
 }

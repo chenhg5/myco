@@ -18,11 +18,37 @@ import { L } from "@/lib/i18n";
 
 const CAPS = ["#3fa37a", "#e0675a", "#e7a33e", "#5b8def", "#9b6bd6", "#e46aa5", "#33aebf", "#8a9a3c", "#d9824a", "#6f7fd8"];
 
-// The cap (rows 0-5), with spots (o) in one of three patterns.
-const CAP_PATTERNS = [
-  ["....CCCC....", "..CCCCCCCC..", ".CCoCCCCoCC.", "CCCCCCCCCCCC", "CCCCCoCCCCCC", ".CCCCCCCCCC."],
-  ["....CCCC....", "..CCCoCCCC..", ".CCCCCCCCoC.", "CoCCCCCCCCCC", "CCCCCCCoCCCC", ".CCCCCCCCCC."],
-  ["....CoCC....", "..CCCCCCCC..", ".CCCCoCCCCC.", "CCCCCCCCCCoC", "CCoCCCCCCCCC", ".CCCCCCCCCC."],
+// The cap's outline (rows y = -2..5, 12 wide): six shapes that tell apart
+// even at 20px. 0 is the dome every face had before shapes came.
+const SHAPES = [
+  // dome
+  ["............", "............", "....CCCC....", "..CCCCCCCC..", ".CCCCCCCCCC.", "CCCCCCCCCCCC", "CCCCCCCCCCCC", ".CCCCCCCCCC."],
+  // cone: a pointed top
+  [".....CC.....", "....CCCC....", "....CCCC....", "...CCCCCC...", "..CCCCCCCC..", ".CCCCCCCCCC.", "CCCCCCCCCCCC", ".CCCCCCCCCC."],
+  // flat: wide and low
+  ["............", "............", "............", "............", "............", ".CCCCCCCCCC.", "CCCCCCCCCCCC", "CCCCCCCCCCCC"],
+  // bell: tall and narrow
+  ["............", "....CCCC....", "...CCCCCC...", "...CCCCCC...", "...CCCCCC...", "..CCCCCCCC..", "..CCCCCCCC..", "..CCCCCCCC.."],
+  // frill: a dome with a scalloped edge
+  ["............", "............", "....CCCC....", "..CCCCCCCC..", ".CCCCCCCCCC.", "CCCCCCCCCCCC", "CCCCCCCCCCCC", "C.CC.CC.CC.C"],
+  // brim: a small crown on a wide brim
+  ["............", "............", "............", "....CCCC....", "...CCCCCC...", "...CCCCCC...", "CCCCCCCCCCCC", ".CCCCCCCCCC."],
+];
+// Where accessories sit on each shape: its top, left and right shoulders [x, y].
+const ANCHORS: { top: [number, number]; left: [number, number]; right: [number, number] }[] = [
+  { top: [6, 0], left: [2, 1], right: [9, 1] },
+  { top: [6, -2], left: [3, 1], right: [8, 1] },
+  { top: [6, 3], left: [1, 3], right: [10, 3] },
+  { top: [6, -1], left: [3, 0], right: [8, 0] },
+  { top: [6, 0], left: [2, 1], right: [9, 1] },
+  { top: [6, 1], left: [4, 1], right: [7, 1] },
+];
+// The spots, as [x, y] on the cap (one of three patterns; a spot falls
+// only where the shape has cap).
+const SPOTS: [number, number][][] = [
+  [[3, 2], [8, 2], [5, 4]],
+  [[5, 1], [9, 2], [1, 3], [7, 4]],
+  [[5, 0], [5, 2], [10, 3], [2, 4]],
 ];
 // The stem and face (rows 6-11): eyes (e), glasses (g), blush (b); the
 // stem's right edge in shade (T), so it stands out from a pale tile.
@@ -31,6 +57,13 @@ const FACES = [
   ["...SSSSST...", "..ggggggggg.", "...SeSSeT...", "...SSSSST...", "...SS..ST...", "............"],
   ["...SSSSST...", "...SeSSeT...", "...bSSSSb...", "...SSSSST...", "...SS..ST...", "............"],
   ["...SSSSST...", "...SSSSST...", "...SeSSeT...", "...SSSSST...", "...SS..ST...", "............"],
+];
+// What it wears (one at most): 0 nothing, 1 a sprout (as before), then a
+// leaf, a bow, headphones, a scarf, a star and a flower; with the shapes
+// each one fits (a sprout needs room on top, headphones a dome).
+const ACCESSORIES: { name: string; fits?: number[] }[] = [
+  { name: "none" }, { name: "sprout", fits: [0, 2, 4, 5] }, { name: "leaf" }, { name: "bow" },
+  { name: "headphones", fits: [0, 4] }, { name: "scarf" }, { name: "star" }, { name: "flower" },
 ];
 
 function hash(s: string): number {
@@ -42,42 +75,77 @@ function hash(s: string): number {
   return h >>> 0;
 }
 
-/** A drawn face's parts, as indexes: cap colour, spots, face, a sprout. */
-export type Look = { cap: number; pattern: number; face: number; sprout: boolean };
+/** Whether an accessory can be worn on a shape. */
+export function accessoryFits(acc: number, shape: number): boolean {
+  const f = ACCESSORIES[acc]?.fits;
+  return !f || f.includes(shape);
+}
+
+/** A drawn face's parts, as indexes: cap colour, spots, face, cap shape and
+ *  what it wears (sprout is acc 1, kept for words from before shapes). */
+export type Look = { cap: number; pattern: number; face: number; sprout: boolean; shape: number; acc: number };
 
 /** How many of each part there are (for a picker). */
-export const LOOK_PARTS = { caps: CAPS, patterns: CAP_PATTERNS.length, faces: FACES.length };
+export const LOOK_PARTS = { caps: CAPS, patterns: SPOTS.length, faces: FACES.length, shapes: SHAPES.length, accessories: ACCESSORIES.map((a) => a.name) };
 
-/** The parts drawn from a seed (an agent's id): its default face. */
+/** The parts drawn from a seed (an agent's id): its default face. The
+ *  colour, spots and face are what they always were; the shape and what it
+ *  wears come from a second hash, so they vary apart from the colour. */
 export function lookOfSeed(seed: string): Look {
   const h = hash(seed || "?");
-  return {
-    cap: h % CAPS.length,
-    pattern: (h >>> 8) % CAP_PATTERNS.length,
-    face: (h >>> 12) % FACES.length,
-    // a sprout on top, now and then
-    sprout: ((h >>> 16) % 4) === 0,
-  };
+  const h2 = hash("\u0001" + (seed || "?"));
+  const shape = h2 % SHAPES.length;
+  const fit = ACCESSORIES.map((_, i) => i).filter((i) => i > 0 && accessoryFits(i, shape));
+  // about one in four wears nothing
+  const k = (h2 >>> 8) % (fit.length + 2);
+  const acc = k < fit.length ? fit[k] : 0;
+  return { cap: h % CAPS.length, pattern: (h >>> 8) % SPOTS.length, face: (h >>> 12) % FACES.length, sprout: acc === 1, shape, acc };
 }
 
-/** The parts of a chosen drawn face ("look:c3-p1-f2-s1"), or null. */
+/** The parts of a chosen drawn face, or null. "look:c3-p1-f2-s1" is one
+ *  chosen before shapes: the dome, a sprout or nothing, as it always was;
+ *  newer ones add "-h<shape>-a<accessory>". */
 export function parseLook(avatar?: string): Look | null {
-  const m = /^look:c(\d+)-p(\d+)-f(\d+)-s([01])$/.exec(avatar || "");
+  const m = /^look:c(\d+)-p(\d+)-f(\d+)-s([01])(?:-h(\d+)-a(\d+))?$/.exec(avatar || "");
   if (!m) return null;
   const [cap, pattern, face] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  if (cap >= CAPS.length || pattern >= CAP_PATTERNS.length || face >= FACES.length) return null;
-  return { cap, pattern, face, sprout: m[4] === "1" };
+  if (cap >= CAPS.length || pattern >= SPOTS.length || face >= FACES.length) return null;
+  const sprout = m[4] === "1";
+  const shape = m[5] === undefined ? 0 : Number(m[5]);
+  const acc = m[6] === undefined ? (sprout ? 1 : 0) : Number(m[6]);
+  if (shape >= SHAPES.length || acc >= ACCESSORIES.length) return null;
+  return { cap, pattern, face, sprout: acc === 1, shape, acc };
 }
 
-/** The avatar word a hub keeps for a drawn face. */
+/** The avatar word a hub keeps for a drawn face: as before for a dome with
+ *  a sprout or nothing (older apps read it), else with its shape and what
+ *  it wears. */
 export function lookWord(l: Look): string {
-  return `look:c${l.cap}-p${l.pattern}-f${l.face}-s${l.sprout ? 1 : 0}`;
+  const acc = l.acc ?? (l.sprout ? 1 : 0);
+  const shape = l.shape ?? 0;
+  const base = `look:c${l.cap}-p${l.pattern}-f${l.face}-s${acc === 1 ? 1 : 0}`;
+  return shape === 0 && acc <= 1 ? base : `${base}-h${shape}-a${acc}`;
 }
 
-/** What a face looks like: the chosen parts, else the ones from its seed. */
+/** In one workspace, faces drawn from a seed that would share a colour and
+ *  a shape with an earlier agent's take the next free shape, then colour
+ *  (rememberWorkspaceFaces). By agent id. */
+const assigned = new Map<string, Look>();
+
+/** The parts of a face: the chosen ones, else the workspace's pick for it,
+ *  else the ones from its seed. */
+export function lookOf(seed: string, avatar?: string): Look {
+  return parseLook(avatar) || assigned.get(seed) || lookOfSeed(seed);
+}
+
+/** What a face looks like: its parts' rows and colours. */
 export function looksOf(seed: string, avatar?: string) {
-  const l = parseLook(avatar) || lookOfSeed(seed);
-  return { cap: CAPS[l.cap], pattern: CAP_PATTERNS[l.pattern], face: FACES[l.face], sprout: l.sprout };
+  const l = lookOf(seed, avatar);
+  const outline = SHAPES[l.shape] || SHAPES[0];
+  const spots = new Set(SPOTS[l.pattern].map(([x, y]) => `${x},${y}`));
+  // the cap rows y = -2..5, spots where the cap is
+  const cap = outline.map((row, i) => [...row].map((k, x) => (k === "C" && spots.has(`${x},${i - 2}`) ? "o" : k)).join(""));
+  return { cap: CAPS[l.cap], rows: cap, face: FACES[l.face], shape: l.shape, acc: accessoryFits(l.acc, l.shape) ? l.acc : 0 };
 }
 
 const FILL: Record<string, string> = {
@@ -85,15 +153,75 @@ const FILL: Record<string, string> = {
   g: "var(--av-eye)", b: "rgba(232,110,110,0.55)",
 };
 
+/** What it wears, as [x, y, colour] pixels on its shape. */
+function accessoryPixels(acc: number, shape: number): [number, number, string][] {
+  const a = ANCHORS[shape] || ANCHORS[0];
+  const [tx, ty] = a.top;
+  const [lx, ly] = a.left;
+  const [rx, ry] = a.right;
+  const green = "#5aa86a";
+  switch (ACCESSORIES[acc]?.name) {
+    case "sprout": return [[tx, ty - 2, green], [tx, ty - 1, green], [tx + 1, ty - 2, green]];
+    case "leaf": return [[lx, ly - 1, "#3f8f4f"], [lx + 1, ly - 1, green], [lx - 1, ly, green], [lx, ly, "#3f8f4f"]];
+    case "bow": return [[rx - 1, ry - 1, "#f0507a"], [rx + 1, ry - 1, "#f0507a"], [rx - 1, ry, "#f0507a"], [rx, ry, "#b8325a"], [rx + 1, ry, "#f0507a"]];
+    case "headphones": {
+      const ink = "#3b3f4a";
+      return [...[2, 3, 4, 5, 6, 7, 8, 9].map((x) => [x, -1, ink] as [number, number, string]),
+        [1, 0, ink], [10, 0, ink], [0, 1, ink], [1, 1, ink], [0, 2, ink], [1, 2, ink], [10, 1, ink], [11, 1, ink], [10, 2, ink], [11, 2, ink]];
+    }
+    case "scarf": return [...[2, 3, 4, 5, 6, 7, 8, 9].map((x) => [x, 9, "#d9433f"] as [number, number, string]), [9, 10, "#d9433f"], [9, 11, "#b8322f"]];
+    case "star": return [[10, -2, "#f2b632"], [9, -1, "#f2b632"], [10, -1, "#fff3c4"], [11, -1, "#f2b632"], [10, 0, "#f2b632"]];
+    case "flower": {
+      const [fx, fy] = [lx + 1, ly];
+      return [[fx, fy - 1, "#ffffff"], [fx - 1, fy, "#ffffff"], [fx + 1, fy, "#ffffff"], [fx, fy + 1, "#ffffff"], [fx, fy, "#f2b632"]];
+    }
+    default: return [];
+  }
+}
+
 export function MushroomFace({ seed, avatar }: { seed: string; avatar?: string }) {
   const l = looksOf(seed, avatar);
-  const rows = [...l.pattern, ...l.face];
+  const px = (row: string, y: number) => [...row].map((k, x) => (k === "." ? null : <rect key={`${x},${y}`} x={x} y={y} width="1" height="1" fill={FILL[k]} />));
   return (
-    <svg className="pa-sprite" viewBox="0 -2 12 14" shapeRendering="crispEdges" aria-hidden="true">
-      {l.sprout && <><rect x="6" y="-2" width="1" height="2" fill="#5aa86a" /><rect x="7" y="-2" width="1" height="1" fill="#5aa86a" /></>}
-      {rows.flatMap((row, y) => [...row].map((k, x) => (k === "." ? null : <rect key={`${x},${y}`} x={x} y={y} width="1" height="1" fill={FILL[k]} />)))}
+    <svg className="pa-sprite" viewBox="0 -2 12 14" shapeRendering="crispEdges" aria-hidden="true" data-shape={l.shape} data-acc={l.acc}>
+      {l.rows.flatMap((row, i) => px(row, i - 2))}
+      {l.face.flatMap((row, i) => px(row, i + 6))}
+      {accessoryPixels(l.acc, l.shape).map(([x, y, c]) => <rect key={`a${x},${y}`} x={x} y={y} width="1" height="1" fill={c} />)}
     </svg>
   );
+}
+
+/** Spreads the faces drawn from seeds in one workspace: agents in the order
+ *  they joined (so a newcomer never changes an older one's face), each
+ *  keeping its own face unless an earlier one already has its colour and
+ *  shape; then it takes the next free shape, else the next free colour.
+ *  Chosen faces count as taken and stay as they are. */
+export function rememberWorkspaceFaces(agents: { id: string; created_at?: string; avatar?: string }[]) {
+  const byAge = [...agents].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || "") || a.id.localeCompare(b.id));
+  const taken = new Set<string>();
+  const key = (l: Look) => `${l.cap}/${l.shape}`;
+  for (const a of byAge) {
+    const chosen = parseLook(a.avatar);
+    if (chosen) { taken.add(key(chosen)); continue; }
+    if (a.avatar?.startsWith("pic:")) continue;
+    const own = lookOfSeed(a.id);
+    let pick = own;
+    if (taken.has(key(own))) {
+      search: for (let dc = 0; dc < CAPS.length; dc++) {
+        for (let ds = 0; ds < SHAPES.length; ds++) {
+          const shape = (own.shape + ds) % SHAPES.length;
+          const cap = (own.cap + dc) % CAPS.length;
+          if (!taken.has(`${cap}/${shape}`)) {
+            const acc = accessoryFits(own.acc, shape) ? own.acc : 0;
+            pick = { ...own, cap, shape, acc, sprout: acc === 1 };
+            break search;
+          }
+        }
+      }
+    }
+    taken.add(key(pick));
+    if (pick === own) assigned.delete(a.id); else assigned.set(a.id, pick);
+  }
 }
 
 // A workspace: a small window with a prompt.
