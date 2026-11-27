@@ -70,8 +70,6 @@ def resolve(repo, ref, *, sign_only=False, full_ci=False, defer_ci=False, force_
     version = command("git", "show", f"{sha}:VERSION")
     if not re.fullmatch(r"v\d+\.\d+\.\d+", version):
         raise ValueError("VERSION must be vMAJOR.MINOR.PATCH")
-    if sign_only:
-        return {"sha": sha, "version": version, "base": sha, "ci_run": ""}
     parents = command("git", "rev-list", "--parents", "-n", "1", sha).split()[1:]
     base = sha
     if len(parents) == 1:
@@ -79,6 +77,8 @@ def resolve(repo, ref, *, sign_only=False, full_ci=False, defer_ci=False, force_
         if files == {"VERSION", "CHANGELOG.md"}:
             base = parents[0]
     subprocess.run(["git", "merge-base", "--is-ancestor", base, "origin/main"], check=True)
+    if sign_only:
+        return {"sha": sha, "version": version, "base": base, "ci_run": ""}
     if force_ci and not defer_ci:
         raise ValueError("--force-ci requires deferred qualification")
     run = None if force_ci else (green_run(repo, base, full=True) if full_ci else green_run(repo, base))

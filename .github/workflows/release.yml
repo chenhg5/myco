@@ -1,3 +1,4 @@
+# actions-release-v1: frozen workflow and Environment isolation are required.
 name: release
 run-name: ${{ inputs.sign_only && 'sign-only' || inputs.dry_run && 'release-check' || 'release' }} ${{ inputs.release_ref || github.sha }}
 
@@ -14,6 +15,10 @@ on:
         description: "Full commit SHA to build (main source plus VERSION/CHANGELOG only)"
         type: string
         default: ""
+      managed_release:
+        description: "Actions orchestration owns metadata sync and asynchronous Gitee mirror"
+        type: boolean
+        default: false
       sign_only:
         description: "Only build and sign the Mac app (checks the signing secrets; publishes nothing)"
         type: boolean
@@ -27,9 +32,7 @@ on:
         type: boolean
         default: false
 
-permissions:
-  contents: write
-  actions: read
+permissions: {}
 
 # Publishing two versions at once can race tags and the latest release pointer.
 concurrency:
@@ -38,6 +41,11 @@ concurrency:
 
 jobs:
   version:
+    if: github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
@@ -46,9 +54,22 @@ jobs:
       base: ${{ steps.source.outputs.base }}
       ci_run: ${{ steps.source.outputs.ci_run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+      - name: Require restricted release Environment before accessing credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ENVIRONMENT_READY: ${{ vars.RELEASE_ENVIRONMENT_READY }}
+        run: |
+          python3 - <<'PYCODE'
+          import importlib.util
+          from pathlib import Path
+          p=Path('scripts/release-orchestrate.py')
+          spec=importlib.util.spec_from_file_location('release_policy',p)
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          m.environment_policy(m.GitHub(__import__('os').environ['GITHUB_REPOSITORY']))
+          PYCODE
       - name: Resolve and validate immutable source
         id: v
         env:
@@ -95,6 +116,7 @@ jobs:
       force_full: true
 
   quality_gate:
+    permissions: {}
     needs: [version, qualify]
     if: always() && needs.version.result == 'success' && needs.version.outputs.skip != 'true' && !inputs.sign_only
     runs-on: ubuntu-latest
@@ -113,22 +135,33 @@ jobs:
   # The Mac app for both architectures, zipped (ad-hoc signed), and with the
   # signing secrets also the signed, notarized universal app and DMG.
   app:
+    environment: release
+    permissions:
+      contents: read
     needs: version
     if: needs.version.outputs.skip != 'true' || inputs.sign_only
     runs-on: macos-latest
     timeout-minutes: 60
     env:
-      # Signing and notarizing happen here when the repository has the
-      # signing secrets (the maintainers' release runbook); without them the release gets
-      # unsigned app zips and a Mac signs it (scripts/mac-sign.sh).
+      # Credentials are released only by the restricted release Environment.
+      # Missing signing/notarization credentials fail before packaging.
       SIGN: ${{ secrets.MAC_CERT_P12_BASE64 != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ needs.version.outputs.sha }}
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
+      - name: Require signing credentials in release Environment
+        env:
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          test "$SIGN" = true && test -n "$MAC_CERT_PASSWORD" && test -n "$NOTARY_APPLE_ID" && test -n "$NOTARY_PASSWORD" || {
+            echo '::error::Signing/notarization credentials are required in the release Environment'; exit 1;
+          }
       - name: Prepare pinned builtin apps
         run: python3 scripts/prepare-apps.py
       - name: build myco.app (arm64, amd64)
@@ -205,12 +238,14 @@ jobs:
             --password "$NOTARY_PASSWORD" --keychain "$kc" >/dev/null
           MYCO_SIGN_IDENTITY="$id" MYCO_NOTARY_KEYCHAIN="$kc" scripts/mac-sign.sh ${{ needs.version.outputs.version }}
           mv dist/myco.dmg dist/myco-app-darwin-universal.zip out/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: app
           path: out/*
 
   cross:
+    permissions:
+      contents: read
     # The CLI for every platform and the Windows console app, at the same
     # time as the Mac app and source qualification: one
     # runner per OS, each building its two architectures.
@@ -221,10 +256,10 @@ jobs:
       matrix:
         goos: [linux, darwin, windows]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ needs.version.outputs.sha }}
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: Prepare pinned builtin apps
@@ -254,25 +289,27 @@ jobs:
       - name: Smoke-test the linux/amd64 release binary
         if: matrix.goos == 'linux'
         run: MYCO_BIN=$PWD/bin/myco-linux-amd64 scripts/smoke.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: cross-${{ matrix.goos }}
           path: bin/myco-*
 
   release:
+    permissions:
+      contents: write
     needs: [version, quality_gate, app, cross]
     if: always() && needs.version.result == 'success' && needs.version.outputs.skip != 'true' && !inputs.sign_only && needs.quality_gate.result == 'success' && needs.app.result == 'success' && needs.cross.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ needs.version.outputs.sha }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: cross-*
           merge-multiple: true
           path: bin
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: app
           path: bin
@@ -328,3 +365,46 @@ jobs:
             gh release create "$v" bin/* --target "$RELEASE_SHA" --generate-notes
           fi
 
+
+  metadata_sync:
+    needs: [version, release]
+    if: inputs.managed_release && !inputs.dry_run && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Sync metadata without overwriting main source and clean exact source lease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+          METADATA_SHA: ${{ needs.version.outputs.sha }}
+        run: python3 scripts/release-orchestrate.py finish --version "$RELEASE_VERSION" --metadata-sha "$METADATA_SHA"
+
+  mirror:
+    needs: [version, release]
+    if: inputs.managed_release && !inputs.dry_run && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 12
+    concurrency:
+      group: gitee-release-mirror
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Mirror after GitHub publication (bounded; retry only this job)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_LOGIN: ${{ vars.GITEE_LOGIN }}
+          GITEE_REPOSITORY: ${{ vars.GITEE_REPOSITORY || 'cg33/myco' }}
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+        run: python3 scripts/release-gitee.py --version "$RELEASE_VERSION" --budget 600
