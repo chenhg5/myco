@@ -508,9 +508,10 @@ function StartDialog({ hubId, wf, onClose, onStarted }: { hubId: string; wf: Wor
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [more, setMore] = useState(false);
   useEffect(() => {
     if (!wf) return;
-    setDef(null); setError(null); setBusy(false);
+    setDef(null); setError(null); setBusy(false); setMore(false);
     let off = false;
     appApi.workflow(hubId, wf.id).then((w) => {
       if (off) return;
@@ -525,56 +526,104 @@ function StartDialog({ hubId, wf, onClose, onStarted }: { hubId: string; wf: Wor
   if (!wf) return null;
   const props = Object.entries(def?.inputs?.properties || {});
   const required = def?.inputs?.required || [];
+  const needed = props.filter(([k]) => required.includes(k));
+  const optional = props.filter(([k]) => !required.includes(k));
+  // Many optional inputs fold behind one line that says what they are set
+  // to; a few stay in view.
+  const folds = optional.length > 3;
   const missing = required.find((k) => values[k] === undefined || values[k] === "");
+  const first = def ? def.steps.find((x) => x.id === def.entry) || def.steps[0] : undefined;
+  const who = first ? first.agent || (first.role && L(`分工「${first.role}」`, `the "${first.role}" role`)) || first.computer || (first.human !== undefined ? L("你", "you") : "") : "";
+  const firstWords = first
+    ? who ? L(`第一步「${first.title || first.id}」交给 ${who}，马上开始。`, `Step one, "${first.title || first.id}", goes to ${who} at once.`)
+      : L(`第一步「${first.title || first.id}」马上开始。`, `Step one, "${first.title || first.id}", starts at once.`)
+    : L("第一步马上交出去。", "The first step goes out at once.");
+  const setValue = (k: string) => (v: unknown) => setValues((x) => ({ ...x, [k]: v }));
+  const field = ([k, p]: [string, WfSchema], i: number) => (
+    <InputField key={k} name={k} schema={p} required={required.includes(k)} value={values[k]} disabled={busy}
+      autoFocus={i === 0 && required.includes(k)} onChange={setValue(k)} />
+  );
+  const summary = optional.filter(([k]) => values[k] !== undefined && values[k] !== "").map(([k, p]) =>
+    `${p.title || k}: ${typeof values[k] === "boolean" ? (values[k] ? L("是", "yes") : L("否", "no")) : String(values[k])}`).join(" · ");
   const start = async () => {
     setBusy(true); setError(null);
     try { onStarted(await appApi.startWorkflow(hubId, wf.id, values)); } catch (e) { setError(e); } finally { setBusy(false); }
   };
+  const submit = () => { if (!missing && def && !busy) void start(); };
   return (
-    <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={L(`运行「${wf.name}」`, `Run "${wf.name}"`)}
-      description={props.length ? L("填好它要的，第一步马上交出去。", "Fill in what it takes; the first step goes out at once.") : L("它不用填什么，第一步马上交出去。", "It takes nothing; the first step goes out at once.")}>
-      <form data-testid="workflow-start" onSubmit={(e) => { e.preventDefault(); if (!missing && def) void start(); }}>
+    <Modal open wide={props.length > 0} onOpenChange={(o) => !o && !busy && onClose()} title={L(`运行「${wf.title || wf.name}」`, `Run "${wf.title || wf.name}"`)}
+      description={def ? firstWords : L("正在读取它要填的…", "Reading what it takes…")}>
+      <form className="wf-start" data-testid="workflow-start" onSubmit={(e) => { e.preventDefault(); submit(); }}
+        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submit(); } }}>
         {def === null && !error && <span className="skel skel-line" style={{ width: "60%" }} />}
-        {props.map(([k, p]) => (
-          <InputField key={k} name={k} schema={p} required={required.includes(k)} value={values[k]} disabled={busy}
-            onChange={(v) => setValues((x) => ({ ...x, [k]: v }))} />
-        ))}
+        {needed.length > 0 && <div className="wf-start-fields">{needed.map(field)}</div>}
+        {optional.length > 0 && (
+          <div className={cn("wf-start-more", folds && !more && "is-folded")} data-testid="workflow-start-optional">
+            {folds ? (
+              <button type="button" className="wf-start-more-head" aria-expanded={more} onClick={() => setMore((m) => !m)}>
+                <ChevronDown className="wf-start-chev" />
+                <span className="wf-start-more-title">{L(`可选 · ${optional.length} 项`, `Optional · ${optional.length}`)}</span>
+                {!more && <span className="wf-start-more-sum">{summary || L("都不填也能开始", "Fine to leave them all")}</span>}
+              </button>
+            ) : needed.length > 0 ? <div className="wf-start-more-head is-static"><span className="wf-start-more-title">{L("可选", "Optional")}</span></div> : null}
+            {(!folds || more) && <div className="wf-start-fields">{optional.map(field)}</div>}
+          </div>
+        )}
+        {def && !props.length && <p className="wf-start-none">{L("这个工作流不用填什么。", "This workflow takes no inputs.")}</p>}
         <ErrorText error={error} />
         <div className="app-modal-actions">
           {missing && def && <span className="app-modal-hint">{L(`还没填「${def.inputs?.properties?.[missing]?.title || missing}」`, `Fill in "${def.inputs?.properties?.[missing]?.title || missing}"`)}</span>}
           <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>
-          <button type="submit" className="app-btn app-btn-primary" disabled={busy || !!missing || !def}><Play />{busy ? L("正在开始…", "Starting…") : L("开始运行", "Start")}</button>
+          <button type="submit" className="app-btn app-btn-primary" disabled={busy || !!missing || !def}
+            title={L(`开始运行（${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}↵）`, `Start (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}↵)`)}>
+            <Play />{busy ? L("正在开始…", "Starting…") : L("开始运行", "Start")}
+          </button>
         </div>
       </form>
     </Modal>
   );
 }
 
-function InputField({ name, schema, required, value, disabled, onChange }: {
-  name: string; schema: WfSchema; required: boolean; value: unknown; disabled: boolean; onChange: (v: unknown) => void;
+/** One input of a run: what it is (and a line about it) on the left, the
+ * box on the right; a yes/no is a switch. A name with no title is a key,
+ * written as one. */
+function InputField({ name, schema, required, value, disabled, autoFocus, onChange }: {
+  name: string; schema: WfSchema; required: boolean; value: unknown; disabled: boolean; autoFocus?: boolean; onChange: (v: unknown) => void;
 }) {
-  const label = `${schema.title || name}${required ? "" : L("（可选）", " (optional)")}`;
+  const id = `wf-in-${name}`;
+  const label = (
+    <span className="wf-start-label">
+      <label htmlFor={id} className={cn("wf-start-name", !schema.title && "is-key")}>{schema.title || name}</label>
+      {schema.description && <span className="wf-start-desc" title={schema.description}>{schema.description}</span>}
+    </span>
+  );
+  let control;
   if (schema.type === "boolean") {
-    return (
-      <label className="app-check wf-check"><input type="checkbox" checked={!!value} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />{label}</label>
+    control = (
+      <button id={id} type="button" role="switch" aria-checked={!!value} disabled={disabled} className={cn("app-switch", !!value && "is-on")}
+        onClick={() => onChange(!value)}><span className="app-switch-knob" /></button>
+    );
+  } else if (schema.enum) {
+    control = (
+      <select id={id} className="app-select-field" value={String(value ?? "")} disabled={disabled} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)}>
+        {!required && <option value="">{L("不选", "None")}</option>}
+        {schema.enum.map((o) => <option key={String(o)} value={String(o)}>{String(o)}</option>)}
+      </select>
+    );
+  } else if (schema.format === "textarea") {
+    control = (
+      <textarea id={id} className="app-input au-body" rows={3} value={String(value ?? "")} disabled={disabled} autoFocus={autoFocus}
+        placeholder={required ? L("必填", "Required") : ""} onChange={(e) => onChange(e.target.value)} />
+    );
+  } else {
+    const numeric = schema.type === "number" || schema.type === "integer";
+    control = (
+      <input id={id} className="app-input" value={String(value ?? "")} disabled={disabled} autoFocus={autoFocus}
+        placeholder={required ? L("必填", "Required") : numeric ? L("数字", "A number") : ""}
+        inputMode={numeric ? "decimal" : undefined} spellCheck={false} onChange={(e) => onChange(e.target.value)} />
     );
   }
-  return (
-    <label className="app-field"><span className="app-field-label">{label}</span>
-      {schema.enum ? (
-        <select className="app-select-field" value={String(value ?? "")} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-          {!required && <option value="">—</option>}
-          {schema.enum.map((o) => <option key={String(o)} value={String(o)}>{String(o)}</option>)}
-        </select>
-      ) : schema.format === "textarea" ? (
-        <textarea className="app-input au-body" rows={3} value={String(value ?? "")} disabled={disabled} placeholder={schema.description}
-          onChange={(e) => onChange(e.target.value)} />
-      ) : (
-        <input className="app-input" value={String(value ?? "")} disabled={disabled} placeholder={schema.description}
-          inputMode={schema.type === "number" || schema.type === "integer" ? "decimal" : undefined} onChange={(e) => onChange(e.target.value)} />
-      )}
-    </label>
-  );
+  return <div className={cn("wf-start-field", schema.type === "boolean" && "is-switch", schema.format === "textarea" && "is-long")}>{label}{control}</div>;
 }
 
 /* ---------- make one: ready-made (pick who), or ask an agent ---------- */

@@ -6625,6 +6625,59 @@ async function runMatrix(browser, size, scheme) {
 
     // A workflow opened: its steps drawn, then its runs; a run: how each
     // step went, a decision to make, each step's chat.
+    // Running one that takes many optional inputs (like a release): they
+    // fold behind one line saying what they are set to; open, each is a
+    // row, a yes/no is a switch, a key without a title reads as a key.
+    await step("工作流 · 运行的输入", async () => {
+      await go(page, "工作流", narrow);
+      const row = page.locator("[data-testid=workflows] .au-row", { hasText: "写-审-改" });
+      await row.waitFor({ timeout: 20_000 });
+      const detail = /\/app\/hubs\/[^/]+\/workflows\/[^/?]+$/;
+      await page.route(detail, async (route) => {
+        if (route.request().method() !== "GET") return route.continue();
+        const json = await (await route.fetch()).json();
+        json.definition = { ...json.definition, inputs: { type: "object", properties: {
+          authorization: { type: "string", enum: ["release", "preview"], default: "release", description: "这次是正式发布还是预览" },
+          dry_run: { type: "boolean", default: true, description: "只走一遍流程，不真的发" },
+          notify_agent: { type: "string" },
+          request_task: { type: "string" },
+          requested_at: { type: "string" },
+          source_sha: { type: "string", description: "要发的提交，不填用 main 最新的" },
+          version: { type: "string", title: "版本号" },
+        } } };
+        await route.fulfill({ json });
+      });
+      try {
+        await clickVisible(page, row.getByRole("button", { name: "运行", exact: true }));
+        const form = page.locator("[data-testid=workflow-start]");
+        await form.waitFor({ timeout: 10_000 });
+        const more = form.locator("[data-testid=workflow-start-optional] .wf-start-more-head");
+        await more.waitFor({ timeout: 10_000 });
+        if (await form.locator(".wf-start-field").count()) throw new Error("七个可选项应先收起来");
+        const sum = await more.innerText();
+        if (!sum.includes("release") || !sum.includes("是")) throw new Error(`收起时应写出已填的值，实际「${sum}」`);
+        if (await form.getByRole("button", { name: "开始运行" }).isDisabled()) throw new Error("都可选时应能直接开始");
+        if (!(await page.locator(".app-modal > p").innerText()).includes("第一步")) throw new Error("说明应写第一步交给谁");
+        await settle(page, 150);
+        await shot(page, size, scheme, "workflow-start-folded");
+        await more.click();
+        await form.locator(".wf-start-field").nth(6).waitFor({ timeout: 5_000 });
+        const sw = form.getByRole("switch");
+        if ((await sw.getAttribute("aria-checked")) !== "true") throw new Error("dry_run 应是开着的开关");
+        if (!(await form.locator(".wf-start-name.is-key", { hasText: "source_sha" }).count())) throw new Error("没有标题的输入应按键名显示");
+        if (!(await form.getByText("要发的提交，不填用 main 最新的").isVisible())) throw new Error("输入的说明应写在名字下面");
+        const box = await page.locator(".app-modal").boundingBox();
+        const vh = page.viewportSize().height;
+        if (!box || box.y + box.height > vh + 1) throw new Error("运行弹框展开后不该超出窗口");
+        await settle(page, 150);
+        await shot(page, size, scheme, "workflow-start-open");
+        await page.keyboard.press("Escape");
+        await form.waitFor({ state: "detached", timeout: 5_000 });
+      } finally {
+        await page.unroute(detail);
+      }
+    });
+
     await step("工作流 · 运行", async () => {
       await go(page, "工作流", narrow);
       const row = page.locator("[data-testid=workflows] .au-row", { hasText: "写-审-改" });
