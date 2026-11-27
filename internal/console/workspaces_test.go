@@ -14,12 +14,15 @@ import (
 	"github.com/myco-ai/myco/internal/client"
 	"github.com/myco-ai/myco/internal/console"
 	"github.com/myco-ai/myco/internal/hubserver"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 // The app creates a workspace on its hub's server and adds it, signed in as
 // its owner; a hub without workspaces says so.
 func TestAppCreatesWorkspaceOnItsServer(t *testing.T) {
-	o := hubserver.Options{DBPath: filepath.Join(t.TempDir(), "hub.db"), AdminToken: adminToken,
+	// This tests workspace routing and ownership, independently of the size
+	// of the prepared production application catalogue.
+	o := hubserver.Options{OfficialDir: testutil.OfficialDir(t), DBPath: filepath.Join(t.TempDir(), "hub.db"), AdminToken: adminToken,
 		Policy: app.DefaultMessagePolicy(), OnlineWindow: time.Minute, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	h, err := hubserver.Build(o)
 	if err != nil {

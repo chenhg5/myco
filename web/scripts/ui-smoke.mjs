@@ -5383,14 +5383,21 @@ async function runMatrix(browser, size, scheme) {
       const kept = page.locator("[data-testid=providers-hub-kept]");
       await kept.waitFor({ timeout: 10_000 });
       if (!(await kept.innerText()).includes("Hub 管理员能看到")) throw new Error("没开加密时应写清 key 由 Hub 保管");
+      // Nothing yet: one card that says what it is for, and adds one.
+      await page.locator("[data-testid=providers-empty]").waitFor({ timeout: 10_000 });
       if (await page.locator("[data-testid=providers-add]").isDisabled()) throw new Error("没开端到端加密时也应能新增");
-      if ((await page.locator("[data-testid=providers]").innerText()).includes("请先在 设置 › 工作区 里打开端到端加密")) throw new Error("不该再有互相矛盾的说明");
+      if ((await page.locator("[data-testid=providers]").innerText()).includes("先打开端到端加密")) throw new Error("不该再拦着要先开加密");
       await settle(page, 200);
       await shot(page, size, scheme, "settings-providers-hub-kept");
+      await clickVisible(page, page.locator("[data-testid=providers-open-e2e]"));
+      await page.locator(".app-settings-tab.active", { hasText: "工作区" }).first().waitFor({ timeout: 5_000 });
       await setE2E(true);
       await go(page, "成员", narrow);
       await openSection();
       await page.locator("[data-testid=providers-hub-kept]").waitFor({ state: "hidden", timeout: 10_000 });
+      await page.locator("[data-testid=providers-empty]").waitFor({ timeout: 10_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "settings-providers-empty");
       await clickVisible(page, page.locator("[data-testid=providers-add]"));
       const dlg = page.locator(".app-modal", { has: page.locator("[data-testid=provider-vendors]") });
       await dlg.waitFor({ timeout: 5_000 });

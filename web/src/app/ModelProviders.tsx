@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { KeyRound, Plus } from "lucide-react";
 import { appApi, type HubOverview, type ModelProviderInput } from "@/appapi";
 import type { ModelProvider, RuntimeModel } from "@/api";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
@@ -57,7 +58,7 @@ export function custodyLine(e2e: boolean): string {
 /** Settings › 模型供应商: the member's vendors and keys, for every computer
  *  they add an agent on. With end-to-end encryption on, keys are sealed for
  *  their own devices; off, the hub keeps them (i119). */
-export function ModelProvidersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; onRefresh: () => Promise<void> }) {
+export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: { hubsOv?: HubOverview[]; onRefresh: () => Promise<void>; onOpenWorkspaces?: () => void }) {
   const hubs = (hubsOv || []).filter((h) => h.ok && h.me?.member);
   const [hubId, setHubId] = useState("");
   const hub = hubs.find((h) => h.id === hubId) || hubs[0];
@@ -134,34 +135,56 @@ export function ModelProvidersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverv
     }
   };
   const deletingUsers = deleting ? usersOf(hub, deleting).all.length : 0;
+  const providers = list?.providers || [];
+  const empty = !!list && providers.length === 0;
   return (
     <>
-      {hubs.length > 1 && (
-        <select className="app-select-field app-members-hub" value={hub.id} onChange={(e) => setHubId(e.target.value)}>
-          {hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-        </select>
-      )}
-      <div className="app-members-head">
-        <span className="app-group-title"><span className="name">{L("我的模型供应商", "My model providers")}</span></span>
-        <button type="button" className="app-btn app-btn-small app-members-invite" onClick={() => setEditing("new")} data-testid="providers-add">
-          {L("新增", "Add")}
-        </button>
+      {/* One row: what this is, which workspace (when there are several),
+          and adding one. */}
+      <div className="app-members-head pv-head">
+        <span className="app-group-title">
+          <span className="name">{L("我的模型供应商", "My model providers")}</span>
+          {providers.length > 0 && <span className="app-group-note">{L(` · ${providers.length} 个`, ` · ${providers.length}`)}</span>}
+        </span>
+        {hubs.length > 1 && (
+          <select className="app-select-field pv-hub" value={hub.id} onChange={(e) => setHubId(e.target.value)} aria-label={L("工作区", "Workspace")} title={L("存在哪个工作区", "Which workspace keeps them")}>
+            {hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          </select>
+        )}
+        {providers.length > 0 && (
+          <button type="button" className="app-btn app-btn-small app-btn-primary pv-add" onClick={() => setEditing("new")} data-testid="providers-add">
+            <Plus />{L("新增", "Add")}
+          </button>
+        )}
       </div>
       <section className="app-setting-card app-members" data-testid="providers">
         <ErrorText error={error || actionError} />
         {note && <p className="app-small-note app-offline-ok">{note}</p>}
         {!e2e && (
+          // Who keeps keys, said once (i119): nothing is in the way.
           <p className="app-small-note" data-testid="providers-hub-kept">
             {custodyLine(false)}{" "}
-            <button type="button" className="app-kv-link" onClick={() => window.dispatchEvent(new CustomEvent("myco-open-settings", { detail: { section: "hubs" } }))}>
-              {L("开启端到端加密", "Turn on encryption")}
-            </button>
+            {onOpenWorkspaces && (
+              <button type="button" className="app-kv-link" onClick={onOpenWorkspaces} data-testid="providers-open-e2e">{L("开启端到端加密", "Turn on encryption")}</button>
+            )}
           </p>
         )}
-        {list && list.providers.length === 0 && (
-          <p className="app-small-note">{L("还没有。有自己的 key（DeepSeek、Kimi、MiniMax、OpenCode Go……）就新增一个，以后在任何一台电脑上新增 agent 都能直接选。", "None yet. Have your own key (DeepSeek, Kimi, MiniMax, OpenCode Go…)? Add it, and pick it whenever you add an agent on any of your computers.")}</p>
+        {empty && (
+          <div className="pv-state" data-testid="providers-empty">
+            <span className="pv-state-icon"><KeyRound /></span>
+            <div className="pv-state-body">
+              <b>{L("还没有模型供应商", "No model providers yet")}</b>
+              <p>{L("有自己的 key（DeepSeek、Kimi、MiniMax、OpenCode Go……）就新增一个，以后在任何一台电脑上新增 agent 都能直接选。",
+                "Have your own key (DeepSeek, Kimi, MiniMax, OpenCode Go…)? Add it, then pick it whenever you add an agent on any of your computers.")}</p>
+              <div className="pv-state-actions">
+                <button type="button" className="app-btn app-btn-small app-btn-primary" onClick={() => setEditing("new")} data-testid="providers-add">
+                  <Plus />{L("新增模型供应商", "Add a model provider")}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
-        {list?.providers.map((p) => {
+        {providers.map((p) => {
           const users = usersOf(hub, p);
           return (
             <div key={p.id} className="app-member-row" data-testid={`provider-${p.id}`}>
@@ -209,12 +232,12 @@ export function ModelProvidersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverv
             </div>
           );
         })}
-        <p className="app-hint">{e2e
-          ? L("key 在这台电脑上加密后存到工作区，只有你自己的设备能解开，工作区看不到。新增 agent 时只写到那台电脑上（它的 env 文件，权限 600）。",
-            "Keys are encrypted on this computer before they are kept in the workspace: only your own devices open them, the workspace cannot. When you add an agent, the key is written only to that computer (its env file, mode 600).")
-          : L("key 由 Hub 用工作区自己的密钥加密后保存，只发给你选的那台电脑上的 agent（写进它的 env 文件，权限 600）。打开端到端加密后，这台 App 会把它改成只有你的设备能解开。",
-            "The hub keeps keys encrypted with the workspace's own key, and sends one only to the agent you pick (into its env file, mode 600). Once end-to-end encryption is on, this App re-encrypts them for your devices alone.")}</p>
       </section>
+      <p className="app-hint pv-foot">{e2e
+        ? L("key 在这台电脑上加密后存到工作区，只有你自己的设备能解开，工作区看不到。新增 agent 时只写到那台电脑上（它的 env 文件，权限 600）。",
+          "Keys are encrypted on this computer before they are kept in the workspace: only your own devices open them, the workspace cannot. When you add an agent, the key is written only to that computer (its env file, mode 600).")
+        : L("key 由 Hub 用工作区自己的密钥加密后保存，只发给你选的那台电脑上的 agent（写进它的 env 文件，权限 600）。打开端到端加密后，这台 App 会把它改成只有你的设备能解开。",
+          "The hub keeps keys encrypted with the workspace's own key, and sends one only to the agent you pick (into its env file, mode 600). Once end-to-end encryption is on, this App re-encrypts them for your devices alone.")}</p>
 
       {editing && (
         <ProviderEditor hubId={hub.id} e2e={e2e} provider={editing === "new" ? null : editing} onClose={() => setEditing(null)}

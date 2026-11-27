@@ -867,7 +867,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         {section === "hubs" && simple && <MyDevices hubsOv={hubsOv} />}
         {section === "members" && <MembersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
         {section === "audit" && <AuditSection hubsOv={hubsOv} />}
-        {section === "providers" && <ModelProvidersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
+        {section === "providers" && <ModelProvidersSection hubsOv={hubsOv} onRefresh={onRefresh} onOpenWorkspaces={() => setSection("hubs")} />}
       </div>
 
       <Modal

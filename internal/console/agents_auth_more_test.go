@@ -10,7 +10,7 @@ import (
 )
 
 func TestAdditionalCLIAuthEvidence(t *testing.T) {
-	for _, cli := range []string{"kimi", "copilot", "auggie", "kilo", "cline", "grok", "antigravity", "goose"} {
+	for _, cli := range []string{"atomcode", "kimi", "copilot", "auggie", "kilo", "cline", "grok", "antigravity", "goose"} {
 		t.Run(cli+"_unknown", func(t *testing.T) {
 			l := isolatedAuthLocal(t)
 			if got := l.signedIn(context.Background(), cli, "must-not-run"); got != "unknown" {
@@ -337,5 +337,59 @@ func TestAuthConfigLimits(t *testing.T) {
 		if authConfig(path, format) != nil {
 			t.Fatal("oversized configuration accepted")
 		}
+	}
+}
+
+func TestAtomcodeOAuthEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		ready      bool
+	}{
+		{"access", "access_token = 'fixture'\ntoken_type = 'Bearer'\n[user]\nid = 'demo'\nusername = 'demo'\n", true},
+		{"refresh", "refresh_token = 'fixture'\n", true},
+		{"empty", "access_token = '  '\nrefresh_token = ''\n", false},
+		{"metadata", "token_type = 'Bearer'\n[user]\nid = 'demo'\nusername = 'demo'\n", false},
+		{"nested", "[access_token]\nmetadata = 'fixture'\n", false},
+		{"number", "access_token = 123\n", false},
+		{"invalid", "access_token =", false},
+		{"oversize", "access_token = 'fixture'\n#" + strings.Repeat("x", 1<<20), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l := isolatedAuthLocal(t)
+			path := filepath.Join(l.Home, ".atomcode", "auth.toml")
+			writeAuthFixture(t, path, tc.body)
+			want := "unknown"
+			if tc.ready {
+				want = "ready"
+			}
+			if got := l.signedIn(context.Background(), "atomcode", "must-not-run"); got != want {
+				t.Fatalf("state=%s want=%s", got, want)
+			}
+			body, err := os.ReadFile(path)
+			if err != nil || string(body) != tc.body {
+				t.Fatal("credential file changed")
+			}
+		})
+	}
+}
+
+func TestAtomcodeHomeOverride(t *testing.T) {
+	l := isolatedAuthLocal(t)
+	writeAuthFixture(t, filepath.Join(l.Home, ".atomcode", "auth.json"), `{"access_token":"fixture"}`)
+	if l.atomcodeSignedIn() {
+		t.Fatal("unverified JSON store must not count")
+	}
+	writeAuthFixture(t, filepath.Join(l.Home, ".atomcode", "auth.toml"), "access_token = 'fixture'\n")
+	if !l.atomcodeSignedIn() {
+		t.Fatal("default store missing")
+	}
+	dir := filepath.Join(t.TempDir(), "custom home")
+	t.Setenv("ATOMCODE_HOME", dir)
+	if l.atomcodeSignedIn() {
+		t.Fatal("override must not fall back to default home")
+	}
+	writeAuthFixture(t, filepath.Join(dir, "auth.toml"), "access_token = 'fixture'\n")
+	if !l.atomcodeSignedIn() {
+		t.Fatal("relocated store missing")
 	}
 }

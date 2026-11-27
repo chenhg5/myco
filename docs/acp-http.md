@@ -13,10 +13,17 @@ precedence. When no `codebuddy` command is found, myco checks the unpacked CLI i
   LocalAppData (including `Programs`) and Program Files. Its sibling Node script
   is executed through Node, preserving argument boundaries without cmd.exe
   interpolation. Node must be available unless the bundle includes `node.exe`.
-- Linux: the unpacked resources under `/opt/apps/workbuddy`, the installation
-  root shown in the [official Linux FAQ](https://www.workbuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/FAQ).
-  The exact CLI file must exist and be executable; Linux packaging has not been
-  exercised on a real machine. Custom installations can set `runner.binary`.
+- Linux: `/opt/WorkBuddy/resources/app.asar.unpacked/cli/bin/codebuddy`
+  (case-sensitive), verified in the official deb 5.11.6.44396970 from Tencent's
+  [Linux update channel](https://copilot.tencent.com/v2/update?platform=workbuddy-linux-x64-deb).
+  myco also checks the same resource suffix under `/opt/apps/workbuddy`, the
+  installation root documented in the [official Linux FAQ](https://www.workbuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/FAQ).
+  WorkBuddy supports [UOS](https://www.workbuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Installation-UOS-Guide)
+  and [Kylin](https://www.workbuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Installation-Kylin-Guide)
+  through their software stores. The bundled CLI must exist and be executable,
+  and its Node runtime must be available. Package contents have been inspected;
+  an end-to-end Linux login/ACP session has not been tested. Custom installations
+  can set `runner.binary`.
 
 For WorkBuddy, sign in through WorkBuddy on that computer before starting an
 agent. For standalone CodeBuddy Code, sign in through its CLI. A successful
@@ -58,3 +65,15 @@ child. Cancellation uses `session/cancel` before process-group cleanup.
 Older bundled builds have been observed to start HTTP even when asked for
 stdio. Their stdio flag is not used by the CodeBuddy preset. Other agents'
 stdio behavior is unchanged.
+
+## AtomCode sign-in detection
+
+The `atomcode` preset uses `atomcode acp`. The npm package
+`@atomgit.com/atomcode` launches the native Rust CLI. myco detects local OAuth
+credential evidence from top-level `access_token` or `refresh_token` strings in
+`~/.atomcode/auth.toml`, or `auth.toml` under `ATOMCODE_HOME` when overridden.
+This matches the [AtomCode OAuth store](https://github.com/atomgit-atomcode/atomcode/blob/a507ec7666cf44f5abd294448291e5e14013e2e7/crates/atomcode-auth/src/oauth.rs)
+in version 5.2.8. Account metadata alone does not count. Missing, unreadable or
+malformed stores keep the App status `unknown`; other authentication methods
+also remain `unknown`. This is a read-only presence check, not remote validation
+or a guarantee that an expired credential can still be refreshed.
