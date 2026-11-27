@@ -474,9 +474,9 @@ async function go(page, label, narrow) {
   }
   // Computers is a heading over the computers listed in the sidebar;
   // members are managed from the chat list's menu.
-  if (label === "成员") {
+  if (label === "成员" || label === "Members") {
     await clickVisible(page, page.locator(".sp-nav-chat-sort"));
-    await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: "管理成员" }));
+    await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: label === "成员" ? "管理成员" : "Manage members" }));
   } else {
     const item = label === "电脑" ? page.locator(".sp-nav-pcs-head:visible")
       : label === "聊天" ? page.locator(".sp-nav-chat:visible")
