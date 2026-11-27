@@ -411,14 +411,17 @@ func runnerFeatures(h harness.Harness) []string {
 	// Claude headless runs need an explicit allow rule for each MCP server.
 	// Codex MCP calls are not controlled by its shell sandbox flag, so this
 	// capability is advertised only for the harness whose flag we change.
+	// live_max_access: a change to spawn.max_access takes effect on the next
+	// run and is reported within seconds, with no restart (apps wait for it
+	// after "Allow"; without it they say to restart myco on that computer).
 	if h.Name() == "claude" {
-		return []string{"mcp_tools", "remote_provider", "usage", "command_watch", "models_refresh", "hub_provider"}
+		return []string{"mcp_tools", "remote_provider", "usage", "command_watch", "models_refresh", "hub_provider", "live_max_access"}
 	}
 	if h.Name() == "codex" {
-		return []string{"remote_provider", "usage", "command_watch", "models_refresh", "hub_provider"}
+		return []string{"remote_provider", "usage", "command_watch", "models_refresh", "hub_provider", "live_max_access"}
 	}
 	if h.Name() != "exec" && h.Name() != "machine" {
-		return []string{"usage", "command_watch"}
+		return []string{"usage", "command_watch", "live_max_access"}
 	}
 	if h.Name() == "machine" {
 		// It opens a new agent's provider sealed for it (i115), or fetches

@@ -344,7 +344,9 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 		if sh.processes != nil {
 			go rep.watchHealth(e.in.Ctx, sh.processes, cfg.Hub, me.OwnerID)
 		}
-		go rep.watchMaxAccess(e.in.Ctx, 20*time.Second, maxAccess, e.machineMaxAccess)
+		// (a change in machine.yaml, from the app's "Allow" or by hand, is
+		// reported within seconds; each run reads it again: liveMaxAccess)
+		go rep.watchMaxAccess(e.in.Ctx, 3*time.Second, maxAccess, e.machineMaxAccess)
 		if sh.slots != nil {
 			go rep.watchSlots(e.in.Ctx, sh.slots, runner.SlotOwner(cfg.Hub, me.Name))
 		}
@@ -418,6 +420,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 		OnStop:                rep.Goodbye,
 		Access:                access,
 		MaxAccess:             maxAccess,
+		MaxAccessFunc:         e.machineMaxAccess,
 		CommandRunnerID:       runnerInstance,
 		CommandEnvironment:    host,
 		CommandWatchAllowed: func() bool {
