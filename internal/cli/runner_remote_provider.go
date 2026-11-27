@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -38,6 +39,11 @@ func remoteProviderApplier(path string, c *client.Client) func(context.Context, 
 				return nil
 			} // Already delivered; the settings live only here.
 			if cfg.Runner.ProviderApplied != p.ID {
+				// From a person's device, the agent's owner's (the hub
+				// lets only them set it); never another agent's.
+				if err := ownerSealed(ctx, c, p.From); err != nil {
+					return fmt.Errorf("provider settings refused: %v", err)
+				}
 				raw, err := c.OpenProvider(ctx, *p)
 				if err != nil {
 					return fmt.Errorf("cannot decrypt provider settings")
@@ -95,4 +101,22 @@ func localProviderOptions(cli string) []api.ProviderOption {
 
 func supportsRemoteProvider(cli string) bool {
 	return strings.EqualFold(cli, "claude") || strings.EqualFold(cli, "codex")
+}
+
+// ownerSealed: a custom provider sent to this agent was sealed by its
+// owner's device ("@console:<owner>"); with no owner on record, by a
+// person's device (the hub let only its owner set it).
+func ownerSealed(ctx context.Context, c *client.Client, sealedBy string) error {
+	who, ok := strings.CutPrefix(sealedBy, "@console:")
+	if !ok || who == "" {
+		return errors.New("not sealed by a person")
+	}
+	me, err := c.Me(ctx)
+	if err != nil {
+		return errors.New("its owner could not be checked")
+	}
+	if me.Owner != "" && who != me.Owner {
+		return errors.New("not sealed by its owner")
+	}
+	return nil
 }

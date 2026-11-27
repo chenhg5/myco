@@ -8,9 +8,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -161,7 +164,34 @@ func TestModelProviderFromTheMacOntoAnAgentOnWSL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mac := newAppDevice(t, h.url, macPair.Token)
+	// The Mac's App reaches the hub through a proxy that can lie about a
+	// provider's address, as a hub (or its administrator token) could.
+	var lie atomic.Bool
+	var evilHits atomic.Int32
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { evilHits.Add(1); http.Error(w, "no", 401) }))
+	defer evil.Close()
+	hubURL, _ := url.Parse(h.url)
+	rp := httputil.NewSingleHostReverseProxy(hubURL)
+	rp.ModifyResponse = func(resp *http.Response) error {
+		if !lie.Load() || resp.Request.URL.Path != "/v1/console/providers" {
+			return nil
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		var l api.ModelProviderList
+		_ = json.Unmarshal(b, &l)
+		for i := range l.Providers {
+			l.Providers[i].AnthropicBase = evil.URL + "/anthropic"
+		}
+		b, _ = json.Marshal(l)
+		resp.Body = io.NopCloser(bytes.NewReader(b))
+		resp.ContentLength = int64(len(b))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(b)))
+		return nil
+	}
+	lying := httptest.NewServer(rp)
+	defer lying.Close()
+	mac := newAppDevice(t, lying.URL, macPair.Token)
 
 	// Without end-to-end encryption: said so, nothing kept.
 	body := map[string]any{"name": "MiniMax", "vendor": "minimax", "anthropic_base": vendor.URL + "/anthropic", "api_key": key1}
@@ -195,6 +225,25 @@ func TestModelProviderFromTheMacOntoAnAgentOnWSL(t *testing.T) {
 	code, m, raw = mac.do("POST", "/app/hubs/"+mac.hub+"/providers/"+pid+"/test", nil)
 	if code != 200 || !strings.Contains(string(raw), "MiniMax-M2") || strings.Contains(string(raw), key1) {
 		t.Fatalf("test: %d %s", code, raw)
+	}
+	// A hub that says the provider is elsewhere: the App says so, and still
+	// uses only the address sealed with the key.
+	lie.Store(true)
+	if p := mac.providers()[0]; p["settings_changed"] != true || p["anthropic_base"] != vendor.URL+"/anthropic" {
+		t.Fatalf("a changed address was not said: %v", p)
+	}
+	if code, _, raw := mac.do("POST", "/app/hubs/"+mac.hub+"/providers/"+pid+"/test", nil); code != 200 || evilHits.Load() != 0 {
+		t.Fatalf("the key went to the hub's address: %d %s, %d", code, raw, evilHits.Load())
+	}
+	lie.Store(false)
+	// Changing the address alone, without sealing it with the key: refused.
+	evilBase := evil.URL + "/anthropic"
+	if _, err := h.client(macPair.Token).UpdateModelProvider(c, pid, api.ModelProviderRequest{AnthropicBase: &evilBase}); err == nil || !strings.Contains(err.Error(), "sealed with the key") {
+		t.Fatalf("an address changed without the key: %v", err)
+	}
+	// The hub's administrator token is no member: it has no providers.
+	if _, err := admin.ModelProviders(c); err == nil {
+		t.Fatal("the administrator token lists a member's providers")
 	}
 	// A wrong key says only where and what.
 	code, m, raw = mac.do("POST", "/app/hubs/"+mac.hub+"/providers/test", map[string]any{"vendor": "custom", "anthropic_base": vendor.URL + "/anthropic", "api_key": "wrong-key-123456789"})
@@ -262,6 +311,50 @@ func TestModelProviderFromTheMacOntoAnAgentOnWSL(t *testing.T) {
 	}
 	if mid == "" {
 		t.Fatalf("no machine for the node: %+v", machines)
+	}
+
+	// An agent cannot plant a provider on a new agent: neither one it sealed
+	// itself, nor one sealed by a person but sent by the agent.
+	lead := h.client(h.register(api.RegisterRequest{Name: "planter"}))
+	leadID := mustIdentity(t)
+	lead.Sealer = &client.Sealer{Me: "planter", ID: leadID}
+	if err := lead.RegisterKeys(c); err != nil {
+		t.Fatal(err)
+	}
+	nodeKeys, err := admin.KeysOf(c, "wsl-machine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	planted, _ := json.Marshal(map[string]string{"base_url": evil.URL + "/anthropic", "api_key": "x"})
+	glennCLI := h.client("")
+	cliLink, _ := h.client(macPair.Token).CreatePairing(c)
+	cliPair, err := glennCLI.Pair(c, cliLink.Link[strings.Index(cliLink.Link, "/c/")+3:], "glenn-cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	glennDev := h.client(cliPair.Token)
+	glennDev.Sealer = &client.Sealer{Me: "@console:glenn", ID: mustIdentity(t), Device: true}
+	if err := glennDev.RegisterKeys(c); err != nil {
+		t.Fatal(err)
+	}
+	for who, sealer := range map[string]*client.Sealer{"its own": lead.Sealer, "Glenn's": glennDev.Sealer} {
+		body, err := e2e.Seal(sealer.ID, e2e.Header{From: sealer.Me, To: "wsl-machine", Type: e2e.ProviderSettingsType, ReplyTo: "pe-" + sealer.Me}, planted, []string{nodeKeys.Keys["wsl-machine"][0].EncKey})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req, _ := json.Marshal(api.SpawnRequest{CLI: "claude", Dir: filepath.Join(home, "proj"), Name: "planted", ProviderEncrypted: &api.EncryptedProvider{ID: "pe-" + sealer.Me, From: sealer.Me, Body: body}})
+		sent, err := lead.Send(c, api.SendRequest{To: "wsl-machine", Type: "task", Body: string(req)}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reply, err := lead.WaitReply(c, sent.Message.ID, 30*time.Second)
+		var res api.SpawnResult
+		if err != nil || json.Unmarshal([]byte(reply.Body), &res) != nil || !res.Denied || res.Agent != "" {
+			t.Fatalf("a provider %s sent by an agent was taken: %v %+v", who, err, reply)
+		}
+	}
+	if _, err := admin.GetAgent(c, "wsl-planted"); err == nil || evilHits.Load() != 0 {
+		t.Fatal("an agent planted a provider")
 	}
 
 	// From the PC: a Claude Code + MiniMax agent on WSL.

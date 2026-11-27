@@ -134,12 +134,11 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 		}
 		ref := *in.ProviderRef
 		if ref.ID != "" {
-			_, member := s.consoleIdentity(r)
-			if s.modelProviders == nil || member == "" {
+			if s.modelProviders == nil || actor.Member == nil {
 				writeError(w, domain.Errf(domain.CodeInvalidArgument, "unknown model provider"))
 				return
 			}
-			p, err := s.modelProviders.Owned(r.Context(), member, ref.ID)
+			p, err := s.modelProviders.Owned(r.Context(), actor.Member.ID, ref.ID)
 			if err != nil {
 				writeError(w, err)
 				return

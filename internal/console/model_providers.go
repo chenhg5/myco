@@ -22,7 +22,9 @@ import (
 // agent's computer. It is never logged, and errors name only a host.
 
 // ConsoleProvider is a provider as the App shows it: no sealed key, but
-// whether this device can open it and its last four characters.
+// whether this device can open it and its last four characters. Its
+// vendor, addresses and small model are the sealed ones when this device
+// can open them (the hub's copy is only for showing).
 type ConsoleProvider struct {
 	api.ModelProvider
 	KeyHint     string `json:"key_hint,omitempty"`
@@ -30,11 +32,39 @@ type ConsoleProvider struct {
 	// Rewrapped: this device sealed it again for the member's devices now
 	// (one was added or removed).
 	Rewrapped bool `json:"rewrapped,omitempty"`
+	// SettingsChanged: the hub's copy of its vendor, addresses or small
+	// model is not what was sealed. The sealed ones are shown and used; the
+	// hub's are not to be trusted.
+	SettingsChanged bool `json:"settings_changed,omitempty"`
+	// SealAgain: it was sealed before its addresses went into the
+	// envelope; it is used only once saved again with its key.
+	SealAgain bool `json:"seal_again,omitempty"`
 }
 
-// providerSecret is what a provider's sealed key holds.
+// providerSecret is what a provider's envelope holds: the key and every
+// setting the key is used with, so that whoever can change the hub's copy
+// (the hub itself, its administrator token) cannot send the key elsewhere.
 type providerSecret struct {
-	APIKey string `json:"api_key"`
+	APIKey        string `json:"api_key"`
+	Vendor        string `json:"vendor"`
+	AnthropicBase string `json:"anthropic_base,omitempty"`
+	OpenAIBase    string `json:"openai_base,omitempty"`
+	SmallModel    string `json:"small_model,omitempty"`
+}
+
+// errSealAgain: an envelope from before the addresses were sealed too.
+var errSealAgain = &client.Error{Status: 409, Code: "seal_again", Message: "this provider was saved before its addresses were sealed with its key",
+	Suggestion: "edit it and enter its key again"}
+
+// same reports whether the hub's copy says what was sealed.
+func (s providerSecret) same(p api.ModelProvider) bool {
+	return s.Vendor == p.Vendor && s.AnthropicBase == p.AnthropicBase && s.OpenAIBase == p.OpenAIBase && s.SmallModel == p.SmallModel
+}
+
+// shown is p with the sealed settings (what is used).
+func (s providerSecret) shown(p api.ModelProvider) api.ModelProvider {
+	p.Vendor, p.AnthropicBase, p.OpenAIBase, p.SmallModel = s.Vendor, s.AnthropicBase, s.OpenAIBase, s.SmallModel
+	return p
 }
 
 // ProviderInput is the App's form: the provider and, when it is new or
@@ -91,23 +121,38 @@ func (b *Backend) listModelProviders(w http.ResponseWriter, r *http.Request, c *
 	for _, p := range list.Providers {
 		cp := ConsoleProvider{ModelProvider: p}
 		if merr == nil && list.E2E {
-			if key, err := openKey(r.Context(), c, member, p); err == nil {
-				cp.KeyReadable, cp.KeyHint = true, hint(key)
-				// A device added or removed: seal it again for the ones now.
-				if stale, err := c.ProviderKeyStale(r.Context(), p); err == nil && stale {
-					if body, err := sealKey(r.Context(), c, member, p.ID, p.KeyVersion, key); err == nil {
-						v := p.KeyVersion
-						if up, err := c.UpdateModelProvider(r.Context(), p.ID, api.ModelProviderRequest{KeySealed: &body, KeyVersion: &v}); err == nil {
-							cp.ModelProvider, cp.Rewrapped = *up, true
-						}
-					}
-				}
-			}
+			cp = describe(r.Context(), c, member, p)
 		}
 		cp.KeySealed = ""
 		out.Providers = append(out.Providers, cp)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// describe opens a provider's envelope (sealing it again for the member's
+// devices now when a device was added or removed) and says what it holds.
+func describe(ctx context.Context, c *client.Client, member string, p api.ModelProvider) ConsoleProvider {
+	cp := ConsoleProvider{ModelProvider: p}
+	sec, err := openSecret(ctx, c, member, p)
+	if errors.Is(err, errSealAgain) {
+		cp.SealAgain = true
+		return cp
+	}
+	if err != nil {
+		return cp
+	}
+	cp.KeyReadable, cp.KeyHint = true, hint(sec.APIKey)
+	cp.SettingsChanged = !sec.same(p)
+	cp.ModelProvider = sec.shown(p)
+	if stale, err := c.ProviderKeyStale(ctx, p); err == nil && stale {
+		if body, err := sealSecret(ctx, c, member, p.ID, p.KeyVersion, sec); err == nil {
+			v := p.KeyVersion
+			if up, err := c.UpdateModelProvider(ctx, p.ID, api.ModelProviderRequest{KeySealed: &body, KeyVersion: &v}); err == nil {
+				cp.ModelProvider, cp.Rewrapped = sec.shown(*up), true
+			}
+		}
+	}
+	return cp
 }
 
 func (b *Backend) createProvider(w http.ResponseWriter, r *http.Request, c *client.Client) {
@@ -125,16 +170,16 @@ func (b *Backend) createProvider(w http.ResponseWriter, r *http.Request, c *clie
 		writeErr(w, err)
 		return
 	}
+	sec := secretFrom(providerSecret{APIKey: key}, in)
 	id := "prv_" + strings.ToLower(rand.Text())[:16]
-	body, err := sealKey(r.Context(), c, member, id, 1, key)
+	body, err := sealSecret(r.Context(), c, member, id, 1, sec)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
 	one := 1
-	req := api.ModelProviderRequest{ID: id, Name: in.Name, Vendor: in.Vendor, AnthropicBase: in.AnthropicBase, OpenAIBase: in.OpenAIBase,
-		SmallModel: in.SmallModel, KeySealed: &body, KeyVersion: &one}
-	fillBases(&req)
+	req := api.ModelProviderRequest{ID: id, Name: in.Name, Vendor: &sec.Vendor, AnthropicBase: &sec.AnthropicBase, OpenAIBase: &sec.OpenAIBase,
+		SmallModel: &sec.SmallModel, KeySealed: &body, KeyVersion: &one}
 	p, err := c.CreateModelProvider(r.Context(), req)
 	if err != nil {
 		writeErr(w, err)
@@ -143,35 +188,53 @@ func (b *Backend) createProvider(w http.ResponseWriter, r *http.Request, c *clie
 	writeJSON(w, http.StatusCreated, ConsoleProvider{ModelProvider: withoutKey(*p), KeyReadable: true, KeyHint: hint(key)})
 }
 
+// updateProvider: a new name alone is the hub's to keep; a new key, vendor,
+// address or small model is sealed again (a new key version), since the key
+// is only ever sent where its own envelope says.
 func (b *Backend) updateProvider(w http.ResponseWriter, r *http.Request, c *client.Client) {
 	var in ProviderInput
 	if !decode(w, r, &in) {
 		return
 	}
 	id := r.PathValue("pid")
-	req := api.ModelProviderRequest{Name: in.Name, Vendor: in.Vendor, AnthropicBase: in.AnthropicBase, OpenAIBase: in.OpenAIBase, SmallModel: in.SmallModel}
 	key := strings.TrimSpace(in.APIKey)
+	if strings.ContainsAny(key, "\r\n\x00") {
+		writeErr(w, &client.Error{Status: 400, Code: "invalid_argument", Message: "enter the API key on one line"})
+		return
+	}
+	cur, err := findProvider(r.Context(), c, id)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	member, err := providerMember(r.Context(), c)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	old, oerr := openSecret(r.Context(), c, member, *cur)
+	if key == "" && oerr != nil {
+		// (nothing to seal the new settings with: the key is needed)
+		if in.Vendor != nil || in.AnthropicBase != nil || in.OpenAIBase != nil || in.SmallModel != nil {
+			writeErr(w, &client.Error{Status: 409, Code: "key_unreadable", Message: "enter the key again to change its vendor, addresses or small model",
+				Suggestion: "this device cannot open the key it has"})
+			return
+		}
+	}
+	req := api.ModelProviderRequest{Name: in.Name}
+	sec := old
 	if key != "" {
-		if strings.ContainsAny(key, "\r\n\x00") {
-			writeErr(w, &client.Error{Status: 400, Code: "invalid_argument", Message: "enter the API key on one line"})
-			return
-		}
-		cur, err := findProvider(r.Context(), c, id)
-		if err != nil {
-			writeErr(w, err)
-			return
-		}
-		member, err := providerMember(r.Context(), c)
-		if err != nil {
-			writeErr(w, err)
-			return
-		}
+		sec.APIKey = key
+	}
+	sec = secretFrom(sec, in)
+	if key != "" || (oerr == nil && sec != old) {
 		v := cur.KeyVersion + 1
-		body, err := sealKey(r.Context(), c, member, id, v, key)
+		body, err := sealSecret(r.Context(), c, member, id, v, sec)
 		if err != nil {
 			writeErr(w, err)
 			return
 		}
+		req.Vendor, req.AnthropicBase, req.OpenAIBase, req.SmallModel = &sec.Vendor, &sec.AnthropicBase, &sec.OpenAIBase, &sec.SmallModel
 		req.KeySealed, req.KeyVersion = &body, &v
 	}
 	p, err := c.UpdateModelProvider(r.Context(), id, req)
@@ -179,23 +242,21 @@ func (b *Backend) updateProvider(w http.ResponseWriter, r *http.Request, c *clie
 		writeErr(w, err)
 		return
 	}
-	out := ConsoleProvider{ModelProvider: withoutKey(*p), KeyReadable: key != ""}
-	if key != "" {
-		out.KeyHint = hint(key)
-	}
+	out := describe(r.Context(), c, member, *p)
+	out.KeySealed = ""
 	writeJSON(w, http.StatusOK, out)
 }
 
 // testProvider reads the vendor's models once with the key: a saved
-// provider's (whose list is kept), or the form's before it is saved.
+// provider's (at its sealed address; its list is kept), or the form's
+// before it is saved.
 func (b *Backend) testProvider(w http.ResponseWriter, r *http.Request, c *client.Client) {
 	var in ProviderInput
 	if r.ContentLength != 0 && !decode(w, r, &in) {
 		return
 	}
 	var saved *api.ModelProvider
-	key := strings.TrimSpace(in.APIKey)
-	ep := provider.Endpoint{}
+	var sec providerSecret
 	if id := r.PathValue("pid"); id != "" {
 		p, err := findProvider(r.Context(), c, id)
 		if err != nil {
@@ -203,36 +264,26 @@ func (b *Backend) testProvider(w http.ResponseWriter, r *http.Request, c *client
 			return
 		}
 		saved = p
-		if key == "" {
-			member, err := providerMember(r.Context(), c)
-			if err != nil {
-				writeErr(w, err)
-				return
-			}
-			if key, err = openKey(r.Context(), c, member, *p); err != nil {
-				writeErr(w, &client.Error{Status: 409, Code: "key_unreadable", Message: "this device cannot open the key yet",
-					Suggestion: "open the App on another of your devices once, or enter the key again here"})
-				return
-			}
+		member, err := providerMember(r.Context(), c)
+		if err != nil {
+			writeErr(w, err)
+			return
 		}
-		ep = provider.Endpoint{Base: p.AnthropicBase, Anthropic: true}
-		if ep.Base == "" {
-			ep = provider.Endpoint{Base: p.OpenAIBase}
+		if sec, err = openSecret(r.Context(), c, member, *p); err != nil {
+			writeErr(w, unreadable(err))
+			return
 		}
 	} else {
-		req := api.ModelProviderRequest{Vendor: in.Vendor, AnthropicBase: in.AnthropicBase, OpenAIBase: in.OpenAIBase}
-		fillBases(&req)
-		if req.AnthropicBase != nil && *req.AnthropicBase != "" {
-			ep = provider.Endpoint{Base: *req.AnthropicBase, Anthropic: true}
-		} else if req.OpenAIBase != nil {
-			ep = provider.Endpoint{Base: *req.OpenAIBase}
-		}
+		sec = secretFrom(providerSecret{APIKey: strings.TrimSpace(in.APIKey)}, in)
 	}
-	if ep.Base == "" || key == "" {
+	ep := provider.Endpoint{Base: sec.AnthropicBase, Anthropic: true, Key: sec.APIKey}
+	if ep.Base == "" {
+		ep = provider.Endpoint{Base: sec.OpenAIBase, Key: sec.APIKey}
+	}
+	if ep.Base == "" || ep.Key == "" {
 		writeErr(w, &client.Error{Status: 400, Code: "invalid_argument", Message: "an address and a key are needed to test"})
 		return
 	}
-	ep.Key = key
 	ms, err := provider.FetchModels(r.Context(), nil, ep)
 	if err != nil {
 		// (the error names the host and status only)
@@ -253,19 +304,9 @@ func (b *Backend) testProvider(w http.ResponseWriter, r *http.Request, c *client
 // pushProvider sends a provider's current key to every agent that has an
 // older one (the App offers it after the key changed).
 func (b *Backend) pushProvider(w http.ResponseWriter, r *http.Request, c *client.Client) {
-	p, err := findProvider(r.Context(), c, r.PathValue("pid"))
+	p, sec, err := providerWithSecret(r.Context(), c, r.PathValue("pid"))
 	if err != nil {
 		writeErr(w, err)
-		return
-	}
-	member, err := providerMember(r.Context(), c)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	key, err := openKey(r.Context(), c, member, *p)
-	if err != nil {
-		writeErr(w, &client.Error{Status: 409, Code: "key_unreadable", Message: "this device cannot open the key yet"})
 		return
 	}
 	ov, err := c.Overview(r.Context(), 0)
@@ -290,7 +331,7 @@ func (b *Backend) pushProvider(w http.ResponseWriter, r *http.Request, c *client
 		if model == "" && st.Agent.Runtime != nil {
 			model = st.Agent.Runtime.Model
 		}
-		if err := deliverProvider(r.Context(), c, *p, key, st.Agent, model); err != nil {
+		if err := deliverProvider(r.Context(), c, *p, sec, st.Agent, model); err != nil {
 			out.Failed = append(out.Failed, failure{Agent: st.Agent.Name, Error: errText(err)})
 			continue
 		}
@@ -302,36 +343,53 @@ func (b *Backend) pushProvider(w http.ResponseWriter, r *http.Request, c *client
 // useProviderFor sends a provider to an agent's computer, sealed for the
 // agent (PUT /app/hubs/{id}/agents/{name}/provider with "workspace").
 func useProviderFor(ctx context.Context, c *client.Client, name, id, model string) (*api.Agent, error) {
-	p, err := findProvider(ctx, c, id)
+	p, sec, err := providerWithSecret(ctx, c, id)
 	if err != nil {
 		return nil, err
-	}
-	member, err := providerMember(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-	key, err := openKey(ctx, c, member, *p)
-	if err != nil {
-		return nil, &client.Error{Status: 409, Code: "key_unreadable", Message: "this device cannot open the provider's key yet"}
 	}
 	a, err := c.GetAgent(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	if err := deliverProvider(ctx, c, *p, key, *a, model); err != nil {
+	if err := deliverProvider(ctx, c, *p, sec, *a, model); err != nil {
 		return nil, err
 	}
 	return c.GetAgent(ctx, name)
 }
 
+// providerWithSecret is a provider and what its envelope holds.
+func providerWithSecret(ctx context.Context, c *client.Client, id string) (*api.ModelProvider, providerSecret, error) {
+	p, err := findProvider(ctx, c, id)
+	if err != nil {
+		return nil, providerSecret{}, err
+	}
+	member, err := providerMember(ctx, c)
+	if err != nil {
+		return nil, providerSecret{}, err
+	}
+	sec, err := openSecret(ctx, c, member, *p)
+	if err != nil {
+		return nil, providerSecret{}, unreadable(err)
+	}
+	return p, sec, nil
+}
+
+func unreadable(err error) error {
+	if errors.Is(err, errSealAgain) {
+		return errSealAgain
+	}
+	return &client.Error{Status: 409, Code: "key_unreadable", Message: "this device cannot open the provider's key yet",
+		Suggestion: "open the App on another of your devices once, or enter the key again here"}
+}
+
 // deliverProvider seals the provider for one agent and records which
 // provider and key version it has.
-func deliverProvider(ctx context.Context, c *client.Client, p api.ModelProvider, key string, a api.Agent, model string) error {
+func deliverProvider(ctx context.Context, c *client.Client, p api.ModelProvider, sec providerSecret, a api.Agent, model string) error {
 	cli := a.Binding.Harness
 	if a.Runtime != nil && a.Runtime.CLI != "" {
 		cli = a.Runtime.CLI
 	}
-	raw, err := manualFor(p, key, cli, model)
+	raw, err := manualFor(sec, cli, model)
 	if err != nil {
 		return err
 	}
@@ -345,20 +403,20 @@ func deliverProvider(ctx context.Context, c *client.Client, p api.ModelProvider,
 	return err
 }
 
-// manualFor is the custom provider an agent of cli gets from p (its
-// address for that CLI, the key, the model and the small model).
-func manualFor(p api.ModelProvider, key, cli, model string) ([]byte, error) {
-	m := provider.Manual{APIKey: key, Model: strings.TrimSpace(model), SmallModel: p.SmallModel}
+// manualFor is the custom provider an agent of cli gets: the sealed
+// address for that CLI, the key, the model and the small model.
+func manualFor(sec providerSecret, cli, model string) ([]byte, error) {
+	m := provider.Manual{APIKey: sec.APIKey, Model: strings.TrimSpace(model), SmallModel: sec.SmallModel}
 	switch cli {
 	case "claude":
-		m.BaseURL = p.AnthropicBase
+		m.BaseURL = sec.AnthropicBase
 		if m.SmallModel == "" {
-			if v, ok := provider.VendorByID(p.Vendor); ok {
+			if v, ok := provider.VendorByID(sec.Vendor); ok {
 				m.SmallModel = v.Small
 			}
 		}
 	case "codex":
-		m.BaseURL, m.WireAPI, m.SmallModel = p.OpenAIBase, "chat", ""
+		m.BaseURL, m.WireAPI, m.SmallModel = sec.OpenAIBase, "chat", ""
 	}
 	if m.BaseURL == "" {
 		return nil, &client.Error{Status: 400, Code: "invalid_argument", Message: "this provider has no address for " + cli}
@@ -372,25 +430,18 @@ func manualFor(p api.ModelProvider, key, cli, model string) ([]byte, error) {
 // sealedSpawn seals the chosen provider for a computer's machine node
 // when it can take one (sealed_spawn and its key registered); false when it
 // cannot, and the provider is sent to the new agent after it joins.
-func sealedSpawn(ctx context.Context, c *client.Client, machineID string, in *api.SpawnRequest, providerID string) (p *api.ModelProvider, key string, sealed bool, err error) {
-	p, err = findProvider(ctx, c, providerID)
+func sealedSpawn(ctx context.Context, c *client.Client, machineID string, in *api.SpawnRequest, providerID string) (p *api.ModelProvider, sec providerSecret, sealed bool, err error) {
+	p, sec, err = providerWithSecret(ctx, c, providerID)
 	if err != nil {
-		return nil, "", false, err
+		return nil, sec, false, err
 	}
-	member, err := providerMember(ctx, c)
+	raw, err := manualFor(sec, in.CLI, in.Model)
 	if err != nil {
-		return nil, "", false, err
-	}
-	if key, err = openKey(ctx, c, member, *p); err != nil {
-		return nil, "", false, &client.Error{Status: 409, Code: "key_unreadable", Message: "this device cannot open the provider's key yet"}
-	}
-	raw, err := manualFor(*p, key, in.CLI, in.Model)
-	if err != nil {
-		return nil, "", false, err
+		return nil, sec, false, err
 	}
 	machines, err := c.Machines(ctx)
 	if err != nil {
-		return nil, "", false, err
+		return nil, sec, false, err
 	}
 	node := ""
 	for _, m := range machines {
@@ -399,27 +450,27 @@ func sealedSpawn(ctx context.Context, c *client.Client, machineID string, in *ap
 		}
 	}
 	if node == "" {
-		return p, key, false, nil // an older hub: after the agent joins
+		return p, sec, false, nil // an older hub: after the agent joins
 	}
 	if a, err := c.GetAgent(ctx, node); err != nil || a.Runtime == nil || !slices.Contains(a.Runtime.Features, "sealed_spawn") {
-		return p, key, false, nil // an older machine node
+		return p, sec, false, nil // an older machine node
 	}
 	enc, err := c.SealProvider(ctx, node, raw)
 	if err != nil {
 		var ce *client.Error
 		if errors.As(err, &ce) && ce.Code == "keys_missing" {
-			return p, key, false, nil // its key not registered yet
+			return p, sec, false, nil // its key not registered yet
 		}
-		return nil, "", false, err
+		return nil, sec, false, err
 	}
 	in.ProviderEncrypted, in.ProviderRef = enc, &api.ProviderRef{ID: p.ID, KeyVersion: p.KeyVersion}
-	return p, key, true, nil
+	return p, sec, true, nil
 }
 
 // deliverAfterJoin sends the provider to an agent that joined without it
 // (an older machine): once its runner has registered its key, before
 // anything is sent to it.
-func deliverAfterJoin(ctx context.Context, c *client.Client, p api.ModelProvider, key, agent, model string) error {
+func deliverAfterJoin(ctx context.Context, c *client.Client, p api.ModelProvider, sec providerSecret, agent, model string) error {
 	for {
 		keys, err := c.KeysOf(ctx, agent)
 		if err == nil && len(keys.Keys[agent]) == 1 {
@@ -427,7 +478,7 @@ func deliverAfterJoin(ctx context.Context, c *client.Client, p api.ModelProvider
 			if err != nil {
 				return err
 			}
-			return deliverProvider(ctx, c, p, key, *a, model)
+			return deliverProvider(ctx, c, p, sec, *a, model)
 		}
 		select {
 		case <-ctx.Done():
@@ -451,41 +502,53 @@ func findProvider(ctx context.Context, c *client.Client, id string) (*api.ModelP
 	return nil, &client.Error{Status: 404, Code: "not_found", Message: "model provider not found"}
 }
 
-func openKey(ctx context.Context, c *client.Client, member string, p api.ModelProvider) (string, error) {
+// openSecret opens a provider's envelope. One sealed before its addresses
+// were is not used (errSealAgain): the hub's addresses cannot be trusted.
+func openSecret(ctx context.Context, c *client.Client, member string, p api.ModelProvider) (providerSecret, error) {
 	raw, err := c.OpenProviderKey(ctx, member, p)
 	if err != nil {
-		return "", err
+		return providerSecret{}, err
 	}
 	var s providerSecret
 	if json.Unmarshal(raw, &s) != nil || s.APIKey == "" {
-		return "", errors.New("unreadable provider key")
+		return providerSecret{}, errors.New("unreadable provider key")
 	}
-	return s.APIKey, nil
+	if s.Vendor == "" || (s.AnthropicBase == "" && s.OpenAIBase == "") {
+		return providerSecret{}, errSealAgain
+	}
+	return s, nil
 }
 
-func sealKey(ctx context.Context, c *client.Client, member, id string, version int, key string) (string, error) {
-	raw, _ := json.Marshal(providerSecret{APIKey: key})
+func sealSecret(ctx context.Context, c *client.Client, member, id string, version int, s providerSecret) (string, error) {
+	raw, _ := json.Marshal(s)
 	return c.SealProviderKey(ctx, member, id, version, raw)
 }
 
-// fillBases puts a catalogue vendor's addresses in when none were given.
-func fillBases(req *api.ModelProviderRequest) {
-	if req.Vendor == nil {
-		return
+// secretFrom is s with what the form changes: a catalogue vendor's
+// addresses come with it when none are given.
+func secretFrom(s providerSecret, in ProviderInput) providerSecret {
+	if in.Vendor != nil {
+		s.Vendor = strings.TrimSpace(*in.Vendor)
+		if v, ok := provider.VendorByID(s.Vendor); ok && len(v.Hosts) > 0 {
+			origin := "https://" + v.Hosts[0]
+			if in.AnthropicBase == nil {
+				s.AnthropicBase = origin + v.Anthropic
+			}
+			if in.OpenAIBase == nil {
+				s.OpenAIBase = origin + v.OpenAI
+			}
+		}
 	}
-	v, ok := provider.VendorByID(*req.Vendor)
-	if !ok || len(v.Hosts) == 0 {
-		return
+	if in.AnthropicBase != nil {
+		s.AnthropicBase = strings.TrimSpace(*in.AnthropicBase)
 	}
-	origin := "https://" + v.Hosts[0]
-	if req.AnthropicBase == nil && v.Anthropic != "" {
-		s := origin + v.Anthropic
-		req.AnthropicBase = &s
+	if in.OpenAIBase != nil {
+		s.OpenAIBase = strings.TrimSpace(*in.OpenAIBase)
 	}
-	if req.OpenAIBase == nil && v.OpenAI != "" {
-		s := origin + v.OpenAI
-		req.OpenAIBase = &s
+	if in.SmallModel != nil {
+		s.SmallModel = strings.TrimSpace(*in.SmallModel)
 	}
+	return s
 }
 
 func withoutKey(p api.ModelProvider) api.ModelProvider { p.KeySealed = ""; return p }
