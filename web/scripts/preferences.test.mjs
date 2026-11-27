@@ -40,8 +40,10 @@ assert.deepEqual(disk,{'myco-theme':'dark','myco-usage-days':'30'}); assert.equa
 c.localPreferences.removeItem('myco-usage-days'); await c.flushPreferences();
 assert.equal(disk['myco-usage-days'],null);
 // Upgrade: a new browser origin has no localStorage, and its cache may be full.
+disk["myco-island"] = "off";
 c=await client({},true); await c.initializePreferences();
 assert.equal(c.localPreferences.getItem('myco-theme'),'dark');
+assert.equal(c.localPreferences.getItem('myco-island'),'off');
 await c.saveWorkspaceAppearance('demo','Demo',{color:2,pic:'/app/preferences/images/'+'a'.repeat(64)+'.png'});
 assert.equal(JSON.parse(disk['myco-app-hub-names']).demo,'Demo');
 assert.equal(c.preferencesProblem(),false,'browser quota cannot fail a committed save');

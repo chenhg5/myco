@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useRef, useState } from "react";
 import { appApi, type AppOverview } from "@/appapi";
 import type { Agent } from "@/api";
@@ -38,7 +39,7 @@ export const ISLAND_KEY = "myco-island";
 type Busy = { hubId: string; agent: Agent; status: string; since?: string; project?: string };
 
 function enabled(): boolean {
-  try { return localStorage.getItem(ISLAND_KEY) !== "off"; } catch { return true; }
+  try { return localPreferences.getItem(ISLAND_KEY) !== "off"; } catch { return true; }
 }
 
 /** Who is at work. A workspace that cannot be read now (a bad network)
