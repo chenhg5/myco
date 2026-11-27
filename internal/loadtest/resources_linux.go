@@ -47,6 +47,7 @@ func proc(pid int) processResource {
 		p.FDs = len(a)
 	}
 	if b, e = os.ReadFile(base + "/io"); e == nil {
+		p.IOAvailable = true
 		for _, line := range strings.Split(string(b), "\n") {
 			f := strings.Fields(line)
 			if len(f) != 2 {
@@ -136,20 +137,7 @@ func readResources(pid int, dir string, prev *resourceSample) resourceSample {
 		v := float64(s.Generator.CPUTicks-prev.Generator.CPUTicks) / clockTicks() / secs * 100
 		s.Generator.CPUPercent = &v
 	}
-	if len(s.CPU) == 8 && len(prev.CPU) == 8 {
-		var total uint64
-		for i, v := range s.CPU {
-			if v >= prev.CPU[i] {
-				total += v - prev.CPU[i]
-			}
-		}
-		if total > 0 {
-			v := float64(s.CPU[7]-prev.CPU[7]) / float64(total) * 100
-			s.StealPercent = &v
-			v = float64(s.CPU[4]-prev.CPU[4]) / float64(total) * 100
-			s.IOWaitPercent = &v
-		}
-	}
+	s.StealPercent, s.IOWaitPercent = systemCPUPercent(s.CPU, prev.CPU)
 	if s.Disk != nil && prev.Disk != nil && s.Disk.Device == prev.Disk.Device {
 		a, b := s.Disk, prev.Disk
 		if a.Writes > b.Writes && a.WriteMS >= b.WriteMS {
@@ -166,4 +154,25 @@ func readResources(pid int, dir string, prev *resourceSample) resourceSample {
 		}
 	}
 	return s
+}
+
+// Keep independent values: two pointers to the same reused local variable
+// would turn steal into iowait in the encoded sample. Counter resets are unknown.
+func systemCPUPercent(cur, prev []uint64) (steal, wait *float64) {
+	if len(cur) != 8 || len(prev) != 8 {
+		return nil, nil
+	}
+	var total uint64
+	for i, n := range cur {
+		if n < prev[i] {
+			return nil, nil
+		}
+		total += n - prev[i]
+	}
+	if total == 0 {
+		return nil, nil
+	}
+	sv := float64(cur[7]-prev[7]) / float64(total) * 100
+	wv := float64(cur[4]-prev[4]) / float64(total) * 100
+	return &sv, &wv
 }
