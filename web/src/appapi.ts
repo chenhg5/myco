@@ -1115,8 +1115,8 @@ export const appApi = {
   /** Starts this computer's runner service, or restarts it when running. */
   restartRunner: () => request<{ runner: string }>("POST", "app/local/runner"),
   /** Allow (or stop allowing) shell nodes and full-access sessions on this computer. */
-  /** max_access: the limit this computer's agents now run under (consoles
-   *  from v0.23.9; runners that list "live_max_access" pick it up within
+  /** max_access: the limit this computer's agents now run under (newer
+   *  consoles; runners that list "live_max_access" pick it up within
    *  seconds, older ones after a restart) */
   shellAccess: (allow: boolean) => request<{ shell_allowed: boolean; max_access?: string }>("POST", "app/local/shell-access", { allow }),
   /** Downloads and verifies the myco CLI; can take up to a minute. */
