@@ -3817,6 +3817,8 @@ body.is-resizing-rows { cursor: row-resize; user-select: none; }
 }
 /* the chat's head is one line: the name; what it is with shows on hover */
 .ui-clean .conv-head-what { display: none; }
+/* a project's head too: its name; the goal shows on hover */
+.ui-clean .sp-head-titles p { display: none; }
 .ui-clean .conv-head-titles p:not(:has(.app-stale)) { display: none; }
 .ui-clean .sp-member > .pa {
   width: 10px !important;

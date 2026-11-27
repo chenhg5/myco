@@ -117,6 +117,8 @@ so a stalled perf call does not suppress the resource sample at a write spike.
 Other platforms retain HTTP/task/pool metrics but mark host sampling unsupported;
 the Linux resource guards are unavailable there.
 Unavailable disk measurements are omitted, not reported as healthy zeros.
+Process I/O counters are usable only when `io_available` is true. Raw system CPU
+counters are retained so steal/iowait percentages can be audited.
 
 `--profile` collects child CPU/heap profiles in the isolated directory. Profiled
 runs have different overhead and must be labeled separately.

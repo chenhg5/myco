@@ -5002,6 +5002,12 @@ async function runMatrix(browser, size, scheme) {
       if (look.headFaces) throw new Error("清爽模式下会话标题不该有头像");
       if (look.memberFace > 12) throw new Error(`清爽模式下成员栏只留状态点，实际宽 ${look.memberFace}px`);
       if (look.mushrooms) throw new Error("清爽模式下不该有走路的小蘑菇");
+      const projectHead = await page.evaluate(() => {
+        const p = document.querySelector(".sp-home .sp-head-titles p");
+        return { line: !!p && p.getClientRects().length > 0, tip: document.querySelector(".sp-home .sp-head-titles h2")?.getAttribute("title") || "" };
+      });
+      if (projectHead.line) throw new Error("清爽模式下项目标题只留一行名字，不显示目标");
+      if (!projectHead.tip) throw new Error("清爽模式下项目的目标应在名字的悬停提示里");
       await settle(page, 300);
       await shot(page, size, scheme, "clean-mode");
       // A chat's head is one line: the name; what it is with on hover.
@@ -7037,6 +7043,25 @@ async function runMatrix(browser, size, scheme) {
           throw new Error(`专注模式的 ${sel} 应和输入框对齐（${b?.x}–${b && b.x + b.width}，输入框 ${cbox?.x}–${cbox && cbox.x + cbox.width}）`);
         }
       }
+      // Quiet chrome: the head is the name alone; its buttons are faint
+      // until pointed at; the plan and goal are not a card.
+      const quiet = await page.locator(".conv-detail:visible").first().evaluate((d) => {
+        const head = d.querySelector(":scope > .conv-head");
+        const shown = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).display !== "none";
+        const more = head?.querySelector(".conv-head-actions > *");
+        const tops = d.querySelector(":scope > .conv-tops");
+        return {
+          face: shown(head?.querySelector(".conv-head-faces")),
+          line: shown(head?.querySelector(".conv-head-titles p")),
+          rule: head ? getComputedStyle(head).borderBottomWidth : "",
+          button: more ? Number(getComputedStyle(more).opacity) : 1,
+          card: tops ? getComputedStyle(tops).borderTopWidth !== "0px" || getComputedStyle(tops).borderRadius !== "0px" : false,
+        };
+      });
+      if (quiet.face || quiet.line) throw new Error("专注模式下标题只留名字：不显示头像和描述");
+      if (quiet.rule !== "0px") throw new Error("专注模式下标题下不该有分隔线");
+      if (quiet.button > 0.5) throw new Error(`专注模式下标题的按钮应淡（像退出按钮），实际不透明度 ${quiet.button}`);
+      if (quiet.card) throw new Error("专注模式下计划和目标不该是一张带框的卡片");
       await settle(page, 250);
       await shot(page, size, scheme, "focus-mode");
       // The background: the quiet button beside the way out opens its panel.
