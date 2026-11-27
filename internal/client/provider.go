@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/myco-ai/myco/internal/api"
@@ -78,4 +79,21 @@ func (c *Client) AckProvider(ctx context.Context, id string) error {
 func (c *Client) PatchRunSettings(ctx context.Context, name string, rs api.RunSettingsPatch) (*api.Agent, error) {
 	var out api.Agent
 	return &out, c.do(ctx, http.MethodPut, "/v1/agents/"+esc(name)+"/run-settings", nil, rs, &out)
+}
+
+// ProviderMaterial fetches a provider the hub keeps (i119): this agent's,
+// for request id, or, for a machine node, the one a spawn request's grant
+// names. The answer carries the key: it goes into the env file only.
+func (c *Client) ProviderMaterial(ctx context.Context, id, grant string) (*api.ProviderMaterial, error) {
+	q := url.Values{}
+	if grant != "" {
+		q.Set("grant", grant)
+	} else {
+		q.Set("id", id)
+	}
+	var out api.ProviderMaterial
+	if err := c.do(ctx, http.MethodGet, "/v1/me/provider-material", q, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

@@ -202,7 +202,10 @@ type EncryptedProvider struct {
 type RunSettings struct {
 	Provider          *string            `json:"provider,omitempty"`
 	ProviderEncrypted *EncryptedProvider `json:"provider_encrypted,omitempty"`
-	Model             string             `json:"model,omitempty"`
+	// ProviderHub is a custom provider the hub keeps for the agent (i119,
+	// with end-to-end encryption off), until its runner has it.
+	ProviderHub *HubProvider `json:"provider_hub,omitempty"`
+	Model       string       `json:"model,omitempty"`
 	Effort            string             `json:"effort,omitempty"`
 	// MCPTools lets headless runs use configured MCP servers outside full access.
 	// Only the agent's owner may choose this; false preserves the old behavior.
@@ -217,6 +220,27 @@ type RunSettings struct {
 	// from, and its key's version (i115); zero when none.
 	ProviderRef ProviderRef `json:"provider_ref,omitzero"`
 }
+
+// HubProvider is a custom provider the hub keeps for an agent, with the
+// workspace's end-to-end encryption off (i119). Its runner fetches it from
+// the hub (GET /v1/me/provider-material) and acknowledges it like a sealed
+// one; the agent's settings never show the key, nor this.
+type HubProvider struct {
+	// ID names the request (acknowledged when applied).
+	ID string `json:"id"`
+	// From is who set it: "@console:<the agent's owner>".
+	From string `json:"from"`
+	// Ref: the settings are this model provider's (its key now); else
+	// Sealed holds them (an address and key given for this agent alone),
+	// sealed with the workspace's key for this agent and request.
+	Ref    ProviderRef `json:"ref,omitzero"`
+	Model  string      `json:"model,omitempty"`
+	Sealed string      `json:"sealed,omitempty"`
+}
+
+// HubProviderPurpose binds a provider sealed by the hub for an agent to
+// that agent and request.
+func HubProviderPurpose(agent, id string) string { return "agent-provider|" + agent + "|" + id }
 
 // ProviderRef points at a model provider and a version of its key.
 type ProviderRef struct {
@@ -253,6 +277,16 @@ func (rs RunSettings) Validate(h string) error {
 			if strings.ContainsAny(v, "\r\n\x00") {
 				return Errf(CodeInvalidArgument, "invalid encrypted provider request")
 			}
+		}
+	}
+	if rs.ProviderHub != nil {
+		e := rs.ProviderHub
+		bad := rs.Provider == nil || *rs.Provider != "custom" || rs.ProviderEncrypted != nil || len(e.ID) < 16 || len(e.ID) > 80 ||
+			len(e.From) > 200 || !strings.HasPrefix(e.From, "@console:") || strings.ContainsAny(e.ID+e.From+e.Model+e.Ref.ID, "\r\n\x00 \t") ||
+			len(e.Model) > 80 || len(e.Sealed) > 65536 || (e.Ref.ID == "") == (e.Sealed == "") ||
+			(e.Sealed != "" && !strings.HasPrefix(e.Sealed, "myco-hub:v1:")) || (e.Ref.ID != "" && e.Ref.KeyVersion < 1)
+		if bad {
+			return Errf(CodeInvalidArgument, "invalid provider request")
 		}
 	}
 	for _, s := range []string{rs.Model, rs.Effort} {

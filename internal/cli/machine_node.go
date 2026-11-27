@@ -341,6 +341,24 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 				ps, _, _ := providerFromVars(cli, vars)
 				return vars, ps, nil
 			},
+			HubProvider: func(ctx context.Context, cli, sender, grant string) (map[string]string, *harness.ProviderSettings, error) {
+				got, err := c.ProviderMaterial(ctx, "", grant)
+				if err != nil {
+					return nil, nil, errors.New("it could not be fetched from the hub")
+				}
+				// Set by this computer's owner, sent by them or by the hub
+				// for them: as for a sealed one.
+				if err := providerSenderOK(ctx, c, sender, got.From); err != nil {
+					return nil, nil, err
+				}
+				man := provider.Manual{BaseURL: got.BaseURL, APIKey: got.APIKey, Model: got.Model, WireAPI: got.WireAPI, SmallModel: got.SmallModel}
+				if man.Validate(cli) != nil {
+					return nil, nil, errors.New("its settings are not valid for " + cli)
+				}
+				vars := man.Variables(cli)
+				ps, _, _ := providerFromVars(cli, vars)
+				return vars, ps, nil
+			},
 			ProviderFor: func(cli string) *harness.ProviderSettings {
 				cfg, err := config.Load(config.ProfilePath(e.defaultPath, me.Name))
 				if err != nil {

@@ -84,6 +84,10 @@ func (s *Server) agentDTO(r *http.Request, a *domain.Agent) api.Agent {
 		if rs.ProviderRef.ID != "" {
 			out.RunSettings.ProviderRef = &api.ProviderRef{ID: rs.ProviderRef.ID, KeyVersion: rs.ProviderRef.KeyVersion}
 		}
+		if rs.ProviderHub != nil {
+			// which request, and who set it: never the settings
+			out.RunSettings.ProviderHub = &api.HubProviderInfo{ID: rs.ProviderHub.ID, From: rs.ProviderHub.From}
+		}
 		if rs.ProviderEncrypted != nil {
 			e := rs.ProviderEncrypted
 			out.RunSettings.ProviderEncrypted = &api.EncryptedProvider{ID: e.ID, From: e.From, Body: e.Body}

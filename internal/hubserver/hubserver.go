@@ -22,6 +22,7 @@ import (
 	"github.com/myco-ai/myco/internal/domain"
 	"github.com/myco-ai/myco/internal/infra/blob"
 	"github.com/myco-ai/myco/internal/infra/diskspace"
+	"github.com/myco-ai/myco/internal/infra/hubkey"
 	"github.com/myco-ai/myco/internal/infra/jsonschema"
 	"github.com/myco-ai/myco/internal/infra/notify"
 	"github.com/myco-ai/myco/internal/infra/security"
@@ -287,10 +288,29 @@ func Build(o Options) (*Hub, error) {
 	srv.SetVoiceSettings(app.NewVoiceSettingsService(sqlite.NewSettingRepo(db)))
 	e2e := app.NewE2EService(sqlite.NewKeyRepo(db), sqlite.NewSettingRepo(db), agentsRepo, consoleSvc, sqlite.NewMemberRepo(db), clock)
 	srv.SetE2E(e2e)
-	srv.SetModelProviders(app.NewModelProviderService(sqlite.NewModelProviderRepo(db), e2e, clock, func(id string) bool {
+	modelProviders := app.NewModelProviderService(sqlite.NewModelProviderRepo(db), e2e, clock, func(id string) bool {
 		_, ok := provider.VendorByID(id)
 		return ok
-	}))
+	})
+	// Keys the hub keeps, with end-to-end encryption off (i119): sealed
+	// with this workspace's own key, in a file next to its database.
+	secretKey := ""
+	if o.DBPath != ":memory:" {
+		secretKey = filepath.Join(filepath.Dir(o.DBPath), hubkey.FileName)
+	}
+	modelProviders.SetHubCustody(hubkey.New(secretKey), agentsRepo.AnyHubSealedProvider,
+		func(p app.ProviderSettings, cli, model string) (api.ProviderMaterial, error) {
+			m, err := provider.ManualFor(p.Vendor, p.AnthropicBase, p.OpenAIBase, p.SmallModel, p.APIKey, cli, model)
+			if err != nil {
+				return api.ProviderMaterial{}, err
+			}
+			return api.ProviderMaterial{BaseURL: m.BaseURL, APIKey: m.APIKey, Model: m.Model, WireAPI: m.WireAPI, SmallModel: m.SmallModel}, nil
+		})
+	if modelProviders.HubKeyLost(context.Background()) {
+		o.Log.Warn("the hub's key for secrets is missing: keys it kept for model providers cannot be opened; restore it from a backup, or have members enter them again (a new one is not made while they are kept)",
+			"file", secretKey)
+	}
+	srv.SetModelProviders(modelProviders)
 	// Agents acting on a computer through its App, with its owner's approval.
 	actionSvc := app.NewActionService(superagents, machineSvc, members, messages, e2e.Enabled, audit, ids, clock)
 	srv.SetActions(actionSvc)

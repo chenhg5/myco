@@ -257,7 +257,26 @@ func (r *AgentRepo) AckProvider(ctx context.Context, name domain.AgentName, id s
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
+		// one the hub kept (i119): once applied, the hub keeps it no longer
+		res, err = r.db.ExecContext(ctx, `UPDATE agents SET run_settings=json_remove(run_settings,'$.provider_hub') WHERE name=? AND json_extract(run_settings,'$.provider_hub.id')=?`, name, id)
+		if err != nil {
+			return internal(err)
+		}
+		n, _ = res.RowsAffected()
+	}
+	if n == 0 {
 		return domain.Errf(domain.CodeConflict, "provider request has already changed or been consumed")
 	}
 	return nil
+}
+
+// AnyHubSealedProvider reports whether an agent has a provider the hub
+// sealed for it, not yet applied (i119).
+func (r *AgentRepo) AnyHubSealedProvider(ctx context.Context) (bool, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM agents WHERE json_extract(run_settings,'$.provider_hub.sealed') IS NOT NULL`).Scan(&n)
+	if err != nil {
+		return false, internal(err)
+	}
+	return n > 0, nil
 }

@@ -137,3 +137,29 @@ func WriteEnv(path, agent string, vars map[string]string) error {
 	}
 	return os.Rename(f.Name(), path)
 }
+
+// ManualFor is a model provider's settings for an agent on cli with model
+// (i115): Claude Code uses its Anthropic address, with the vendor's small
+// model unless one is chosen; Codex its OpenAI-compatible address, over
+// chat completions.
+func ManualFor(vendor, anthropicBase, openaiBase, smallModel, apiKey, cli, model string) (Manual, error) {
+	m := Manual{APIKey: apiKey, Model: strings.TrimSpace(model), SmallModel: smallModel}
+	switch cli {
+	case "claude":
+		m.BaseURL = anthropicBase
+		if m.SmallModel == "" {
+			if v, ok := VendorByID(vendor); ok {
+				m.SmallModel = v.Small
+			}
+		}
+	case "codex":
+		m.BaseURL, m.WireAPI, m.SmallModel = openaiBase, "chat", ""
+	}
+	if m.BaseURL == "" {
+		return Manual{}, fmt.Errorf("this provider has no address for %s", cli)
+	}
+	if err := m.Validate(cli); err != nil {
+		return Manual{}, err
+	}
+	return m, nil
+}

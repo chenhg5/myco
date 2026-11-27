@@ -75,6 +75,9 @@ type Deps struct {
 	// this computer's owner, or not sent by them (or by the hub for them).
 	// Nil: not offered.
 	SealedProvider func(ctx context.Context, cli, sender string, p api.EncryptedProvider) (map[string]string, *harness.ProviderSettings, error)
+	// HubProvider fetches, with a spawn request's one-use grant, the
+	// provider the hub keeps for the new agent (i119), as SealedProvider.
+	HubProvider func(ctx context.Context, cli, sender, grant string) (map[string]string, *harness.ProviderSettings, error)
 	// ProviderFor is how a session of cli started here signs in (the
 	// machine node's pinned provider or env-file API settings); nil: none.
 	ProviderFor func(cli string) *harness.ProviderSettings
@@ -212,6 +215,15 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 			return denied("the provider sent with the request is not taken here: %v", err)
 		}
 		plan.ProviderVars, plan.ProviderID, prov = vars, sr.ProviderEncrypted.ID, ps
+	} else if sr.ProviderGrant != "" {
+		if n.Deps.HubProvider == nil {
+			return denied("machine %s cannot take a provider the hub keeps; update myco there", n.Machine)
+		}
+		vars, ps, err := n.Deps.HubProvider(ctx, plan.CLI, req.From, sr.ProviderGrant)
+		if err != nil {
+			return denied("the provider sent with the request is not taken here: %v", err)
+		}
+		plan.ProviderVars, plan.ProviderID, prov = vars, sr.ProviderGrant, ps
 	}
 	if sr.TakeOver != "" {
 		return n.takeOver(ctx, h, plan, sr, req.Env, prov)

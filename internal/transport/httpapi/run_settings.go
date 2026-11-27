@@ -3,14 +3,16 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
-	"github.com/myco-ai/myco/internal/e2e"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/myco-ai/myco/internal/api"
 	"github.com/myco-ai/myco/internal/app"
 	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/e2e"
+	"github.com/myco-ai/myco/internal/provider"
 )
 
 // setAgentRunSettings: PUT /v1/agents/{name}/run-settings from the console.
@@ -41,6 +43,7 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 		ProviderEncrypted *domain.EncryptedProvider `json:"provider_encrypted"`
 		ModelsRefresh     *string                   `json:"models_refresh"`
 		ProviderRef       *domain.ProviderRef       `json:"provider_ref"`
+		ProviderHub       *api.HubProviderRequest   `json:"provider_hub"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -65,10 +68,10 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 		}
 		rs.ModelsRefresh = v
 	}
-	providerChanged := in.Provider != nil || in.ProviderEncrypted != nil
+	providerChanged := in.Provider != nil || in.ProviderEncrypted != nil || in.ProviderHub != nil
 	// A model editor may echo the current selection. An unchanged custom
 	// marker without a new envelope must not erase a pending delivery.
-	if in.Provider != nil && rs.Provider != nil && *in.Provider == *rs.Provider {
+	if in.Provider != nil && rs.Provider != nil && *in.Provider == *rs.Provider && in.ProviderHub == nil {
 		if in.ProviderEncrypted == nil || (rs.ProviderEncrypted != nil && *in.ProviderEncrypted == *rs.ProviderEncrypted) {
 			providerChanged = false
 		}
@@ -116,9 +119,23 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 				writeError(w, domain.Errf(domain.CodeConflict, "use a new provider request id"))
 				return
 			}
+		} else if in.ProviderHub != nil {
+			hp, ok := s.hubProviderFor(w, r, name, cur, actor, in.Provider, in.ProviderHub)
+			if !ok {
+				return
+			}
+			rs.ProviderHub = hp
+			if hp.Ref.ID != "" && in.ProviderRef == nil {
+				rs.ProviderRef = hp.Ref
+			}
 		} else if in.Provider != nil && *in.Provider == "custom" {
 			writeError(w, domain.Errf(domain.CodeInvalidArgument, "custom provider requires an encrypted payload"))
 			return
+		}
+		if in.ProviderHub == nil {
+			rs.ProviderHub = nil
+		} else {
+			in.ProviderEncrypted = nil
 		}
 		rs.Provider, rs.ProviderEncrypted = in.Provider, in.ProviderEncrypted
 		// Another provider: no longer the model provider's (unless said).
@@ -177,6 +194,9 @@ func (s *Server) setRunSettings(w http.ResponseWriter, r *http.Request, name dom
 	detail := "model=" + orDash(rs.Model) + " effort=" + orDash(rs.Effort) + " access=" + orDash(rs.Access) + " mcp_tools=" + strconv.FormatBool(rs.MCPTools)
 	if providerChanged {
 		detail += " provider=updated"
+		if rs.ProviderHub != nil {
+			detail += " kept_by=hub"
+		}
 	}
 	s.recordAs(r, actor, "agent.run_settings", string(name), detail)
 	writeJSON(w, http.StatusOK, s.agentDTO(r, a))
@@ -230,4 +250,77 @@ func verifyEncryptedProvider(ctx context.Context, service *app.E2EService, name 
 		}
 	}
 	return domain.Errf(domain.CodeInvalidArgument, "invalid provider envelope or signature")
+}
+
+// hubProviderFor checks a provider the hub is to keep for an agent (i119):
+// with the workspace's end-to-end encryption off, from the agent's owner at
+// one of their devices, to a runner that fetches it (hub_provider); either
+// one of their model providers the hub keeps, or settings for this agent
+// alone, which the hub seals with the workspace's key.
+func (s *Server) hubProviderFor(w http.ResponseWriter, r *http.Request, name domain.AgentName, cur *domain.Agent, actor app.Actor, sel *string, in *api.HubProviderRequest) (*domain.HubProvider, bool) {
+	if s.modelProviders == nil {
+		writeError(w, domain.Errf(domain.CodeUnsupported, "this hub cannot keep providers"))
+		return nil, false
+	}
+	if s.e2e != nil && s.e2e.Enabled(r.Context()) {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "this workspace has end-to-end encryption on: send the provider sealed for the agent (provider_encrypted)"))
+		return nil, false
+	}
+	if sel == nil || *sel != "custom" || actor.Member == nil || actor.Via != nil {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "a provider the hub keeps is a custom one, set by the agent's owner at one of their devices"))
+		return nil, false
+	}
+	if !slices.Contains(strings.Fields(cur.Runtime.Features), "hub_provider") {
+		writeError(w, domain.Errf(domain.CodeUnsupported, "this runner cannot take a provider the hub keeps").WithSuggestion("update myco on that computer"))
+		return nil, false
+	}
+	id := strings.TrimSpace(in.ID)
+	if len(id) < 16 || len(id) > 80 || strings.ContainsAny(id, " \t\r\n\x00") {
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "invalid provider request id"))
+		return nil, false
+	}
+	if cur.RunSettings.ProviderHub != nil && cur.RunSettings.ProviderHub.ID == id {
+		writeError(w, domain.Errf(domain.CodeConflict, "use a new provider request id"))
+		return nil, false
+	}
+	hp := &domain.HubProvider{ID: id, From: app.ConsoleSenderPrefix + actor.Member.Name, Model: strings.TrimSpace(in.Model)}
+	switch {
+	case in.Ref != nil && in.Manual == nil:
+		p, err := s.modelProviders.Owned(r.Context(), actor.Member.ID, in.Ref.ID)
+		if err != nil {
+			writeError(w, err)
+			return nil, false
+		}
+		if !p.HubHeld() {
+			writeError(w, domain.Errf(domain.CodeInvalidArgument, "this provider's key is sealed for your devices: send it sealed for the agent"))
+			return nil, false
+		}
+		if s.modelProviders.KeyLost(p) {
+			writeError(w, domain.Errf(domain.CodeInvalidState, "this provider's key is lost").WithSuggestion("enter the key again in Settings › Model providers"))
+			return nil, false
+		}
+		// it must make settings for this agent's CLI
+		if _, _, err := s.modelProviders.Material(r.Context(), p.ID, actor.Member.ID, cur.Runtime.CLI, hp.Model); err != nil {
+			writeError(w, err)
+			return nil, false
+		}
+		hp.Ref = domain.ProviderRef{ID: p.ID, KeyVersion: p.KeyVersion}
+	case in.Manual != nil && in.Ref == nil:
+		m := provider.Manual{BaseURL: in.Manual.BaseURL, APIKey: in.Manual.APIKey, Model: in.Manual.Model, WireAPI: in.Manual.WireAPI, SmallModel: in.Manual.SmallModel}
+		if err := m.Validate(cur.Runtime.CLI); err != nil {
+			writeError(w, domain.Errf(domain.CodeInvalidArgument, "%v", err))
+			return nil, false
+		}
+		raw, _ := json.Marshal(api.HubManual{BaseURL: m.BaseURL, APIKey: m.APIKey, Model: m.Model, WireAPI: m.WireAPI, SmallModel: m.SmallModel})
+		sealed, err := s.modelProviders.SealForAgent(r.Context(), string(name), id, raw)
+		if err != nil {
+			writeError(w, err)
+			return nil, false
+		}
+		hp.Sealed, hp.Model = sealed, ""
+	default:
+		writeError(w, domain.Errf(domain.CodeInvalidArgument, "provider_hub needs ref or manual"))
+		return nil, false
+	}
+	return hp, true
 }

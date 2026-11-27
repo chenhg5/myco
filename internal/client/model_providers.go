@@ -31,8 +31,16 @@ func (c *Client) DeleteModelProvider(ctx context.Context, id string) error {
 }
 
 // myDevices are the encryption keys of the member's devices (this one
-// among them), as the hub lists them.
+// among them), as the hub lists them, to seal for: with the workspace's
+// encryption on only.
 func (c *Client) myDevices(ctx context.Context) ([]api.KeyHolder, error) {
+	return c.devicesOf(ctx, true)
+}
+
+// devicesOf is myDevices; to open a key (forSealing false) the workspace
+// may have encryption off by now: a key sealed before is still opened, to
+// hand it to the hub (i119).
+func (c *Client) devicesOf(ctx context.Context, forSealing bool) ([]api.KeyHolder, error) {
 	s := c.Sealer
 	if s == nil || s.ID == nil || !s.Device {
 		return nil, &Error{Status: 400, Code: "e2e_required", Message: "this device has no encryption identity"}
@@ -45,7 +53,7 @@ func (c *Client) myDevices(ctx context.Context) ([]api.KeyHolder, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !keys.E2E {
+	if !keys.E2E && forSealing {
 		return nil, &Error{Status: 409, Code: "e2e_required", Message: "this workspace has end-to-end encryption off"}
 	}
 	return keys.Keys[s.Me], nil
@@ -68,7 +76,7 @@ func (c *Client) SealProviderKey(ctx context.Context, member, id string, version
 // OpenProviderKey opens a model provider's key, checking that one of the
 // member's own devices sealed it for this version.
 func (c *Client) OpenProviderKey(ctx context.Context, member string, p api.ModelProvider) ([]byte, error) {
-	devices, err := c.myDevices(ctx)
+	devices, err := c.devicesOf(ctx, false)
 	if err != nil {
 		return nil, err
 	}
@@ -105,4 +113,15 @@ func (c *Client) ProviderKeyStale(ctx context.Context, p api.ModelProvider) (boo
 		}
 	}
 	return false, nil
+}
+
+// ModelProviderKey reads the key the hub keeps for one of the member's own
+// providers (i119): to seal it for their devices, or to list the vendor's
+// models from this computer. Never shown, logged or stored here.
+func (c *Client) ModelProviderKey(ctx context.Context, id string) (*api.ProviderKey, error) {
+	var out api.ProviderKey
+	if err := c.do(ctx, http.MethodGet, "/v1/console/providers/"+esc(id)+"/key", nil, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

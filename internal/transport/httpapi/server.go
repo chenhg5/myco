@@ -86,8 +86,10 @@ type Server struct {
 	appFreshen      func(context.Context)
 	voice           *app.VoiceSettingsService
 	modelProviders  *app.ModelProviderService
-	activity        sync.Map   // message id -> time.Time; transient task heartbeat
-	aliasesMu       sync.Mutex // serialize alias permission checks with writes
+	secretReads     *rateLimit   // reads of keys the hub keeps (i119)
+	grants          *spawnGrants // providers machine nodes may fetch once (i119)
+	activity        sync.Map     // message id -> time.Time; transient task heartbeat
+	aliasesMu       sync.Mutex   // serialize alias permission checks with writes
 	namesMu         sync.Mutex
 	names           map[string]string // member id -> name (see ownerName)
 	namesAt         time.Time
@@ -137,7 +139,8 @@ type Ingress interface {
 
 // New builds the HTTP handler. adminToken guards agent administration.
 func New(agents *app.AgentService, messages *app.MessageService, enroll *app.EnrollmentService, adminToken string, log *slog.Logger, ingress ...Ingress) *Server {
-	s := &Server{enroll: enroll, agents: agents, messages: messages, adminToken: adminToken, log: log, mux: http.NewServeMux(), ingress: map[string]Ingress{}}
+	s := &Server{enroll: enroll, agents: agents, messages: messages, adminToken: adminToken, log: log, mux: http.NewServeMux(), ingress: map[string]Ingress{},
+		secretReads: newRateLimit(secretReadsPerMinute, time.Minute), grants: newSpawnGrants()}
 	for _, in := range ingress {
 		s.ingress[in.Kind()] = in
 	}
@@ -233,6 +236,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/console/providers", s.admin(s.createModelProvider))
 	m.HandleFunc("PATCH /v1/console/providers/{id}", s.admin(s.updateModelProvider))
 	m.HandleFunc("DELETE /v1/console/providers/{id}", s.admin(s.deleteModelProvider))
+	m.HandleFunc("GET /v1/console/providers/{id}/key", s.admin(s.modelProviderKey))
 	m.HandleFunc("GET /v1/console/voice", s.admin(s.consoleVoice))
 	m.HandleFunc("PUT /v1/console/voice", s.admin(s.putConsoleVoice))
 	m.HandleFunc("DELETE /v1/console/tokens/{id}", s.masterAdmin(s.revokeConsoleToken))
@@ -313,6 +317,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /v1/me/resume", s.agent(s.createMyResume))
 	m.HandleFunc("PUT /v1/me/run-settings", s.agent(s.setMyRunSettings))
 	m.HandleFunc("POST /v1/me/provider/ack", s.agent(s.ackMyProvider))
+	m.HandleFunc("GET /v1/me/provider-material", s.agent(s.providerMaterial))
 	m.HandleFunc("DELETE /v1/me/resume", s.agent(s.revokeMyResume))
 	m.HandleFunc("PUT /v1/me/binding", s.agent(s.bind))
 	m.HandleFunc("PUT /v1/me/labels", s.agent(s.myLabels))
@@ -1796,7 +1801,7 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	in.EnrollToken = ""
+	in.EnrollToken, in.ProviderGrant = "", ""
 	if !s.mayOwnMachine(w, r, r.PathValue("id"), "start sessions on") {
 		return
 	}
@@ -1814,10 +1819,19 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		// starting a session.
 		in = api.SpawnRequest{JoinLink: strings.TrimSpace(in.JoinLink)}
 	}
-	if in.ProviderEncrypted != nil || in.ProviderRef != nil {
+	if in.ProviderEncrypted != nil || in.ProviderRef != nil || in.ProviderHub {
 		if !s.checkSpawnProvider(w, r, &in) {
 			return
 		}
+	}
+	if in.ProviderHub {
+		// The node fetches the provider the hub keeps, once, for this
+		// request only (i119).
+		grant, ok := s.spawnGrant(w, r, &in)
+		if !ok {
+			return
+		}
+		defer s.grants.remove(grant)
 	}
 	if in.CLI == "exec" {
 		// A shell node: the machine joins it with a one-use exec enrollment
@@ -1885,7 +1899,7 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 			kind += " copy of session " + in.ForkFrom
 		}
 		s.record(r, "machine.spawn", res.Agent, kind+" in "+res.Workdir+" ("+r.PathValue("id")+")")
-		if in.ProviderEncrypted != nil && res.Agent != "" {
+		if (in.ProviderEncrypted != nil || in.ProviderGrant != "") && res.Agent != "" {
 			// The new agent's provider was written on its computer: it is
 			// a custom one, from the member's model provider.
 			s.markSpawnedProvider(r, domain.AgentName(res.Agent), in.ProviderRef, res, since)
