@@ -4108,7 +4108,8 @@ const server = http.createServer(async (req, res) => {
       if (parts.length === 5 && parts[4] === "test" && method === "POST") {
         const body = await readBody(req);
         if (!body?.api_key) return fail(res, 400, "invalid_argument", "an address and a key are needed to test");
-        if (body.api_key.includes("wrong")) return fail(res, 502, "provider_unreachable", `models from ${new URL(body.anthropic_base || "https://api.minimax.io").host}: HTTP 401`);
+        if (body.api_key.includes("wrong")) return fail(res, 502, body.vendor === "minimax" ? "provider_region_or_key" : "provider_unreachable", `models from ${new URL(body.anthropic_base || "https://api.minimax.io").host}: HTTP 401`);
+        if (body.vendor === "minimax" && body.api_key.includes("no-model-list")) return send(res, 200, { models: models(body.vendor), models_source: "catalog" });
         return send(res, 200, { models: models(body.vendor) });
       }
       const p = hub.providers.find((x) => x.id === parts[4]);

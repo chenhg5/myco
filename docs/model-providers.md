@@ -69,3 +69,30 @@ Open the App once on a device that can already open the key; it seals the key ag
 ### What happens to agents if I delete a provider?
 
 The confirmation says: "N agents use it. They keep using what is written on their computers; the App asks you to pick another or clear it." Those agents keep running with the copy on their computer, and the agent's **Provider** row says: "Its model provider was deleted: what is on its computer still works. Pick another, or have it follow its computer again." New agents will not offer the deleted provider. Deleting it in the App does not reach into those computers; pick another provider for the agent, or set it back to following its computer.
+
+
+### MiniMax regions and connection tests
+
+Choose **MiniMax region** in either the provider editor or the add-agent form.
+**International** uses `api.minimax.io`; **China** uses `api.minimaxi.com`.
+Choose the site where the key was created: a key from the other region can return
+HTTP 401. Changing the region explicitly sets both the Anthropic and OpenAI
+addresses; testing never sends the key to another region automatically. Existing
+providers keep their saved addresses and the same `minimax` vendor identifier.
+An authentication failure explains that the key or region may be wrong.
+When editing without re-entering the key, save an address or region change
+before testing; the test otherwise uses the saved, sealed addresses.
+
+A normal test reads the account's model list. If a known MiniMax endpoint cannot
+list models, user-triggered verification (**Test**, or **Save and use** in the
+add-agent form) can make one small completion (at most 16
+output tokens) on the selected interface. This may consume a small amount of
+quota. Only a valid API response passes; HTTP 200 containing an API error does
+not. The App labels the resulting choices as **preset models**, rather than a
+list read from the account. Background discovery never generates completions.
+Rate limits, server failures and network errors do not trigger that fallback.
+
+MiniMax's [Anthropic](https://platform.minimax.io/docs/api-reference/text-anthropic-api)
+and [OpenAI](https://platform.minimax.io/docs/api-reference/text-openai-api)
+documentation currently lists `MiniMax-M3` and `MiniMax-M3.1-Flash`; live model
+lists take precedence over these presets.

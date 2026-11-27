@@ -1854,3 +1854,16 @@ responses. This rule applies to details, lists and overview. Older runners omit
 the field; older Hubs ignore it. Existing databases store it in runtime JSON and
 need no schema migration. The App shows it alongside the cloud/machine location
 when present; provider names continue to describe the model provider separately.
+
+
+### Local App model-provider connection test
+
+`POST /app/hubs/{id}/providers/test` tests the unsaved form; the `{pid}/test`
+variant uses a saved provider's sealed address and key. The response remains
+`{models: [...]}` with an optional `models_source` of `provider` or `catalog`.
+The latter means an explicit, bounded MiniMax completion verified the chosen
+endpoint when model discovery was unavailable; it is not a discovered list.
+Background discovery never generates completions. MiniMax HTTP 401 failures use
+`provider_region_or_key` and a suggestion to check the selected region and key.
+Neither errors nor responses contain the request key. No Hub API or vendor id
+changes are required; region choice is stored in the existing address fields.

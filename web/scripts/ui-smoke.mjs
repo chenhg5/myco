@@ -5530,6 +5530,14 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "add-agent-model-source");
       await clickVisible(page, source.locator("[data-testid=model-source-add]"));
       const form = source.locator("[data-testid=model-source-new]");
+      // The inline form keeps MiniMax's vendor id while selecting its region.
+      await form.locator("[data-testid=model-source-minimax-region]").selectOption("china");
+      await form.locator("[data-testid=model-source-key]").fill("mm-inline-fixture-key");
+      const regionRequest = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/providers/test"));
+      await clickVisible(page, form.locator("[data-testid=model-source-test]"));
+      const regionBody = (await regionRequest).postDataJSON();
+      if (regionBody.vendor !== "minimax" || regionBody.anthropic_base !== "https://api.minimaxi.com/anthropic" || regionBody.openai_base !== "https://api.minimaxi.com/v1") throw new Error("MiniMax inline region must set both addresses and keep the vendor id");
+      await form.locator("[data-testid=model-source-tested]").waitFor({ timeout: 5_000 });
       await form.locator("[data-testid=model-source-vendor]").selectOption("deepseek");
       await form.locator("[data-testid=model-source-key]").fill("sk-deepseek-test-1234");
       await clickVisible(page, form.locator("[data-testid=model-source-test]"));
@@ -5590,11 +5598,22 @@ async function runMatrix(browser, size, scheme) {
       const dlg = page.locator(".app-modal", { has: page.locator("[data-testid=provider-vendors]") });
       await dlg.waitFor({ timeout: 5_000 });
       if (!(await dlg.locator("[data-testid=provider-vendors]").innerText()).includes("OpenCode Go")) throw new Error("应列出内置的供应商");
+      const region = dlg.locator("[data-testid=provider-minimax-region]");
+      if (await region.inputValue() !== "international") throw new Error("Existing MiniMax default must stay international");
+      await region.selectOption("china");
+      if (!(await dlg.locator("[data-testid=provider-vendors] .picked").innerText()).includes("api.minimaxi.com")) throw new Error("The selected vendor must show the selected region's host");
       await dlg.locator("[data-testid=provider-api-key]").fill("mm-test-key-wrong-1234");
       await clickVisible(page, dlg.locator("[data-testid=provider-test]"));
       await dlg.locator(".app-error-text", { hasText: "HTTP 401" }).first().waitFor({ timeout: 5_000 });
-      await dlg.locator("[data-testid=provider-api-key]").fill("mm-test-key-1234abcd");
+      if (!(await dlg.locator(".app-error-text").innerText()).includes("地区")) throw new Error("MiniMax 401 must explain the region choice");
+      await dlg.locator("[data-testid=provider-api-key]").fill("mm-no-model-list-fixture-abcd");
       await clickVisible(page, dlg.locator("[data-testid=provider-test]"));
+      await dlg.locator("[data-testid=provider-tested]", { hasText: "预设模型" }).waitFor({ timeout: 5_000 });
+      await dlg.locator("[data-testid=provider-api-key]").fill("mm-test-key-1234abcd");
+      const regionalTest = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith("/providers/test"));
+      await clickVisible(page, dlg.locator("[data-testid=provider-test]"));
+      const regionalBody = (await regionalTest).postDataJSON();
+      if (regionalBody.vendor !== "minimax" || regionalBody.anthropic_base !== "https://api.minimaxi.com/anthropic" || regionalBody.openai_base !== "https://api.minimaxi.com/v1") throw new Error("MiniMax region must choose both China addresses");
       await dlg.locator("[data-testid=provider-tested]", { hasText: "读到 2 个模型" }).waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "settings-provider-add");
@@ -5602,6 +5621,7 @@ async function runMatrix(browser, size, scheme) {
       await dlg.waitFor({ state: "hidden", timeout: 5_000 });
       const row = page.locator("[data-testid^=provider-prv_]").first();
       await row.waitFor({ timeout: 5_000 });
+      if (!(await row.innerText()).includes("api.minimaxi.com")) throw new Error("Saved provider must retain its China address");
       if (!(await row.innerText()).includes("key ···abcd")) throw new Error(`应显示 key 的末四位，实际「${await row.innerText()}」`);
       await clickVisible(page, row.getByRole("button", { name: "测试" }));
       await page.locator("[data-testid=providers] .app-small-note", { hasText: "读到 2 个模型" }).waitFor({ timeout: 5_000 });
@@ -5634,6 +5654,11 @@ async function runMatrix(browser, size, scheme) {
       await openSection();
       await clickVisible(page, page.locator(`[data-testid=provider-${pid}]`).getByRole("button", { name: "编辑" }));
       await dlg.waitFor({ timeout: 5_000 });
+      if (await dlg.locator("[data-testid=provider-minimax-region]").inputValue() !== "china") throw new Error("Editing must recover the saved region");
+      await dlg.locator("[data-testid=provider-minimax-region]").selectOption("international");
+      await dlg.locator("[data-testid=provider-test-save-first]").waitFor();
+      if (!(await dlg.locator("[data-testid=provider-test]").isDisabled())) throw new Error("A saved key must not test the old address as an unsaved new region");
+      await dlg.locator("[data-testid=provider-minimax-region]").selectOption("china");
       await dlg.locator("[data-testid=provider-api-key]").fill("mm-test-key-second-wxyz");
       await clickVisible(page, dlg.locator("[data-testid=provider-save-workspace]"));
       await dlg.waitFor({ state: "hidden", timeout: 5_000 });

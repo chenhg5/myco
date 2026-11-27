@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { KeyRound, Plus } from "lucide-react";
-import { appApi, type HubOverview, type ModelProviderInput } from "@/appapi";
-import type { ModelProvider, RuntimeModel } from "@/api";
+import { ApiError, appApi, type HubOverview, type ModelProviderInput } from "@/appapi";
+import type { ModelProvider, ModelProviderTestResponse } from "@/api";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { recall, remember } from "@/lib/memo";
 import { L } from "@/lib/i18n";
@@ -22,6 +22,44 @@ export const VENDORS: { id: string; name: string; anthropic: string; openai: str
 
 export const vendorName = (id: string) => VENDORS.find((v) => v.id === id)?.name || L("自定义", "Custom");
 const hostOf = (u?: string) => { try { return u ? new URL(u).host : ""; } catch { return u || ""; } };
+
+const MINIMAX_REGIONS = {
+  international: { anthropic_base: "https://api.minimax.io/anthropic", openai_base: "https://api.minimax.io/v1" },
+  china: { anthropic_base: "https://api.minimaxi.com/anthropic", openai_base: "https://api.minimaxi.com/v1" },
+};
+type MiniMaxRegionID = keyof typeof MINIMAX_REGIONS;
+function miniMaxRegion(input: ModelProviderInput): MiniMaxRegionID | "" {
+  const bases = [input.anthropic_base, input.openai_base].filter(Boolean);
+  for (const region of ["international", "china"] as const) {
+    const expected = MINIMAX_REGIONS[region];
+    if (bases.length && (!input.anthropic_base || input.anthropic_base === expected.anthropic_base) && (!input.openai_base || input.openai_base === expected.openai_base)) return region;
+  }
+  return "";
+}
+function MiniMaxRegion({ value, onChange, disabled, testId }: { value: MiniMaxRegionID | ""; onChange: (value: MiniMaxRegionID) => void; disabled: boolean; testId: string }) {
+  return <label className="app-field">
+    <span className="app-field-label">{L("MiniMax 地区", "MiniMax region")}</span>
+    <select className="app-select-field" value={value} onChange={(e) => onChange(e.target.value as MiniMaxRegionID)} disabled={disabled} data-testid={testId}>
+      {!value && <option value="" disabled>{L("自定义地址", "Custom addresses")}</option>}
+      <option value="international">{L("国际 · api.minimax.io", "International · api.minimax.io")}</option>
+      <option value="china">{L("国内 · api.minimaxi.com", "China · api.minimaxi.com")}</option>
+    </select>
+    <span className="app-field-hint">{L("key 在哪个站创建，就选哪个地区；两站的 key 不通用。", "Choose the region where you created the key; keys are not shared between the two sites.")}</span>
+  </label>;
+}
+function testResultText(result: ModelProviderTestResponse) {
+  const ms = result.models;
+  const names = ms.slice(0, 4).map((m) => m.id);
+  return result.models_source === "catalog"
+    ? L(`对话验证通过，可选 ${ms.length} 个预设模型：${names.join("、")}`, `Completion verified; ${ms.length} preset models: ${names.join(", ")}`)
+    : L(`读到 ${ms.length} 个模型：${names.join("、")}${ms.length > 4 ? " 等" : ""}`, `${ms.length} models: ${names.join(", ")}${ms.length > 4 ? " and more" : ""}`);
+}
+function providerErrorSummary(error: unknown) {
+  return error instanceof ApiError && error.code === "provider_region_or_key" ? {
+    message: L("MiniMax 返回 HTTP 401：key 或地区不匹配。", "MiniMax returned HTTP 401: check the key and region."),
+    suggestion: L("选择创建 key 的地区（国际或国内），再测试；也请确认 key 仍然有效。", "Choose the region where the key was created (International or China), then test again; also check that the key is still valid."),
+  } : undefined;
+}
 
 /** The member's model providers on a hub, kept while the App is open. */
 export function useModelProviders(hubId: string | undefined) {
@@ -83,7 +121,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
     setNote("");
     try {
       const r = await appApi.testModelProvider(hub.id, p.id);
-      setNote(L(`「${p.name}」读到 ${r.models.length} 个模型。`, `“${p.name}”: ${r.models.length} models listed.`));
+      setNote(r.models_source === "catalog" ? testResultText(r) : L(`「${p.name}」读到 ${r.models.length} 个模型。`, `“${p.name}”: ${r.models.length} models listed.`));
       await load();
     } catch (e) {
       setActionError(e);
@@ -158,7 +196,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
         )}
       </div>
       <section className="app-setting-card app-members" data-testid="providers">
-        <ErrorText error={error || actionError} />
+        <ErrorText error={error || actionError} summary={providerErrorSummary(error || actionError)} />
         {note && <p className="app-small-note app-offline-ok">{note}</p>}
         {!e2e && (
           // Who keeps keys, said once (i119): nothing is in the way.
@@ -276,7 +314,7 @@ function ProviderEditor({ hubId, e2e, provider, onClose, onSaved }: { hubId: str
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [tested, setTested] = useState<RuntimeModel[] | null>(null);
+  const [tested, setTested] = useState<ModelProviderTestResponse | null>(null);
   const [showBases, setShowBases] = useState(!!provider || false);
   const pick = (id: string) => {
     const v = VENDORS.find((x) => x.id === id);
@@ -291,6 +329,10 @@ function ProviderEditor({ hubId, e2e, provider, onClose, onSaved }: { hubId: str
     try { const x = new URL(u.trim()); return !/^https?:$/.test(x.protocol) || !!x.username || !!x.search || !!x.hash; } catch { return true; }
   }), [form.anthropic_base, form.openai_base]);
   const canSave = !!form.name.trim() && !badBase && !!(form.anthropic_base?.trim() || form.openai_base?.trim()) && (!!provider || !!key.trim());
+  // With no newly entered key, testing uses the saved, sealed addresses.
+  // Do not show a test of the old region as a test of an unsaved new one.
+  const testNeedsSave = !!provider && !key.trim() && (form.vendor !== provider.vendor
+    || (form.anthropic_base || "") !== (provider.anthropic_base || "") || (form.openai_base || "") !== (provider.openai_base || ""));
   const input = (): ModelProviderInput => ({
     name: form.name.trim(), vendor: form.vendor, anthropic_base: form.anthropic_base?.trim() || "", openai_base: form.openai_base?.trim() || "",
     small_model: form.small_model?.trim() || "", ...(key.trim() ? { api_key: key.trim() } : {}),
@@ -301,7 +343,7 @@ function ProviderEditor({ hubId, e2e, provider, onClose, onSaved }: { hubId: str
     setTested(null);
     try {
       const r = key.trim() || !provider ? await appApi.testModelProvider(hubId, null, input()) : await appApi.testModelProvider(hubId, provider.id);
-      setTested(r.models);
+      setTested(r);
     } catch (e) {
       setError(e);
     } finally {
@@ -328,10 +370,11 @@ function ProviderEditor({ hubId, e2e, provider, onClose, onSaved }: { hubId: str
         {[...VENDORS, { id: "custom", name: L("自定义", "Custom"), anthropic: "", openai: "" }].map((v) => (
           <label key={v.id} className={cn("app-provider-opt", form.vendor === v.id && "picked")}>
             <input type="radio" name="vendor" checked={form.vendor === v.id} onChange={() => pick(v.id)} disabled={busy} />
-            <span><b>{v.name}</b><small>{v.id === "custom" ? L("Anthropic 或 OpenAI 兼容的地址", "An Anthropic- or OpenAI-compatible address") : hostOf(v.anthropic)}</small></span>
+            <span><b>{v.name}</b><small>{v.id === "custom" ? L("Anthropic 或 OpenAI 兼容的地址", "An Anthropic- or OpenAI-compatible address") : hostOf(v.id === form.vendor ? form.anthropic_base || form.openai_base : v.anthropic)}</small></span>
           </label>
         ))}
       </div>
+      {form.vendor === "minimax" && <MiniMaxRegion value={miniMaxRegion(form)} onChange={(region) => { setForm({ ...form, ...MINIMAX_REGIONS[region] }); setTested(null); }} disabled={busy} testId="provider-minimax-region" />}
       <label className="app-field">
         <span className="app-field-label">{L("名字", "Name")}</span>
         <input className="app-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={busy} data-testid="provider-name" />
@@ -365,10 +408,11 @@ function ProviderEditor({ hubId, e2e, provider, onClose, onSaved }: { hubId: str
           : e2e ? L("在这台电脑上加密后才存到工作区，只有你自己的设备能解开。", "Encrypted on this computer before it is kept in the workspace; only your own devices open it.")
           : L("由 Hub 保管（Hub 管理员能看到），只发给你选的那台电脑上的 agent。", "The hub keeps it (its administrator could see it) and sends it only to the agent you pick.")}</span>
       </label>
-      {tested && <p className="app-small-note app-offline-ok" data-testid="provider-tested">{L(`读到 ${tested.length} 个模型：${tested.slice(0, 4).map((m) => m.id).join("、")}${tested.length > 4 ? " 等" : ""}`, `${tested.length} models: ${tested.slice(0, 4).map((m) => m.id).join(", ")}${tested.length > 4 ? " and more" : ""}`)}</p>}
-      <ErrorText error={error} />
+      {tested && <p className="app-small-note app-offline-ok" data-testid="provider-tested">{testResultText(tested)}</p>}
+      {testNeedsSave && <p className="app-field-hint" data-testid="provider-test-save-first">{L("先保存地区或地址的修改，再测试；也可以重新填 key 后立即测试。", "Save the region or address change before testing, or enter the key again to test it now.")}</p>}
+      <ErrorText error={error} summary={providerErrorSummary(error)} />
       <div className="app-modal-actions">
-        <button type="button" className="app-btn" onClick={() => void test()} disabled={busy || (!key.trim() && !provider) || badBase} data-testid="provider-test">
+        <button type="button" className="app-btn" onClick={() => void test()} disabled={busy || (!key.trim() && !provider) || badBase || testNeedsSave} data-testid="provider-test">
           {busy && !tested ? L("正在测试", "Testing") : L("测试", "Test")}
         </button>
         <button type="button" className="app-btn app-btn-primary" onClick={() => void save()} disabled={busy || !canSave} data-testid="provider-save-workspace">
@@ -467,18 +511,19 @@ function QuickProvider({ hubId, cli, e2e, busy, onSaved }: {
   onSaved: (p: ModelProvider, firstModel: string) => Promise<void>;
 }) {
   const [vendor, setVendor] = useState(VENDORS[0].id);
+  const [region, setRegion] = useState<MiniMaxRegionID>("international");
   const [base, setBase] = useState("");
   const [key, setKey] = useState("");
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [tested, setTested] = useState<RuntimeModel[] | null>(null);
+  const [tested, setTested] = useState<ModelProviderTestResponse | null>(null);
   const v = VENDORS.find((x) => x.id === vendor);
   const custom = !v;
   const input = (): ModelProviderInput => {
     const name = v?.name || (() => { try { return new URL(base.trim()).host; } catch { return L("自定义", "Custom"); } })();
     return custom
       ? { name, vendor: "custom", anthropic_base: cli === "claude" ? base.trim() : "", openai_base: cli === "codex" ? base.trim() : "", small_model: "", api_key: key.trim() }
-      : { name, vendor, anthropic_base: v.anthropic, openai_base: v.openai, small_model: "", api_key: key.trim() };
+      : { name, vendor, ...(vendor === "minimax" ? MINIMAX_REGIONS[region] : { anthropic_base: v.anthropic, openai_base: v.openai }), small_model: "", api_key: key.trim() };
   };
   const badBase = custom && (() => { try { const x = new URL(base.trim()); return !/^https?:$/.test(x.protocol) || !!x.username || !!x.search || !!x.hash; } catch { return true; } })();
   const ready = !!key.trim() && !badBase && !working && !busy;
@@ -487,7 +532,7 @@ function QuickProvider({ hubId, cli, e2e, busy, onSaved }: {
     setError(null);
     setTested(null);
     try {
-      setTested((await appApi.testModelProvider(hubId, null, input())).models);
+      setTested(await appApi.testModelProvider(hubId, null, input()));
     } catch (e) {
       setError(e);
     } finally {
@@ -519,6 +564,7 @@ function QuickProvider({ hubId, cli, e2e, busy, onSaved }: {
           <option value="custom">{L("自定义地址", "A custom address")}</option>
         </select>
       </label>
+      {vendor === "minimax" && <MiniMaxRegion value={region} onChange={(next) => { setRegion(next); setTested(null); }} disabled={working || !!busy} testId="model-source-minimax-region" />}
       {custom && (
         <label className="app-field">
           <span className="app-field-label">{cli === "codex" ? L("OpenAI 兼容的地址", "OpenAI-compatible address") : L("Anthropic 兼容的地址", "Anthropic-compatible address")}</span>
@@ -533,8 +579,8 @@ function QuickProvider({ hubId, cli, e2e, busy, onSaved }: {
           disabled={working || busy} placeholder={L("填上这家给你的 key", "The key this vendor gave you")} data-testid="model-source-key" />
       </label>
       </div>
-      {tested && <p className="app-small-note app-offline-ok" data-testid="model-source-tested">{L(`读到 ${tested.length} 个模型：${tested.slice(0, 4).map((m) => m.id).join("、")}${tested.length > 4 ? " 等" : ""}`, `${tested.length} models: ${tested.slice(0, 4).map((m) => m.id).join(", ")}${tested.length > 4 ? " and more" : ""}`)}</p>}
-      <ErrorText error={error} />
+      {tested && <p className="app-small-note app-offline-ok" data-testid="model-source-tested">{testResultText(tested)}</p>}
+      <ErrorText error={error} summary={providerErrorSummary(error)} />
       {/* One line about where it goes and who can read it; the buttons beside it. */}
       <div className="ms-foot">
         <span className="ms-note" data-testid="model-source-custody">

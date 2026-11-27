@@ -1,5 +1,5 @@
 import type { UsageResponse } from "@/lib/usage";
-import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList, Goal, GoalList, GoalStartRequest, GoalPatchRequest, ModelProvider } from "@/api";
+import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList, Goal, GoalList, GoalStartRequest, GoalPatchRequest, ModelProvider, ModelProviderTestResponse } from "@/api";
 import { L } from "@/lib/i18n";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
@@ -1096,7 +1096,7 @@ export const appApi = {
     request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/providers/${enc(id)}`),
   /** Reads the vendor's models once with the key: a saved provider's (id), or the form's. */
   testModelProvider: (hubId: string, id: string | null, input?: Partial<ModelProviderInput>) =>
-    request<{ models: RuntimeModel[] }>("POST", id ? `app/hubs/${enc(hubId)}/providers/${enc(id)}/test` : `app/hubs/${enc(hubId)}/providers/test`, input || {}),
+    request<ModelProviderTestResponse>("POST", id ? `app/hubs/${enc(hubId)}/providers/${enc(id)}/test` : `app/hubs/${enc(hubId)}/providers/test`, input || {}),
   /** Sends a provider's current key to every agent that has an older one. */
   pushModelProvider: (hubId: string, id: string) =>
     request<{ pushed: string[]; failed: { agent: string; error: string }[] }>("POST", `app/hubs/${enc(hubId)}/providers/${enc(id)}/push`),

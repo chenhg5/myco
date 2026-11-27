@@ -69,3 +69,24 @@
 ### 删掉供应商以后，已有的 agent 会怎样？
 
 删除时的确认框写着：「N 个 agent 在用它。它们会照常用各自电脑上已经写好的那份，App 上会提示改选或者清掉。」这些 agent 会继续用各自电脑上那份，它的 **服务商** 一行会显示「它用的模型供应商已删除：它那台电脑上的那份照常能用；改选一个，或者改回跟随它那台电脑。」新开的 agent 不会再列出这个供应商。在 App 里删除不会去动那些电脑；需要的话，给它改选一个供应商，或者改回跟随它那台电脑。
+
+
+### MiniMax 地区与连接测试
+
+在供应商编辑框或新增 agent 的表单中选择 **MiniMax 地区**：**国际**使用
+`api.minimax.io`，**国内**使用 `api.minimaxi.com`。key 在哪个站创建，就选哪个
+地区；另一站可能返回 HTTP 401。切换地区会明确更新 Anthropic 和 OpenAI 两个地址；
+测试不会自动把 key 发到另一站。既有供应商保留原地址和 `minimax` 标识，401 提示会
+说明 key 或地区可能不匹配。编辑时若不重新填 key，请先保存地区或地址修改再测试；
+测试使用的是已保存、与 key 一起封存的地址。
+
+正常测试读取账号的模型列表。如果已知 MiniMax 接口不提供列表，用户主动验证
+（点击 **测试**，或在新增 agent 表单中点击 **保存并使用**）
+时可以在所选接口上发起一次小对话（最多 16 个输出 token），可能消耗少量额度。
+只有有效的 API 响应才算通过；HTTP 200 中的 API 错误不算。此时界面明确显示
+**预设模型**，不冒充从账号读取的列表。后台模型发现不会生成对话；限流、服务端
+故障或网络错误不会触发该回退。
+
+MiniMax 官方的 [Anthropic](https://platform.minimax.io/docs/api-reference/text-anthropic-api)
+和 [OpenAI](https://platform.minimax.io/docs/api-reference/text-openai-api)
+文档当前列出 `MiniMax-M3` 和 `MiniMax-M3.1-Flash`；真实模型列表优先于这些预设。

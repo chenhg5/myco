@@ -73,6 +73,9 @@ export interface RunSettings {
 
 /** One of the member's model providers (i115), as the App's backend lists it:
  *  never the key, only whether this device can open it and its last four characters. */
+/** Local App connection test; older App backends omit models_source. */
+export interface ModelProviderTestResponse { models: RuntimeModel[]; models_source?: "provider" | "catalog" }
+
 export interface ModelProvider {
   id: string;
   name: string;

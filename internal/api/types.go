@@ -399,6 +399,13 @@ type ModelProviderList struct {
 	Providers []ModelProvider `json:"providers"`
 }
 
+// ModelProviderTestResponse is the local App's explicit connection test.
+// ModelsSource is "provider" or "catalog" (a verified completion fallback).
+type ModelProviderTestResponse struct {
+	Models       []RuntimeModel `json:"models"`
+	ModelsSource string         `json:"models_source,omitempty"`
+}
+
 // ModelProviderRequest adds one (POST: ID, Name, Vendor, KeySealed with
 // KeyVersion 1 required; the client picks the id, prv_..., since the key
 // is sealed for it) or changes one (PATCH: only what is set). A new

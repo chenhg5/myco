@@ -37,7 +37,7 @@ var Vendors = []Vendor{
 		Models: []string{"kimi-k2-turbo-preview", "kimi-k2-0905-preview"}},
 	{ID: "minimax", Name: "MiniMax", Hosts: []string{"api.minimax.io", "api.minimaxi.com"},
 		Anthropic: "/anthropic", OpenAI: "/v1",
-		Models: []string{"MiniMax-M2"}},
+		Models: []string{"MiniMax-M3", "MiniMax-M3.1-Flash"}},
 	{ID: "zhipu", Name: "智谱", Hosts: []string{"open.bigmodel.cn", "api.z.ai"},
 		Anthropic: "/api/anthropic", OpenAI: "/api/paas/v4", Small: "glm-4.5-air",
 		Models: []string{"glm-4.6", "glm-4.5-air"}},
