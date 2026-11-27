@@ -42,7 +42,8 @@ and sender references remain valid. The new recipient must be visible to the cal
 belong to that unarchived project. Agent-origin tasks retain the original
 sender's recipient visibility and allow-from restrictions. Console-origin tasks
 use the normal console-send exception; receiving exec nodes still enforce their
-console-owner rules. Reassignment does not change the original sender. Claims and reassignment race atomically: the old recipient cannot
+console-owner rules. Reassignment does not change the original sender. Coordinators cannot use a
+known task ID to forward an otherwise hidden private task. Claims and reassignment race atomically: the old recipient cannot
 claim a successfully moved task. Existing file grants are not revoked (they may
 also serve other messages); the new recipient receives attachment access in the
 same transaction. Previously shared files are not recalled.

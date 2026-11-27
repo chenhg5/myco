@@ -276,6 +276,15 @@ func (s *MessageService) Reassign(ctx context.Context, by Actor, id, to, note st
 	if !allowed {
 		return nil, domain.Errf(domain.CodePermissionDenied, "only the sender, a project coordinator or an admin may reassign a task")
 	}
+	// A project role must not turn an otherwise hidden private task into a
+	// forwarding capability. Apply the same visibility boundary as tree reads.
+	readable, err := s.canReadTask(ctx, by, m)
+	if err != nil {
+		return nil, err
+	}
+	if !readable {
+		return nil, domain.Errf(domain.CodePermissionDenied, "task is not visible to this coordinator").WithSuggestion("ask the original sender to reassign this task")
+	}
 	visible, err := s.visibleTaskAgent(ctx, by, target.Name)
 	if err != nil {
 		return nil, err

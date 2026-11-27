@@ -170,4 +170,32 @@ func TestMessageTreeAndReassignThroughHubAndCLI(t *testing.T) {
 	if ce, ok := err.(*client.Error); !ok || ce.Code != "unsupported" || !strings.Contains(ce.Suggestion, "stop + send") {
 		t.Fatalf("E2E rejection: %v", err)
 	}
+	// Knowing an ID must not let a coordinator forward a hidden private task
+	// to a visible worker and obtain its body. The sender still owns its body.
+	privateTask, err := clients["lead"].Send(c, api.SendRequest{To: "old", Body: "private work", Project: "acme"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.admin().InviteMember(c, api.InviteRequest{Name: "private-owner"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.admin().SetAgentOwner(c, "old", "private-owner"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.admin().SetVisibility(c, "old", "private"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := clients["coordinator"].MessageTree(c, privateTask.Message.ID, 100); err == nil {
+		t.Fatal("coordinator read hidden private task metadata")
+	}
+	if _, err := clients["coordinator"].ReassignMessage(c, privateTask.Message.ID, api.ReassignRequest{To: "new"}, false); err == nil {
+		t.Fatal("coordinator forwarded hidden private task")
+	}
+	if _, err := clients["new"].GetMessage(c, privateTask.Message.ID); err == nil {
+		t.Fatal("hidden task body became visible through failed reassignment")
+	}
+	if _, err := clients["lead"].ReassignMessage(c, privateTask.Message.ID, api.ReassignRequest{To: "new"}, false); err != nil {
+		t.Fatalf("original sender lost reassignment permission: %v", err)
+	}
+
 }
