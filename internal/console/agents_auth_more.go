@@ -20,6 +20,8 @@ import (
 // In particular, absent or inaccessible secure stores remain unknown.
 func (l *Local) moreCLISignedIn(ctx context.Context, cli string) bool {
 	switch cli {
+	case "atomcode":
+		return l.atomcodeSignedIn()
 	case "kimi":
 		return l.kimiSignedIn()
 	case "copilot":
@@ -86,6 +88,15 @@ func authConfig(path, format string) map[string]any {
 }
 func configText(v any) string        { s, _ := v.(string); return strings.TrimSpace(s) }
 func configMap(v any) map[string]any { m, _ := v.(map[string]any); return m }
+
+// AtomCode's npm launcher delegates to the Rust CLI. Its OAuth store is
+// auth.toml under ATOMCODE_HOME (default ~/.atomcode), not auth.json. Only
+// literal token fields are evidence; account metadata alone is insufficient.
+// This never runs login, refreshes credentials, or validates them remotely.
+func (l *Local) atomcodeSignedIn() bool {
+	auth := authConfig(filepath.Join(l.authDir("ATOMCODE_HOME", ".atomcode"), "auth.toml"), "toml")
+	return configText(auth["access_token"]) != "" || configText(auth["refresh_token"]) != ""
+}
 
 func (l *Local) kimiSignedIn() bool {
 	home := l.authDir("KIMI_CODE_HOME", ".kimi-code")
