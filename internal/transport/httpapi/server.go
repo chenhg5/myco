@@ -30,6 +30,7 @@ import (
 
 // Server is the hub's HTTP adapter.
 type Server struct {
+	taskMonitor   *app.TaskMonitorService
 	databaseStats func() api.DatabasePoolStats
 	perf          *perf.Timings
 	goals         *app.GoalService
@@ -59,6 +60,7 @@ type Server struct {
 	mux             *http.ServeMux
 	ingress         map[string]Ingress
 	files           *app.FileService
+	coordStats      *app.CoordinationService
 	overview        *app.OverviewService
 	console         *app.ConsoleService
 	machines        *app.MachineService
@@ -149,6 +151,9 @@ func New(agents *app.AgentService, messages *app.MessageService, enroll *app.Enr
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if perf.RequestStart(r.Context()).IsZero() {
+		r = r.WithContext(perf.WithRoute(r.Context()))
+	}
 	limit := int64(domain.MaxBodyBytes + 64*1024)
 	if r.Method == http.MethodPost && (r.URL.Path == "/v1/files" || r.URL.Path == "/v1/console/files") && s.files != nil {
 		limit = s.files.Policy().MaxSize + 1 // FileService reports "too large" itself
@@ -187,6 +192,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) routes() {
 	m := s.mux
 	s.usageRoutes(m)
+	s.taskMonitorRoutes(m)
 	m.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
 		h := api.Health{OK: true, Version: api.Version, PublicURL: s.PublicURL(), ServerVersion: s.version, Workspace: strings.TrimPrefix(s.prefix, "/w/")}
 		if h.PublicURL != "" {
@@ -294,6 +300,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /v1/agents", s.adminOrAgent(s.listAgents))
 	m.HandleFunc("GET /v1/agents/{name}", s.adminOrAgent(s.getAgent))
 	m.HandleFunc("GET /v1/overview", s.handleOverview)
+	s.routeCoordinationStats(m)
 	// A node's card: its owner and admins (console), or a coordinator agent
 	// of the same owner (its own token).
 	m.HandleFunc("PUT /v1/agents/{name}/labels", s.cardEditor("edit the labels of", func(w http.ResponseWriter, r *http.Request, by *domain.Agent) {
@@ -668,6 +675,11 @@ func (s *Server) getAgent(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	dto := s.agentDTO(r, a)
+	if s.machines != nil && a.MachineID != "" {
+		if machine, err := s.machines.Get(r.Context(), a.MachineID); err == nil {
+			dto.MachineOwnerID = &machine.Owner
+		}
+	}
 	if s.resume != nil {
 		if c, err := s.resume.Get(r.Context(), a.Name); err == nil {
 			info := s.resumeInfo(c)
@@ -1035,9 +1047,10 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name stri
 	if !decode(w, r, &req) {
 		return
 	}
-	if req.AllowFrom != nil && !admin {
+	edit := domain.AllowFromEdit{Replace: req.AllowFrom, Add: req.AllowAdd, Remove: req.AllowRemove}
+	if edit.Present() && !admin {
 		writeError(w, domain.Errf(domain.CodePermissionDenied, "only the hub admin can change allow_from").
-			WithSuggestion("ask the admin to run: myco agent update --name %s --allow-from <agents>", name))
+			WithSuggestion("ask the admin to run: myco agent update --name %s --allow-add <agents>", name))
 		return
 	}
 	was, ok := s.cardBefore(w, r, name)
@@ -1049,18 +1062,23 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request, name stri
 		writeError(w, err)
 		return
 	}
-	a, err := s.agents.UpdateProfile(r.Context(), name, req.DisplayName, req.Description, req.AllowFrom, req.AcceptExecRisk, av)
+	var audit *domain.AuditEntry
+	if edit.Present() {
+		audit = s.audit.Entry(s.actorOf(r), "agent.update", name)
+	}
+	a, diff, err := s.agents.ChangeProfile(r.Context(), name, req.DisplayName, req.Description, edit, req.AcceptExecRisk, av, audit)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	s.recordEdit(r, by, was, a)
-	if admin && req.AllowFrom != nil {
-		s.record(r, "agent.update", string(a.Name), "allow_from: "+orNone(strings.Join(*req.AllowFrom, ", ")))
-	}
 	dto := s.agentDTO(r, a)
 	s.enrich(r.Context(), &dto)
-	writeJSON(w, http.StatusOK, dto)
+	out := api.ProfileResponse{Agent: dto}
+	if diff != nil {
+		out.AllowFromChange = &api.AllowFromChange{Added: diff.Added, Removed: diff.Removed, Unchanged: diff.Unchanged}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // avatarOf reads a profile's avatar: a drawn face's word, or a picture sent
@@ -1270,7 +1288,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 			where = w
 			out.Machines = make([]api.Machine, 0, len(views))
 			for _, v := range views {
-				out.Machines = append(out.Machines, s.machineDTO(v))
+				out.Machines = append(out.Machines, s.machineDTOFor(r, v))
 			}
 		}
 	}
@@ -1388,6 +1406,10 @@ func bindingFromAPI(b api.Binding) domain.Binding {
 }
 
 func (s *Server) send(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
+	received := perf.RequestStart(r.Context())
+	if received.IsZero() {
+		received = time.Now()
+	}
 	var req api.SendRequest
 	if !decode(w, r, &req) {
 		return
@@ -1404,6 +1426,9 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request, a *domain.Agent) {
 	status := http.StatusCreated
 	if out.Duplicate || dry {
 		status = http.StatusOK
+	}
+	if !out.EnqueuedAt.IsZero() {
+		s.log.Info("message latency", "message_id", out.Message.ID, "received_at_ms", received.UnixMilli(), "enqueued_at_ms", out.EnqueuedAt.UnixMilli(), "service_ms", time.Since(received).Milliseconds())
 	}
 	writeJSON(w, status, api.SendResponse{Message: s.messageDTO(out.Message), Duplicate: out.Duplicate, DryRun: dry, ViaAlias: string(out.ViaAlias)})
 }
@@ -1750,7 +1775,7 @@ func (s *Server) listMachines(w http.ResponseWriter, r *http.Request) {
 	}
 	out := api.MachineList{Machines: make([]api.Machine, 0, len(views))}
 	for _, v := range views {
-		out.Machines = append(out.Machines, s.machineDTO(v))
+		out.Machines = append(out.Machines, s.machineDTOFor(r, v))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -1812,6 +1837,13 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(in.CLI) == api.UpgradeCLI {
 		// Upgrading its myco: the release, nothing else.
 		in = api.SpawnRequest{CLI: api.UpgradeCLI, Version: strings.TrimSpace(in.Version)}
+	}
+	if strings.TrimSpace(in.CLI) == api.StopProcessCLI {
+		if in.ProcessRef == "" || len(in.ProcessRef) > 128 {
+			writeError(w, domain.Errf(domain.CodeInvalidArgument, "a current process reference is required"))
+			return
+		}
+		in = api.SpawnRequest{CLI: api.StopProcessCLI, ProcessRef: in.ProcessRef}
 	}
 	if in.JoinLink != "" {
 		// Joining another workspace, nothing else: a machine whose myco
@@ -1882,6 +1914,22 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		writeError(w, domain.Errf(domain.CodePermissionDenied, "%s", res.Error))
 	case res.Error != "":
 		writeError(w, domain.Errf(domain.CodeInvalidState, "%s", res.Error))
+	case in.CLI == api.StopProcessCLI:
+		if res.StoppedProcess == nil {
+			writeError(w, domain.Errf(domain.CodeInvalidState, "runner did not confirm process identity"))
+			return
+		}
+		p := res.StoppedProcess
+		// Audit detail is intentionally limited to name, PID and creation identity;
+		// plus the verified owning agent; the standard actor identifies the requester.
+		detail, _ := json.Marshal(struct {
+			Name    string `json:"name"`
+			PID     int    `json:"pid"`
+			Created string `json:"created"`
+			Agent   string `json:"agent"`
+		}{p.Name, p.PID, p.Created, p.Agent})
+		s.record(r, "machine.process.stop", r.PathValue("id"), string(detail))
+		writeJSON(w, http.StatusOK, res)
 	case in.CLI == api.InfoCLI:
 		// Only looking: nothing to record.
 		writeJSON(w, http.StatusOK, res)
@@ -1947,6 +1995,15 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		Plugins  []api.ToolPlugin `json:"plugins,omitempty"`
 		Warnings []string         `json:"tool_warnings,omitempty"`
 	}{in.MCP, in.Skills, in.Plugins, in.ToolWarnings})
+	health := ""
+	if in.MachineHealth != nil {
+		if err := in.MachineHealth.Validate(); err != nil {
+			writeError(w, err)
+			return
+		}
+		b, _ := json.Marshal(in.MachineHealth)
+		health = string(b)
+	}
 	slots := ""
 	if in.RunnerSlots != nil {
 		v := in.RunnerSlots
@@ -1963,7 +2020,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		b, _ := json.Marshal(v)
 		slots = string(b)
 	}
-	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{RunnerInstance: in.RunnerInstance, RestartingUntil: in.RestartingUntil, RunnerSlots: slots, CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
+	if err := s.machines.SetRuntime(r.Context(), a, domain.Runtime{MachineHealth: health, Account: in.Account, RunnerInstance: in.RunnerInstance, RestartingUntil: in.RestartingUntil, RunnerSlots: slots, CLI: in.CLI, CLIVersion: in.CLIVersion, Model: in.Model,
 		ModelSource: in.ModelSource, Access: in.Access, Provider: in.Provider, ProviderSource: in.ProviderSource, ProviderHost: in.ProviderHost, Providers: encodeProviderOptions(in.Providers),
 		Effort: in.Effort, EffortSource: in.EffortSource, MaxAccess: in.MaxAccess, Quota: quotaFromAPI(in.Quota),
 		Features: domain.JoinFeatures(in.Features), Away: in.Away, Env: in.Env, Models: domain.EncodeModels(modelsFromAPI(in.Models)), ModelsFrom: modelsFrom(in.ModelsFrom, in.Models), ModelsAt: modelsAt(in.ModelsAt, in.Models), Tools: string(toolJSON)}); err != nil {
@@ -1971,6 +2028,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 		return
 	}
 	in.RunnerInstance, in.RestartingUntil, in.Away = a.Runtime.RunnerInstance, a.Runtime.RestartingUntil, a.Runtime.Away
+	in.Account = s.visibleAccount(r, a)
 	in.Quota = s.visibleQuota(r, a)
 	writeJSON(w, http.StatusOK, in)
 }
@@ -1990,6 +2048,10 @@ func (s *Server) consoleDevice(r *http.Request) string {
 }
 
 func (s *Server) consoleSend(w http.ResponseWriter, r *http.Request) {
+	received := perf.RequestStart(r.Context())
+	if received.IsZero() {
+		received = time.Now()
+	}
 	var req api.SendRequest
 	if !decode(w, r, &req) {
 		return
@@ -2012,6 +2074,9 @@ func (s *Server) consoleSend(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusCreated
 	if out.Duplicate {
 		status = http.StatusOK
+	}
+	if !out.EnqueuedAt.IsZero() {
+		s.log.Info("message latency", "message_id", out.Message.ID, "received_at_ms", received.UnixMilli(), "enqueued_at_ms", out.EnqueuedAt.UnixMilli(), "service_ms", time.Since(received).Milliseconds())
 	}
 	if !out.Duplicate {
 		s.record(r, "message."+string(out.Message.Type), string(out.Message.To), out.Message.ID)

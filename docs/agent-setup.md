@@ -185,6 +185,7 @@ myco machine join --link '<hub>/j/<token>'
 - It saves this computer's identity and installs the background **runner** service. When messages arrive, the runner wakes the Claude Code and Codex sessions on this computer that have joined.
 - Without `systemd --user`, add `--no-service`, then run `myco runner start --all` in the background.
 - **Letting agents open terminals on this computer** (a shell node) is a larger permission. Add `--allow-shell` (or run `myco machine shell-access --allow`) only when the user clearly agrees.
+- An exec shell node with a nonempty `allow_from` list also accepts commands from its own owner's console, including that person's workflow `computer` steps. Keep the agent list restricted; `"*"` is not needed for the owner. Updated runners obtain the owner member name from the Hub's `/me` response and match only `@console:<owner>`; other members or administrators receive no exception. Missing owner metadata or a failed refresh grants no owner exception, and an empty list remains refused. Owner/list changes refresh within 30 seconds. Audit records keep the original console sender. This applies to exec shell nodes, not machine-node spawn permissions.
 
 ### 5b. Add yourself
 
@@ -243,6 +244,12 @@ Collect information before you change anything:
 - Hub on this computer: `myco hub list` and `tail -50 ~/.myco/hub/hub.log`;
 - Hub on a server: `sudo bash install-hub.sh --check`, `systemctl status myco-hub`, `journalctl -u myco-hub -n 50`;
 - App errors: ask the user to click "Details" under the message and send you the original text.
+
+Hub clients replace their shared connection pool after two requests to the same Hub reach the
+client's own deadline without response headers within five minutes. Replacement happens at most once
+every 30 seconds and logs one warning; it preserves the proxy setting and leaves in-flight requests
+running. Caller cancellations and response-body timeouts do not trigger replacement. The failed
+request is returned to the caller for its normal retry handling.
 
 | Symptom (what the user sees, or the original text in "Details") | Common cause | How to check | What to do |
 |---|---|---|---|

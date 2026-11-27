@@ -482,3 +482,26 @@ func TestUpgradeRequest(t *testing.T) {
 		t.Fatalf("failure: %+v", res)
 	}
 }
+
+func TestProcessStopRequiresAdministratorAndDedicatedEffect(t *testing.T) {
+	r := newRig(t)
+	calls := 0
+	r.node.Deps.StopProcess = func(_ context.Context, ref string) (*api.MachineProcess, error) {
+		calls++
+		if ref != "verified" {
+			return nil, errors.New("identity changed")
+		}
+		return &api.MachineProcess{PID: 50, Name: "worker", Created: "creation"}, nil
+	}
+	if got := r.run(t, "lead", api.SpawnRequest{CLI: api.StopProcessCLI, ProcessRef: "verified"}); !got.Denied || calls != 0 {
+		t.Fatalf("agent could stop processes: %+v", got)
+	}
+	got := r.run(t, AdminSender, api.SpawnRequest{CLI: api.StopProcessCLI, ProcessRef: "verified"})
+	if got.StoppedProcess == nil || calls != 1 || len(r.enrolled) != 0 {
+		t.Fatalf("not a dedicated action: %+v", got)
+	}
+	got = r.run(t, AdminSender, api.SpawnRequest{CLI: api.StopProcessCLI, ProcessRef: "stale"})
+	if !got.Denied || calls != 2 {
+		t.Fatalf("identity rejection lost: %+v", got)
+	}
+}

@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useSyncExternalStore } from "react";
 
 /*
@@ -10,7 +11,7 @@ import { useSyncExternalStore } from "react";
 const KEY = "myco-runs-reports-only";
 
 function load(): boolean {
-  try { return localStorage.getItem(KEY) === "1"; } catch { return false; }
+  try { return localPreferences.getItem(KEY) === "1"; } catch { return false; }
 }
 
 let on = load();
@@ -18,7 +19,7 @@ const listeners = new Set<() => void>();
 
 export function setReportsOnly(v: boolean) {
   on = v;
-  try { localStorage.setItem(KEY, v ? "1" : "0"); } catch { /* not kept */ }
+  try { localPreferences.setItem(KEY, v ? "1" : "0"); } catch { /* not kept */ }
   listeners.forEach((l) => l());
 }
 

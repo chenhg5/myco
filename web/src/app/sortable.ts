@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useRef, useState } from "react";
 
 /*
@@ -18,7 +19,7 @@ const SLIDE = "transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1)";
 
 function load(key: string): string[] {
   try {
-    const v = JSON.parse(localStorage.getItem(`${PREFIX}\u0000${key}`) || "[]");
+    const v = JSON.parse(localPreferences.getItem(`${PREFIX}\u0000${key}`) || "[]");
     return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -26,7 +27,7 @@ function load(key: string): string[] {
 }
 
 function save(key: string, ids: string[]) {
-  try { localStorage.setItem(`${PREFIX}\u0000${key}`, JSON.stringify(ids)); } catch { /* not kept */ }
+  try { localPreferences.setItem(`${PREFIX}\u0000${key}`, JSON.stringify(ids)); } catch { /* not kept */ }
 }
 
 /** ids in the kept order; ones never placed first, in their own order. */

@@ -126,3 +126,32 @@ func TestContent(t *testing.T) {
 		t.Fatal(k)
 	}
 }
+
+// Lark is its own app: its code is asked of Lark's accounts, not Feishu's.
+func TestRegistrationLark(t *testing.T) {
+	feishuSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("Feishu asked: %s", r.URL)
+	}))
+	defer feishuSrv.Close()
+	lark := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		switch r.Form.Get("action") {
+		case "init":
+			w.Write([]byte(`{"supported_auth_methods":["client_secret"]}`))
+		case "begin":
+			w.Write([]byte(`{"device_code":"dc","verification_uri_complete":"https://lark.example/scan","interval":1,"expires_in":60}`))
+		case "poll":
+			w.Write([]byte(`{"client_id":"cli_l","client_secret":"sec","user_info":{"open_id":"ou_l"}}`))
+		}
+	}))
+	defer lark.Close()
+	p, err := (&Registrar{BaseURL: feishuSrv.URL, LarkURL: lark.URL, Lark: true}).Begin(context.Background())
+	if err != nil || p.URL != "https://lark.example/scan" {
+		t.Fatalf("begin %v %+v", err, p)
+	}
+	p.interval = 10 * time.Millisecond
+	reg, err := p.Wait(context.Background())
+	if err != nil || reg.Platform != "lark" || reg.AppID != "cli_l" {
+		t.Fatalf("registration %+v %v", reg, err)
+	}
+}

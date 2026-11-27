@@ -87,6 +87,9 @@ func imConnectCommand() *Command {
 			{Name: "qr-png", Kind: String, Help: "Feishu/Lark: also save the QR code as a PNG here"},
 			{Name: "timeout", Kind: Duration, Default: "10m", Help: "Feishu/Lark: how long to wait for the scan"},
 			{Name: "profile", Kind: String, Help: "Speak as this existing agent profile instead of a new im-<name> node"},
+			{Name: "llm-base-url", Kind: String, Help: "Front desk: an OpenAI-compatible model's base URL (it answers as the agent, as in voice chats)"},
+			{Name: "llm-model", Kind: String, Help: "Front desk: the model (a fast one)"},
+			{Name: "llm-key-file", Kind: String, Help: "Front desk: file with the model's API key"},
 		},
 		Run: handler(func(e *env) error {
 			if len(e.in.Args) != 1 {
@@ -113,6 +116,9 @@ func imConnectCommand() *Command {
 			}
 			dry := e.in.Bool("dry-run")
 			cfg := &im.Config{Name: name, Platform: platform, Agent: e.in.String("agent"), Project: e.in.String("project"), Lang: e.in.String("lang")}
+			if err := e.imDesk(cfg); err != nil {
+				return err
+			}
 			ctx := e.in.Ctx
 			// The node it will speak as, checked first: no scan for nothing.
 			if _, _, err := e.bridgeNode(cfg, true); err != nil {
@@ -131,7 +137,7 @@ func imConnectCommand() *Command {
 					return e.dryRun(map[string]any{"action": "im connect", "platform": platform, "name": name,
 						"steps": []string{"show a QR code to scan with the Feishu/Lark app", "create node im-" + name, "save " + filepath.Join(dir, name+".json")}})
 				} else {
-					reg, err := e.scanFeishu(ctx, e.in.String("qr-png"), e.in.Duration("timeout"))
+					reg, err := e.scanFeishu(ctx, platform == "lark", e.in.String("qr-png"), e.in.Duration("timeout"))
 					if err != nil {
 						return err
 					}
@@ -199,13 +205,17 @@ func imConnectCommand() *Command {
 }
 
 // scanFeishu shows the registration QR code and waits for the scan.
-func (e *env) scanFeishu(ctx context.Context, png string, timeout time.Duration) (*feishu.Registration, error) {
-	p, err := (&feishu.Registrar{}).Begin(ctx)
+func (e *env) scanFeishu(ctx context.Context, lark bool, png string, timeout time.Duration) (*feishu.Registration, error) {
+	p, err := (&feishu.Registrar{Lark: lark}).Begin(ctx)
 	if err != nil {
 		return nil, errorf("unavailable", ExitUnavailable, "check that this machine reaches accounts.feishu.cn, or pass --app-id with --app-secret-file", "Feishu registration: %v", err)
 	}
 	w := e.in.Stderr
-	fmt.Fprintln(w, "Scan with the Feishu or Lark app to create the bot (用飞书或 Lark 手机 App 扫码创建机器人):")
+	if lark {
+		fmt.Fprintln(w, "Scan with the Lark phone app to create the bot:")
+	} else {
+		fmt.Fprintln(w, "用飞书手机 App 扫码创建机器人 (scan with the Feishu app):")
+	}
 	fmt.Fprintln(w, p.URL)
 	qrterminal.GenerateWithConfig(p.URL, qrterminal.Config{Level: qrterminal.M, Writer: w, HalfBlocks: true,
 		BlackChar: qrterminal.BLACK_BLACK, WhiteChar: qrterminal.WHITE_WHITE, BlackWhiteChar: qrterminal.BLACK_WHITE,
@@ -245,6 +255,30 @@ func (e *env) slackToken(flag, envName, what string) (string, error) {
 		return strings.TrimSpace(line), nil
 	}
 	return "", nil
+}
+
+// imDesk applies the --llm-* flags (the front desk's model).
+func (e *env) imDesk(c *im.Config) error {
+	if e.in.IsSet("llm-base-url") {
+		c.LLMBaseURL = e.in.String("llm-base-url")
+	}
+	if e.in.IsSet("llm-model") {
+		c.LLMModel = e.in.String("llm-model")
+	}
+	if f := e.in.String("llm-key-file"); f != "" {
+		k, err := readSecretFile(f, "--llm-key-file")
+		if err != nil {
+			return err
+		}
+		c.LLMKey = k
+	}
+	if e.in.IsSet("llm-model") || e.in.IsSet("llm-key-file") {
+		c.NoDesk = false
+	}
+	if (c.LLMModel == "") != (c.LLMKey == "") {
+		return errorf("invalid_usage", ExitUsage, "pass both --llm-model and --llm-key-file (and --llm-base-url unless it is OpenAI)", "the front desk needs a model and its key")
+	}
+	return nil
 }
 
 func readSecretFile(path, flag string) (string, error) {
@@ -560,14 +594,34 @@ func imAllowCommand() *Command {
 }
 
 func imSetCommand() *Command {
-	return &Command{Name: "set", Summary: "Change a bridge's project or language", Mutating: true,
+	return &Command{Name: "set", Summary: "Change a bridge's project, language, or front desk (model and instructions)", Mutating: true,
 		Examples: []string{"myco im set --name feishu-coder --project website"},
 		Flags: []Flag{{Name: "name", Kind: String, Required: true, Help: "Bridge name"},
 			{Name: "project", Kind: String, Help: "Project for new conversations (\"\" for none)"},
-			{Name: "lang", Kind: Enum, Values: []string{"zh", "en"}, Help: "What the bot speaks"}},
+			{Name: "lang", Kind: Enum, Values: []string{"zh", "en"}, Help: "What the bot speaks"},
+			{Name: "llm-base-url", Kind: String, Help: "Front desk: an OpenAI-compatible model's base URL (it answers as the agent, as in voice chats)"},
+			{Name: "llm-model", Kind: String, Help: "Front desk: the model (a fast one)"},
+			{Name: "llm-key-file", Kind: String, Help: "Front desk: file with the model's API key"},
+			{Name: "no-desk", Kind: Bool, Help: "Turn the front desk off: messages go straight to the agent"},
+			{Name: "prompt-file", Kind: String, Help: "Front desk: file with your own instructions for this bot (rules for whoever talks to it); an empty file clears them"}},
 		Run: handler(func(e *env) error {
 			c, err := e.loadBridge()
 			if err != nil {
+				return err
+			}
+			if f := e.in.String("prompt-file"); f != "" {
+				b, err := os.ReadFile(f)
+				if err != nil {
+					return errorf("not_found", ExitNotFound, "", "reading --prompt-file: %v", err)
+				}
+				c.Prompt = strings.TrimSpace(string(b))
+				if n := len([]rune(c.Prompt)); n > im.MaxPrompt {
+					return errorf("invalid_argument", ExitUsage, "shorten it", "the instructions are %d characters; at most %d", n, im.MaxPrompt)
+				}
+			}
+			if e.in.Bool("no-desk") {
+				c.LLMBaseURL, c.LLMModel, c.LLMKey, c.NoDesk = "", "", "", true
+			} else if err := e.imDesk(c); err != nil {
 				return err
 			}
 			if e.in.IsSet("project") {
@@ -583,7 +637,7 @@ func imSetCommand() *Command {
 				return err
 			}
 			return e.p.Print(c.Redacted(), func(w io.Writer) {
-				fmt.Fprintf(w, "%s: project=%s lang=%s (a running bridge picks this up within seconds)\n", c.Name, orDash(c.Project), orDash(c.Lang))
+				fmt.Fprintf(w, "%s: project=%s lang=%s desk=%s (a running bridge picks this up within seconds)\n", c.Name, orDash(c.Project), orDash(c.Lang), orDash(c.LLMModel))
 			})
 		}),
 	}

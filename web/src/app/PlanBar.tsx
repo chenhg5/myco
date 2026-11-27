@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ListChecks, X } from "lucide-react";
 import { L } from "@/lib/i18n";
@@ -19,7 +20,7 @@ const CLOSED_KEY = "myco-plan-bar-closed";
 const DONE_MS = 8000;
 
 function readClosed(): string[] {
-  try { return JSON.parse(localStorage.getItem(CLOSED_KEY) || "[]") as string[]; } catch { return []; }
+  try { return JSON.parse(localPreferences.getItem(CLOSED_KEY) || "[]") as string[]; } catch { return []; }
 }
 
 export function PlanBar({ taskId, items, live }: {
@@ -28,7 +29,7 @@ export function PlanBar({ taskId, items, live }: {
   /** the task is still being worked on */
   live: boolean;
 }) {
-  const [open, setOpen] = useState(() => { try { return localStorage.getItem(OPEN_KEY) === "1"; } catch { return false; } });
+  const [open, setOpen] = useState(() => { try { return localPreferences.getItem(OPEN_KEY) === "1"; } catch { return false; } });
   const [closed, setClosed] = useState<string[]>(readClosed);
   const done = items.filter((x) => x.state === "done").length;
   const all = items.length > 0 && done === items.length;
@@ -47,13 +48,13 @@ export function PlanBar({ taskId, items, live }: {
   const doing = items.find((x) => x.state === "doing") || items.find((x) => x.state === "todo");
   const toggle = () => {
     setOpen((o) => {
-      try { localStorage.setItem(OPEN_KEY, o ? "0" : "1"); } catch { /* not kept */ }
+      try { localPreferences.setItem(OPEN_KEY, o ? "0" : "1"); } catch { /* not kept */ }
       return !o;
     });
   };
   const close = () => {
     const next = [...closed.filter((x) => x !== taskId), taskId].slice(-200);
-    try { localStorage.setItem(CLOSED_KEY, JSON.stringify(next)); } catch { /* not kept */ }
+    try { localPreferences.setItem(CLOSED_KEY, JSON.stringify(next)); } catch { /* not kept */ }
     setClosed(next);
   };
   return (

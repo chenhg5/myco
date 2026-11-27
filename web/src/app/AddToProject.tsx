@@ -37,7 +37,7 @@ export async function shareWorkspaces(hubId: string, project: Project, rows: Age
   await Promise.all(spaces.map((r) => {
     const now = (r.st.agent.allow_from || []).filter((x) => x !== "*" && !isNobody(x));
     if (now.includes(agent)) return null;
-    return appApi.updateAllowFrom(hubId, r.st.agent.name, [...now, agent]).catch(() => null);
+    return appApi.addAllowedSenders(hubId, r.st.agent.name, [agent]);
   }));
 }
 
@@ -105,6 +105,10 @@ const NEW_CLIS: { value: SpawnCli; label: string }[] = [
   { value: "atomcode", label: "AtomCode" },
 ];
 
+/** The AIs shown at once in a new agent's "用哪个 AI"; the rest wait
+ *  behind "更多" unless the computer has them installed (or one is picked). */
+const COMMON_CLIS: SpawnCli[] = ["claude", "codex", "gemini", "cursor"];
+
 /** What a computer told about itself, as the dialog keeps it. */
 type InfoState = { info?: MachineInfo; error?: unknown; loading?: boolean };
 
@@ -158,8 +162,8 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
   const hereId = ov ? thisComputerId(ov, local) : undefined;
   const isHere = (m: Machine) => m.id === hereId;
   const hereMachine = machines.find(isHere);
-  const elsewhere = machines.filter((m) => !isHere(m))
-    .sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name));
+  const elsewhere = machines.filter((m) => m.online && !isHere(m))
+    .sort((a, b) => a.name.localeCompare(b.name));
   // Agents of this workspace not in the project yet (in others, or none):
   // online first.
   function others(): AgentRow[] {
@@ -869,6 +873,8 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   // Where its model comes from (i115, i119): the computer's own, or one of
   // the member's model providers, which goes to that computer with it.
   const [providerId, setProviderId] = useState("");
+  const [allFolders, setAllFolders] = useState(false);
+  const [allClis, setAllClis] = useState(false);
   useEffect(() => { if (open) setError(null); }, [open, machine.id]);
   // A model or effort picked for one CLI means nothing to another.
   useEffect(() => { setModel(""); setEffort(""); setProviderId(""); }, [cli]);
@@ -881,6 +887,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   /** the models its CLI offers on that computer (Codex), when it said */
   const offered = aiOf(cli)?.models;
   const ai = aiOf(cli);
+  const hiddenClis = NEW_CLIS.filter((c) => !(COMMON_CLIS.includes(c.value) || c.value === cli || (info?.ais.find((x) => x.cli === c.value)?.state ?? "missing") !== "missing")).length;
   const folders = usedFolders(rows, hubId, machine.id).filter((d) => !info || insideDirs(d, info));
   // Newer computers make a folder when none is given (where they say).
   const autoDir = machineMakesFolders(machine.myco_version);
@@ -941,7 +948,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
       <div className="app-field">
         <span className="app-field-label">{L("用哪个 AI", "Which AI")}</span>
         <div className="ws-computers">
-          {NEW_CLIS.map((c) => {
+          {NEW_CLIS.filter((c) => allClis || COMMON_CLIS.includes(c.value) || c.value === cli || (info?.ais.find((a) => a.cli === c.value)?.state ?? "missing") !== "missing").map((c) => {
             const a = here ? undefined : aiOf(c.value);
             return (
               <button key={c.value} type="button" className={cn("ws-computer", cli === c.value && "active", a?.state === "missing" && "is-away")} onClick={() => setCli(c.value)} disabled={!!busy}>
@@ -951,6 +958,11 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
               </button>
             );
           })}
+          {!allClis && hiddenClis > 0 && (
+            <button type="button" className="ws-computer ws-computer-more" onClick={() => setAllClis(true)} disabled={!!busy} data-testid="new-agent-more-ais">
+              {L(`更多 · ${hiddenClis}`, `More · ${hiddenClis}`)}<ChevronDown />
+            </button>
+          )}
         </div>
       </div>
       {here ? <LocalAgentLines only={[cli]} hideReady /> : ai && (ai.state === "missing" || ai.state === "signed_out") && (
@@ -967,6 +979,11 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
         </div>
       )}
       <ModelSource hubId={hubId} cli={cli} machineName={machine.name} value={providerId} onChange={setProviderId} model={model} onModel={setModel} busy={!!busy} />
+      {/* (its name first: it also names the folder made when none is given) */}
+      <label className="app-field">
+        <span className="app-field-label">{L("它的名字（可以不填）", "Its name (optional)")}</span>
+        <input className="app-input" value={role} onChange={(e) => setRole(e.target.value)} placeholder={L("比如 后端小助手", "e.g. Backend helper")} disabled={!!busy} />
+      </label>
       <label className="app-field">
         <span className="app-field-label">{autoDir ? L("在哪个文件夹干活（可以不填）", "Which folder it works in (optional)") : L("在哪个文件夹干活", "Which folder it works in")}</span>
         <input className="app-input mono" value={dir} onChange={(e) => setDir(e.target.value)} disabled={!!busy} required={!autoDir}
@@ -981,18 +998,19 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
           <span className={cn("app-field-hint", outside && "is-bad")} data-testid="allowed-dirs">{outside
             ? <>{L(`这个文件夹不在「${machine.name}」允许的范围里。允许的：${info.dirs.join("、")}`, `That folder is outside what “${machine.name}” allows. Allowed: ${info.dirs.join(", ")}`)}
               {hub && <AllowFolder hubId={hubId} hub={hub} machine={machine} dir={dir.trim()} onAllowed={setAllowed} />}</>
-            : L(`「${machine.name}」只允许在这些文件夹里开工：${info.dirs.join("、")}`, `“${machine.name}” only allows these folders: ${info.dirs.join(", ")}`)}</span>
+            : <span className="add-dirs-line" title={info.dirs.join("\n")}>{L(`只允许在这里开工：${info.dirs.join("、")}`, `Only in: ${info.dirs.join(", ")}`)}</span>}</span>
         )}
       </label>
+      {/* Folders used before: four, the rest a click away. */}
       {folders.length > 0 && (
-        <div className="app-convpick-folders">
-          {folders.map((d) => <button key={d} type="button" className={cn("app-convpick-folder mono", d === dir.trim() && "active")} onClick={() => setDir(d)} disabled={!!busy} title={d}>{shortDir(d)}</button>)}
+        <div className="app-convpick-folders add-recent">
+          <span className="add-recent-label">{L("用过的", "Used before")}</span>
+          {(allFolders ? folders : folders.slice(0, 4)).map((d) => <button key={d} type="button" className={cn("app-convpick-folder mono", d === dir.trim() && "active")} onClick={() => setDir(d)} disabled={!!busy} title={d}>{shortDir(d)}</button>)}
+          {!allFolders && folders.length > 4 && (
+            <button type="button" className="app-convpick-folder add-recent-more" onClick={() => setAllFolders(true)} disabled={!!busy}>{L(`还有 ${folders.length - 4} 个`, `${folders.length - 4} more`)}</button>
+          )}
         </div>
       )}
-      <label className="app-field">
-        <span className="app-field-label">{L("它的分工（可以不填）", "Its role (optional)")}</span>
-        <input className="app-input" value={role} onChange={(e) => setRole(e.target.value)} placeholder={L("比如 后端工程师", "e.g. Backend engineer")} disabled={!!busy} />
-      </label>
       <details className="app-advanced">
         <summary>{L("更多选项：模型、思考强度、权限", "More: model, effort, access")}<ChevronDown /></summary>
         <div className="app-advanced-body">
@@ -1212,7 +1230,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
       const now = (r.st.agent.allow_from || []).filter((x) => !isNobody(x));
       if (now.length && !now.includes("*")) {
         const next = [...new Set([...now, ...users])];
-        if (next.length !== now.length) await appApi.updateAllowFrom(hubId, r.st.agent.name, next).catch(() => undefined);
+        if (next.length !== now.length) await appApi.addAllowedSenders(hubId, r.st.agent.name, users.filter((n) => !now.includes(n)));
       }
       onAdded();
       onClose();

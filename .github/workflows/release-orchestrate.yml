@@ -1,0 +1,103 @@
+# actions-release-v1: manual entry only; no schedule or VERSION mutation in dry_run.
+name: Release orchestration
+run-name: release-plan ${{ inputs.version }} ${{ inputs.dry_run && 'dry-run' || 'live' }} ${{ inputs.request_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Explicit next stable version, e.g. v1.2.3'
+        required: true
+        type: string
+      request_id:
+        description: "Optional observer correlation ID (not a credential)"
+        type: string
+        default: ""
+      dry_run:
+        description: 'Preview immutable metadata and dispatch; no remote writes or signing'
+        default: true
+        type: boolean
+permissions: {}
+concurrency:
+  group: release-orchestration-${{ inputs.dry_run && github.run_id || 'publish' }}
+  cancel-in-progress: false
+jobs:
+  plan:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Validate release workflow isolation and recovery tests
+        run: |
+          python3 scripts/release-actions-policy.test.py
+          python3 scripts/release-orchestrate.test.py
+      - name: Select complete green main and preview immutable metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python3 scripts/release-orchestrate.py plan --version "$RELEASE_VERSION" --dry-run
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: release-plan
+          path: release-plan.json
+          if-no-files-found: warn
+          retention-days: 30
+  dispatch:
+    needs: plan
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: write
+      deployments: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-plan
+      - name: Check Environment and dispatch the exact previewed source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_ENVIRONMENT_READY: ${{ vars.RELEASE_ENVIRONMENT_READY }}
+        run: python3 scripts/release-orchestrate.py dispatch --version "$RELEASE_VERSION" --plan release-plan.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: release-dispatch
+          path: release-plan.json
+          retention-days: 30
+  mirror_preview:
+    needs: plan
+    if: inputs.dry_run
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Bounded public Gitee read probe (latest published release, no upload)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          python3 scripts/release-gitee.py --version "$v" --dry-run --budget 60 > mirror-preview.json
+          cat mirror-preview.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: mirror-preview
+          path: mirror-preview.json
+          retention-days: 30

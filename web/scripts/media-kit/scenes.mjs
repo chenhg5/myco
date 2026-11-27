@@ -477,6 +477,36 @@ export const scenes = [
       await bar.locator(".goal-round").first().waitFor();
     },
   },
+  {
+    id: "machine-health",
+    title: "机器负载与进程归属 / Machine pressure and process ownership",
+    zh: "看清电脑负载和进程归属，确认后才结束可疑进程；来源未知的进程只告警。",
+    en: "See machine pressure and process ownership, then confirm before ending a verified suspect.",
+    tags: ["电脑", "权限与安全"], themes: ["light", "dark"],
+    description: "电脑详情的机器健康面板，展示负载、可用内存、已知与未知进程，以及结束进程确认框；纯演示数据",
+    prepare: async ({page,T}) => {
+      // The showcase uses its own machine names/IDs; keep all data synthetic.
+      await page.route("**/app/overview", async route => {
+        const response=await route.fetch(), data=await response.json();
+        for (const hub of data.hubs || []) for (const machine of hub.overview?.machines || []) {
+          machine.can_stop_process=true;
+          machine.machine_health={at:new Date().toISOString(),runner_instance:"demo-runner",complete:true,alert:true,cores:8,load_metric:"load1_per_core",load_ratio:0.86,memory_total:16*1024**3,memory_available:2*1024**3,processes:[
+            {pid:4101,name:"demo-worker",created:"demo-birth-1",cpu:99,memory:8388608,agent:"demo-coder",suspicious:true,ref:"demo-suspect"},
+            {pid:4102,name:"legacy-worker",created:"demo-birth-2",cpu:95,memory:8388608,suspicious:false},
+          ]};
+        }
+        await route.fulfill({response,json:data});
+      });
+      await page.reload();
+      await nav(page,".sp-nav-pcs-head");
+      await click(page.locator(".pc-card").first());
+      const health=page.getByTestId("machine-health");
+      await health.getByText(T("来源未知","Unknown source"),{exact:false}).first().waitFor();
+      await click(health.locator(".app-row",{hasText:"demo-worker"}).getByRole("button",{name:T("结束","End"),exact:true}));
+      await page.getByRole("dialog",{name:T("结束这个进程？","End this process?")}).waitFor();
+    },
+  },
+
 ];
 
 scenes.push(...interactionScenes);

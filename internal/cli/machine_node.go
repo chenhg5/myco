@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"os"
@@ -260,6 +261,31 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 		},
 		Senders: me.AllowFrom, CurrentSenders: cachedAllowFrom(e.in.Ctx, c, 30*time.Second),
 		Deps: machinenode.Deps{
+			StopProcess: func(ctx context.Context, ref string) (*api.MachineProcess, error) {
+				if sh.processes == nil {
+					return nil, fmt.Errorf("process monitoring unavailable")
+				}
+				current, err := c.Me(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if !processOwnerCurrent(current, me) {
+					return nil, fmt.Errorf("machine ownership changed")
+				}
+				agent, err := sh.processes.AgentFor(hub, me.OwnerID, ref)
+				if err != nil {
+					return nil, err
+				}
+				target, err := c.GetAgent(ctx, agent)
+				if err != nil {
+					return nil, err
+				}
+				if target.OwnerID != me.OwnerID || target.MachineID != current.MachineID {
+					return nil, fmt.Errorf("agent ownership or machine changed")
+				}
+				p, err := sh.processes.Terminate(ctx, hub, me.OwnerID, ref)
+				return &p, err
+			},
 			NewHarness: func(cli string, opts harness.Options) (harness.Harness, error) { return sh.registry.New(cli, opts) },
 			Installed: func(cli string) bool {
 				_, err := exec.LookPath(spawnBinary(cli))
@@ -517,4 +543,12 @@ func providerSenderOK(ctx context.Context, c *client.Client, sender, sealedBy st
 		return errors.New("it was not sealed by this computer's owner")
 	}
 	return nil
+}
+
+// A machine can be transferred independently of its nodes. Unknown ownership on
+// an older Hub must never authorize a destructive process operation.
+func processOwnerCurrent(current, expected *api.Agent) bool {
+	return current != nil && expected != nil && current.MachineOwnerID != nil &&
+		*current.MachineOwnerID == expected.OwnerID && current.OwnerID == expected.OwnerID &&
+		current.MachineID != "" && (expected.MachineID == "" || current.MachineID == expected.MachineID)
 }

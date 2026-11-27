@@ -1,3 +1,4 @@
+import { localPreferences, PREFERENCES_CHANGED } from "@/lib/localPreferences";
 import { useSyncExternalStore } from "react";
 
 /*
@@ -11,7 +12,7 @@ const KEY = "myco-app-hub-looks";
 
 function load(): Record<string, HubLook> {
   try {
-    const v: unknown = JSON.parse(localStorage.getItem(KEY) || "{}");
+    const v: unknown = JSON.parse(localPreferences.getItem(KEY) || "{}");
     return v && typeof v === "object" ? v as Record<string, HubLook> : {};
   } catch {
     return {};
@@ -25,12 +26,7 @@ export function setHubLook(id: string, look: HubLook | null) {
   const next = { ...looks };
   if (look && (look.color !== undefined || look.pic)) next[id] = look;
   else delete next[id];
-  try {
-    localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    // Too big for this browser's storage: keep the colour, drop the picture.
-    if (look?.pic) return setHubLook(id, look.color !== undefined ? { color: look.color } : null);
-  }
+  localPreferences.setItem(KEY, JSON.stringify(next));
   looks = next;
   listeners.forEach((l) => l());
 }
@@ -42,3 +38,5 @@ export function useHubLooks(): Record<string, HubLook> {
     () => looks,
   );
 }
+
+window.addEventListener(PREFERENCES_CHANGED, () => { looks = load(); listeners.forEach((l) => l()); });

@@ -69,10 +69,16 @@ type Request struct {
 	// agent says, thinks and does), for the live view in the app. Harnesses
 	// that cannot tell leave it uncalled. It may be called from several goroutines.
 	OnEvent func(Event)
+	// OnTiming receives content-free lifecycle milestones, never model text or
+	// credentials. A session announcement does not prove history is restored.
+	OnTiming func(stage string)
 }
 
 // Event is one step of a run.
 type Event struct {
+	// ObservedAtMS is the runner's source observation time (Unix ms), not
+	// the Hub's later ingestion time. Cross-host differences need clock bounds.
+	ObservedAtMS int64 `json:"observed_at_ms,omitempty"`
 	// Kind: text, thinking, tool, tool_result, usage, error, output (a
 	// shell command's output as it runs; Stream says stdout or stderr), or
 	// turn_end (a session followed from its file ended its turn and waits).
@@ -174,6 +180,9 @@ type Harness interface {
 
 // Options configures a harness instance.
 type Options struct {
+	// ClientVersion is the host CLI version advertised by protocol adapters.
+	// It is captured per instance so concurrent runners share no mutable metadata.
+	ClientVersion string
 	// ACPTransport overrides the ACP transport (stdio or streamable-http).
 	ACPTransport string
 	// Binary overrides the executable (e.g. a full path to claude).
@@ -214,8 +223,9 @@ type ExecSpec struct {
 	// Senders is the set of agents allowed to send commands, re-checked on
 	// every message (filled from the agent's allow_from at start).
 	Senders []string `yaml:"-" json:"-"`
-	// CurrentSenders, if set, returns the up-to-date allow_from (the admin
-	// may change it while the node runs); Senders is used if it fails.
+	// CurrentSenders, if set, returns the current authorized senders, including
+	// an exec node owner's console identity confirmed by the Hub. Senders is
+	// the original allow_from only, used without an owner exception on failure.
 	CurrentSenders func() ([]string, error) `yaml:"-" json:"-"`
 	// AuditLog is a JSONL file recording every command (set by the runner).
 	AuditLog string `yaml:"-" json:"-"`

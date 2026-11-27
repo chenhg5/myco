@@ -113,7 +113,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	// Bound every call, long-polls included (their wait plus a margin): a
 	// connection that died while the computer slept or changed networks
 	// otherwise hangs forever without an error, and a runner never retries.
-	rctx, cancel := context.WithTimeout(ctx, requestBound(query))
+	rctx, cancel := boundedContext(ctx, requestBound(query))
 	defer cancel()
 	req, err := http.NewRequestWithContext(rctx, method, u.String(), body)
 	if err != nil {
@@ -431,12 +431,28 @@ func (c *Client) SetSkills(ctx context.Context, name string, skills []api.Skill)
 }
 
 func (c *Client) UpdateProfile(ctx context.Context, name string, req api.ProfileRequest) (*api.Agent, error) {
+	out, err := c.UpdateProfileWithChanges(ctx, name, req)
+	if err != nil {
+		return nil, err
+	}
+	return &out.Agent, nil
+}
+
+// UpdateProfileWithChanges never falls back to a read/replace when an older
+// Hub rejects delta fields: that fallback could erase concurrent permissions.
+func (c *Client) UpdateProfileWithChanges(ctx context.Context, name string, req api.ProfileRequest) (*api.ProfileResponse, error) {
 	path := "/v1/me/profile"
 	if name != "" {
 		path = "/v1/agents/" + esc(name) + "/profile"
 	}
-	var out api.Agent
-	return &out, c.do(ctx, http.MethodPut, path, nil, req, &out)
+	var out api.ProfileResponse
+	err := c.do(ctx, http.MethodPut, path, nil, req, &out)
+	var ce *Error
+	if (req.AllowAdd != nil || req.AllowRemove != nil) && errors.As(err, &ce) && ce.Code == "invalid_argument" &&
+		(strings.Contains(ce.Message, `unknown field "allow_add"`) || strings.Contains(ce.Message, `unknown field "allow_remove"`)) {
+		return nil, &Error{Status: ce.Status, Code: "upgrade_required", Message: "this Hub does not support incremental sender permissions", Suggestion: "upgrade the Hub, then retry; no permissions were replaced"}
+	}
+	return &out, err
 }
 
 // ListAliases lists aliases.
@@ -931,11 +947,15 @@ func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 		}
 	}
 	var err error
-	for attempt := 0; attempt < 6; attempt++ {
+	for attempt := 0; attempt < 8; attempt++ {
 		err = c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
 		// Older hubs reject unknown JSON fields. Retry only that specific schema
 		// rejection, leaving authentication and other validation failures intact.
 		var apiErr *Error
+		if r.Account != "" && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "account"`) {
+			r.Account = ""
+			continue
+		}
 		if r.Quota != nil && r.Quota.ProfileRef != "" && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest {
 			for _, field := range []string{"profile_ref", "machine_id", "source_kind", "status", "checked_at", "error_code", "plan", "duration_sec", "model_scope", "provider"} {
 				if strings.Contains(apiErr.Message, `unknown field "`+field+`"`) {
@@ -950,6 +970,10 @@ func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 		}
 		if (r.RunnerInstance != "" || !r.RestartingUntil.IsZero()) && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && (strings.Contains(apiErr.Message, `unknown field "runner_instance"`) || strings.Contains(apiErr.Message, `unknown field "restarting_until"`)) {
 			r.RunnerInstance, r.RestartingUntil = "", time.Time{}
+			continue
+		}
+		if r.MachineHealth != nil && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "machine_health"`) {
+			r.MachineHealth = nil
 			continue
 		}
 		if r.RunnerSlots != nil && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "runner_slots"`) {

@@ -174,7 +174,7 @@ func TestClientsShareTheHubTransport(t *testing.T) {
 	if base(a) != hubTransport || base(b) != hubTransport {
 		t.Fatal("clients do not share hubTransport")
 	}
-	if h := hubTransport.HTTP2; h == nil || h.SendPingTimeout != pingAfter || h.PingTimeout != pingTimeout {
-		t.Fatalf("hubTransport has no HTTP/2 health check: %+v", hubTransport.HTTP2)
+	if h := hubTransport.current.HTTP2; h == nil || h.SendPingTimeout != pingAfter || h.PingTimeout != pingTimeout {
+		t.Fatalf("hubTransport has no HTTP/2 health check: %+v", hubTransport.current.HTTP2)
 	}
 }

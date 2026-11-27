@@ -1,6 +1,7 @@
 import type { UsageResponse } from "@/lib/usage";
-import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList, Goal, GoalList, GoalStartRequest, GoalPatchRequest, ModelProvider } from "@/api";
+import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList, Goal, GoalList, GoalStartRequest, GoalPatchRequest, ModelProvider, ModelProviderTestResponse } from "@/api";
 import { L } from "@/lib/i18n";
+import { latencySend } from "@/lib/latency";
 
 // Types mirror the App backend (cmd/myco-app) which proxies to enrolled hubs.
 /** GET /app/notices: whether this computer shows notices, per workspace
@@ -129,6 +130,10 @@ export interface IMBridge {
   claim?: string;
   /** no owner, and its claim code no longer works (expired or too many wrong tries) */
   claim_expired?: boolean;
+  /** It answers as the agent with the voice chats' model (front desk). */
+  desk?: boolean;
+  /** Its owner's own instructions for the front desk (this bot only). */
+  prompt?: string;
   node?: string;
   hub?: string;
   online: boolean;
@@ -822,7 +827,7 @@ export const appApi = {
   },
   /** Sends a task from this console; without thread_id it starts a conversation. */
   sendMessage: (hubId: string, input: SendMessageInput) =>
-    request<Message>("POST", `app/hubs/${enc(hubId)}/messages`, input),
+    latencySend(hubId, performance.now(), request<Message>("POST", `app/hubs/${enc(hubId)}/messages`, input)),
   /** Uploads a file to attach to the next message (as yours; sealed when the
    *  workspace encrypts). Older workspaces answer not_found. */
   uploadAttachment: (hubId: string, file: File, name = file.name) =>
@@ -963,6 +968,10 @@ export const appApi = {
     request<void>("PUT", `app/hubs/${enc(hubId)}/aliases/${enc(alias)}`, { target }),
   removeAlias: (hubId: string, alias: string) =>
     request<void>("DELETE", `app/hubs/${enc(hubId)}/aliases/${enc(alias)}`),
+  changeAllowFrom: (hubId: string, name: string, change: import("@/lib/allow-from").AllowFromEdit) =>
+    request<Agent & { allow_from_change?: import("@/lib/allow-from").AllowFromChange }>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/allow_from`, change),
+  addAllowedSenders: (hubId: string, name: string, names: string[]) =>
+    appApi.changeAllowFrom(hubId, name, { allow_add: names }),
   updateAllowFrom: (hubId: string, name: string, allowFrom: string[]) =>
     request<void>("PUT", `app/hubs/${enc(hubId)}/agents/${enc(name)}/allow_from`, { allow_from: allowFrom }),
   kick: (hubId: string, name: string) =>
@@ -980,6 +989,8 @@ export const appApi = {
   handOver: (hubId: string, name: string, input: HandoverRequest) =>
     request<HandoverResult>("POST", `app/hubs/${enc(hubId)}/agents/${enc(name)}/handover`, input),
   /** Starts a session on a machine; the machine may take up to two minutes. */
+  stopMachineProcess: (hubId: string, machineId: string, ref: string) =>
+    request<{ stopped_process?: import("@/api").MachineProcess }>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/spawn`, { cli: "process-stop", process_ref: ref }),
   spawn: (hubId: string, machineId: string, input: SpawnInput) =>
     request<SpawnResult>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/spawn`, input),
   machineInfo: (hubId: string, machineId: string) =>
@@ -1051,13 +1062,15 @@ export const appApi = {
   /** An agent's chat-app bots (Feishu/Lark, Slack) this computer runs. */
   imBridges: (hubId: string, agent: string) => request<{ bridges: IMBridge[]; slack_create_url: string }>("GET", `app/im?hub_id=${enc(hubId)}&agent=${enc(agent)}`),
   /** A Feishu QR code to scan: makes the bot and connects it. */
-  startFeishuScan: (hubId: string, agent: string) => request<{ id: string; url: string; qr: string }>("POST", "app/im/feishu", { hub_id: hubId, agent }),
+  /** platform: feishu (China) or lark (international) — separate apps, separate codes. */
+  startFeishuScan: (hubId: string, agent: string, platform: "feishu" | "lark" = "feishu") => request<{ id: string; url: string; qr: string }>("POST", "app/im/feishu", { hub_id: hubId, agent, platform }),
   feishuScan: (id: string) => request<{ state: "waiting" | "connecting" | "done" | "failed"; error?: string; bridge?: IMBridge }>("GET", `app/im/feishu/${enc(id)}`),
   stopFeishuScan: (id: string) => request<{ stopped: boolean }>("DELETE", `app/im/feishu/${enc(id)}`),
   connectSlack: (hubId: string, agent: string, botToken: string, appToken: string) =>
     request<{ bridge: IMBridge }>("POST", "app/im/slack", { hub_id: hubId, agent, bot_token: botToken, app_token: appToken }),
   /** A new claim code for a bot without an owner (the old one stops working). */
   renewIMClaim: (name: string) => request<{ name: string; claim: string }>("POST", `app/im/${enc(name)}/claim`),
+  setIMPrompt: (name: string, prompt: string) => request<{ name: string; prompt: string }>("PUT", `app/im/${enc(name)}/prompt`, { prompt }),
   removeIMBridge: (name: string) => request<{ removed: string }>("DELETE", `app/im/${enc(name)}`),
   /** The agent CLIs on this computer: installed, signed in (from v0.20.12). */
   localAgents: () => request<{ agents: LocalAgent[] }>("GET", "app/local/agents"),
@@ -1090,7 +1103,7 @@ export const appApi = {
     request<{ ok: boolean }>("DELETE", `app/hubs/${enc(hubId)}/providers/${enc(id)}`),
   /** Reads the vendor's models once with the key: a saved provider's (id), or the form's. */
   testModelProvider: (hubId: string, id: string | null, input?: Partial<ModelProviderInput>) =>
-    request<{ models: RuntimeModel[] }>("POST", id ? `app/hubs/${enc(hubId)}/providers/${enc(id)}/test` : `app/hubs/${enc(hubId)}/providers/test`, input || {}),
+    request<ModelProviderTestResponse>("POST", id ? `app/hubs/${enc(hubId)}/providers/${enc(id)}/test` : `app/hubs/${enc(hubId)}/providers/test`, input || {}),
   /** Sends a provider's current key to every agent that has an older one. */
   pushModelProvider: (hubId: string, id: string) =>
     request<{ pushed: string[]; failed: { agent: string; error: string }[] }>("POST", `app/hubs/${enc(hubId)}/providers/${enc(id)}/push`),

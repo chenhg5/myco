@@ -13,10 +13,12 @@ concurrency:
   cancel-in-progress: true
 jobs:
   simulator:
+    permissions:
+      contents: read
     runs-on: macos-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Select an available iPhone simulator
         run: |
           xcodebuild -version
@@ -41,7 +43,7 @@ jobs:
         working-directory: ios
         run: |
           xcodebuild test -project Myco.xcodeproj -scheme Myco -destination "platform=iOS Simulator,id=$MYCO_SIMULATOR" -derivedDataPath "$RUNNER_TEMP/myco-ios-derived" -only-testing:MycoAppUITests/ConversationTests/testRemoteControllerHasWebRTCNativeConsentAndDisconnectsInBackground -only-testing:MycoAppUITests/ConversationTests/testAPageAnAgentPublishedIsACardThatOpensInTheApp -only-testing:MycoAppUITests/WalkthroughTests/testAnAppMakesAPageThatTalksToTheWorkspace -only-testing:MycoAppUITests/ConversationTests/testAVoiceChatHearsAnswersAndPassesOn -only-testing:MycoAppUITests/ConversationTests/testAChineseVoiceGreetsAndTakesOnItsOwnWork -only-testing:MycoAppUITests/ConversationTests/testAVoiceChatGoesOnWhenItsChatIsLeft -only-testing:MycoAppUITests/WalkthroughTests/testAVoiceIsPickedFromTheListAndTried CODE_SIGNING_ALLOWED=NO
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
           name: ios-remote-test-results

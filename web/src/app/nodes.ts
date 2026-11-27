@@ -96,9 +96,9 @@ export function nodeIcon(a: Agent) {
 /** How a cloud session is shown where a machine name would go. */
 export function cloudLabel(a: Agent): string {
   const cli = a.runtime?.cli || a.binding.harness || "";
-  if (cli.startsWith("claude")) return L("云端（claude.ai）", "Cloud (claude.ai)");
-  if (cli.startsWith("codex")) return L("云端（Codex）", "Cloud (Codex)");
-  return L("云端", "Cloud");
+  const service = cli.startsWith("claude") ? "claude.ai" : cli.startsWith("codex") ? "Codex" : "";
+  const detail = [service, a.runtime?.account].filter(Boolean).join(" · ");
+  return detail ? L(`云端（${detail}）`, `Cloud (${detail})`) : L("云端", "Cloud");
 }
 
 export function machinesOfHub(hub: AgentRow["hub"]): Machine[] {
@@ -119,8 +119,8 @@ export function machineLabel(row: AgentRow): string | undefined {
   const a = row.st.agent;
   if (isCloud(a)) return cloudLabel(a);
   const m = machineOfRow(row);
-  if (m) return m.name;
-  return a.machine_id || undefined;
+  const name = m?.name || a.machine_id;
+  return [name, a.runtime?.account].filter(Boolean).join(" · ") || undefined;
 }
 
 export function kindLabel(kind: Kind): string {

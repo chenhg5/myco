@@ -47,13 +47,15 @@ concurrency:
 jobs:
   # What changed, so the slow UI smoke runs only when the UI did.
   changes:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       ui: ${{ steps.c.outputs.ui }}
       shards: ${{ steps.c.outputs.shards }}
       parts: ${{ steps.c.outputs.parts }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.source_sha || github.sha }}
           fetch-depth: 0
@@ -85,6 +87,8 @@ jobs:
           git diff --name-only "$base" "${{ github.sha }}" | head -50
 
   go-race:
+    permissions:
+      contents: read
     # Each shard independently lists the exact source. The go gate lists it
     # again and requires one successful race result for every package.
     runs-on: ubuntu-latest
@@ -98,12 +102,12 @@ jobs:
         shard: [1, 2, 3]
     name: go-race (${{ matrix.shard }}/3)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.source_sha || github.sha }}
       # CI policy comes from this workflow's immutable definition, not from
       # an older frozen source which may predate the sharding helper.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.workflow_sha }}
           path: .ci-tools
@@ -113,7 +117,7 @@ jobs:
             scripts/ci-race-weights.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: Release source, build version and package coverage regressions
@@ -134,7 +138,7 @@ jobs:
       - name: Smoke test (real binary, separate processes)
         if: matrix.shard == 1
         run: make smoke
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: go-race-${{ inputs.source_sha || github.sha }}-${{ matrix.shard }}
@@ -144,6 +148,8 @@ jobs:
           if-no-files-found: error
 
   go:
+    permissions:
+      contents: read
     # Preserve the release-required check name. A failed/cancelled/missing
     # shard cannot be hidden by a successful sibling or stale artifact.
     needs: go-race
@@ -158,10 +164,10 @@ jobs:
         env:
           RACE_RESULT: ${{ needs.go-race.result }}
         run: test "$RACE_RESULT" = success
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.source_sha || github.sha }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.workflow_sha }}
           path: .ci-tools
@@ -170,10 +176,10 @@ jobs:
             scripts/ci-race-weights.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: go-race-${{ inputs.source_sha || github.sha }}-*
           path: race-reports
@@ -184,14 +190,16 @@ jobs:
             --run-id "$RACE_RUN" --reports race-reports
 
   windows:
+    permissions:
+      contents: read
     # Native Windows: build and the tests that do not need a POSIX shell
     # (tests driving fake CLIs written as sh scripts skip themselves here).
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.source_sha || github.sha }}
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: Check app preparation
@@ -217,15 +225,17 @@ jobs:
           bin/myco-app.exe --version
 
   app-macos:
+    permissions:
+      contents: read
     # The console app: built natively (cgo + the system WebKit) and kept as a
     # downloadable artifact (ad-hoc signed; the release workflow signs and
     # notarizes once the Apple secrets are configured).
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.source_sha || github.sha }}
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
       - name: vet and test the app
@@ -238,27 +248,40 @@ jobs:
         run: ditto -c -k --keepParent bin/myco.app bin/myco-app-macos-arm64.zip
       - name: the Intel build (as the release builds it)
         run: GOARCH=amd64 make app && lipo -archs bin/myco.app/Contents/MacOS/myco-app | grep -qx x86_64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: myco-app-macos-arm64
           path: bin/myco-app-macos-arm64.zip
           retention-days: 14
 
   web:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.source_sha || github.sha }}
-      - uses: actions/setup-node@v4
+      - name: Release orchestration and credential isolation checks
+        run: |
+          python3 scripts/release-source.test.py
+          python3 scripts/release-actions-policy.test.py
+          python3 scripts/release-orchestrate.test.py
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Build the dashboard
         run: make web
+      - name: Local preference migration and recovery
+        run: npm --prefix web run test:preferences
       - name: Runner restart display states
         run: node web/scripts/runner-state.test.mjs
+      - name: Latency measurement privacy and ordering
+        run: |
+          node web/scripts/latency.test.mjs
+          python3 -m unittest discover -s scripts/latency-eval -p 'test_*.py'
       - name: Committed internal/web/dist matches the source
         run: |
           if ! git diff --quiet -- internal/web/dist || [ -n "$(git ls-files --others --exclude-standard internal/web/dist)" ]; then
@@ -268,6 +291,8 @@ jobs:
           fi
 
   ui:
+    permissions:
+      contents: read
     # The App UI smoke test (web/scripts/ui-smoke.mjs): every page and the
     # main dialogs against the mock backend, per window size and theme, each
     # in three parts (--shard) running at once, so no job takes long.
@@ -290,10 +315,10 @@ jobs:
         shard: ${{ fromJSON(needs.changes.outputs.shards) }}
     name: ui (${{ matrix.combo }} ${{ matrix.shard }}/${{ needs.changes.outputs.parts }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.source_sha || github.sha }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -304,7 +329,7 @@ jobs:
         run: |
           commit=$(node -p 'require("./apps.lock.json").commit')
           printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: myco-ai/apps
           ref: ${{ steps.apps.outputs.commit }}
@@ -330,7 +355,7 @@ jobs:
             -e HOME=/tmp -e CI -e GITHUB_STEP_SUMMARY \
             "$PLAYWRIGHT_IMAGE" \
             sh -c 'fc-list :lang=zh | grep -q . || echo "::warning::no CJK font in the Playwright image"; node scripts/ui-smoke.mjs --combo ${{ matrix.combo }} --shard ${{ matrix.shard }}/${{ needs.changes.outputs.parts }}'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: ui-results-${{ matrix.combo }}-${{ matrix.shard }}
@@ -338,9 +363,10 @@ jobs:
             web/ui-smoke/flakes.json
             web/ui-smoke/timings.json
             web/ui-smoke/*workflow-catalog-*.png
+            web/ui-smoke/*member-account*.png
           retention-days: 7
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
           name: ui-smoke-${{ matrix.combo }}-${{ matrix.shard }}
@@ -348,6 +374,8 @@ jobs:
           retention-days: 7
 
   app-contract:
+    permissions:
+      contents: read
     # Host changes must keep working with the exact released app SDK and UI.
     # App-owned unit/browser suites remain in myco-ai/apps.
     runs-on: ubuntu-24.04
@@ -356,27 +384,27 @@ jobs:
       PLAYWRIGHT: "1.57.0"
       PLAYWRIGHT_IMAGE: "mcr.microsoft.com/playwright:v1.57.0-noble@sha256:3bed4b1a12f2338642f3d8cba28e291deef3c66bd4a964bbeb3e57bbff511dbd"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ inputs.source_sha || github.sha }}
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - id: apps
         run: |
           commit=$(node -p 'require("./apps.lock.json").commit')
           printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: myco-ai/apps
           ref: ${{ steps.apps.outputs.commit }}
           path: .cache/apps-source
           persist-credentials: false
       # Keep orchestration in the workflow commit, even for older frozen sources.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.workflow_sha }}
           path: .contract-tools
@@ -402,7 +430,7 @@ jobs:
         run: |
           python3 .contract-tools/scripts/ci-contracts.py --image "$PLAYWRIGHT_IMAGE" \
             --playwright-prefix "$RUNNER_TEMP/contract-node" --out "$RUNNER_TEMP/app-contract-results"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: app-contract-results-${{ inputs.source_sha || github.sha }}

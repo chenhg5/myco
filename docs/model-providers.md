@@ -47,13 +47,13 @@ A provider whose agents still have the old key shows **Push new key (N)**; an ag
 - A device added later cannot open the key by itself. Open the App once on another of your devices that can; it seals the key again for the new one. Until then the provider says **This device cannot open the key yet**. If no device that could open it is left, enter the key again with **Edit**.
 **With end-to-end encryption off** (fine for a workspace of your own on your own hub; for a team, turn it on):
 
-- The hub keeps the key, encrypted with the workspace's own key: a file `provider-secret.key` next to the workspace's database, mode 600. The hub's administrator could read it. The provider says **Kept by the hub**.
-- The hub sends the key only to the runner of the agent you picked it for (or the computer starting that agent), over HTTPS; it never appears in the agent's settings, in messages or in logs. Each time it is handed out is recorded, without the key.
+- The hub keeps the key, encrypted with the workspace's own key: a file `provider-secret.key` next to the workspace's database, mode 600. The hub's administrator could read it. The provider says **Kept by the hub**, and the App shows the key only as its last four characters (`key ···abcd`); a key shorter than 12 characters is shown as saved, with none of it in the clear.
+- The hub sends the key only to the computer that runs the agent, over HTTPS, and it never appears in the agent's settings, in messages or in logs. For an agent you picked it for, its runner reads the key; when you start a new agent on a computer, that one start gets an authorization of its own, used once and good for ten minutes. Keys are handed out at most six times a minute for each caller; past that the App says to try again in a minute. Every handout is recorded, without the key.
 - If that key file is lost (a hub moved without it), the provider says **key lost**: **Edit** it and enter the key again, or restore the hub from a backup.
 
 **Turning encryption on or off later.** On: the App, next time it lists your providers, encrypts their keys for your devices, and the hub drops its copy. Off: a provider says the workspace has encryption off now and offers **Hand to the hub**, which asks you first. Agents already set up keep what is on their computers either way.
 
-- Treat backups as secrets. A hub's backup holds the workspace's key file with its database; and a computer that runs an agent has the key it uses in its env file, so a backup of that computer contains it.
+- Treat backups as secrets. A hub's backup holds `provider-secret.key` with its database; and a computer that runs an agent has the key it uses in its env file, so a backup of that computer contains it.
 - Your providers are yours alone: other members cannot see or use them.
 
 ## FAQ
@@ -69,3 +69,30 @@ Open the App once on a device that can already open the key; it seals the key ag
 ### What happens to agents if I delete a provider?
 
 The confirmation says: "N agents use it. They keep using what is written on their computers; the App asks you to pick another or clear it." Those agents keep running with the copy on their computer, and the agent's **Provider** row says: "Its model provider was deleted: what is on its computer still works. Pick another, or have it follow its computer again." New agents will not offer the deleted provider. Deleting it in the App does not reach into those computers; pick another provider for the agent, or set it back to following its computer.
+
+
+### MiniMax regions and connection tests
+
+Choose **MiniMax region** in either the provider editor or the add-agent form.
+**International** uses `api.minimax.io`; **China** uses `api.minimaxi.com`.
+Choose the site where the key was created: a key from the other region can return
+HTTP 401. Changing the region explicitly sets both the Anthropic and OpenAI
+addresses; testing never sends the key to another region automatically. Existing
+providers keep their saved addresses and the same `minimax` vendor identifier.
+An authentication failure explains that the key or region may be wrong.
+When editing without re-entering the key, save an address or region change
+before testing; the test otherwise uses the saved, sealed addresses.
+
+A normal test reads the account's model list. If a known MiniMax endpoint cannot
+list models, user-triggered verification (**Test**, or **Save and use** in the
+add-agent form) can make one small completion (at most 16
+output tokens) on the selected interface. This may consume a small amount of
+quota. Only a valid API response passes; HTTP 200 containing an API error does
+not. The App labels the resulting choices as **preset models**, rather than a
+list read from the account. Background discovery never generates completions.
+Rate limits, server failures and network errors do not trigger that fallback.
+
+MiniMax's [Anthropic](https://platform.minimax.io/docs/api-reference/text-anthropic-api)
+and [OpenAI](https://platform.minimax.io/docs/api-reference/text-openai-api)
+documentation currently lists `MiniMax-M3` and `MiniMax-M3.1-Flash`; live model
+lists take precedence over these presets.

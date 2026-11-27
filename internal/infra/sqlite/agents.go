@@ -65,6 +65,43 @@ func (r *AgentRepo) Get(ctx context.Context, name domain.AgentName) (*domain.Age
 	return a, internal(err)
 }
 
+// MutateProfile acquires the write lock before reading, so concurrent edits
+// always apply to the latest list instead of upgrading a stale read snapshot.
+func (r *AgentRepo) MutateProfile(ctx context.Context, name domain.AgentName, change func(*domain.Agent) error, audit *domain.AuditEntry) (*domain.Agent, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, internal(err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE agents SET name=name WHERE name=?`, name)
+	if err != nil {
+		return nil, internal(err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, domain.Errf(domain.CodeNotFound, "agent %s not found", name)
+	}
+	a, err := scanAgent(tx.QueryRowContext(ctx, `SELECT `+agentCols+` FROM agents WHERE name=?`, name))
+	if err != nil {
+		return nil, internal(err)
+	}
+	if err := change(a); err != nil {
+		return nil, err
+	}
+	_, allow, _ := encodeLists(a)
+	if _, err := tx.ExecContext(ctx, `UPDATE agents SET display_name=?, description=?, avatar=?, allow_from=? WHERE name=?`, a.DisplayName, a.Description, a.Avatar, allow, name); err != nil {
+		return nil, internal(err)
+	}
+	if audit != nil {
+		if err := appendAudit(ctx, tx, audit); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, internal(err)
+	}
+	return a, nil
+}
+
 func (r *AgentRepo) GetByTokenHash(ctx context.Context, hash string) (*domain.Agent, error) {
 	a, err := scanAgent(r.db.QueryRowContext(ctx, `SELECT `+agentCols+` FROM agents WHERE token_hash=?`, hash))
 	if errors.Is(err, sql.ErrNoRows) {

@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 /*
  * What was typed in a box and not sent yet, kept per conversation: switch
  * to another chat and back, or restart the app, and it is still there. A
@@ -13,7 +14,7 @@ function all(): Map<string, string> {
   if (drafts) return drafts;
   drafts = new Map();
   try {
-    const raw = localStorage.getItem(STORE);
+    const raw = localPreferences.getItem(STORE);
     if (raw) for (const [k, v] of JSON.parse(raw) as [string, string][]) if (typeof v === "string") drafts.set(k, v);
   } catch { /* nothing kept */ }
   return drafts;
@@ -25,7 +26,7 @@ function save() {
   // One write per burst of typing, not one per key.
   saving = window.setTimeout(() => {
     saving = null;
-    try { localStorage.setItem(STORE, JSON.stringify([...all()])); } catch { /* not kept */ }
+    try { localPreferences.setItem(STORE, JSON.stringify([...all()])); } catch { /* not kept */ }
   }, 300);
 }
 

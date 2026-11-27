@@ -174,12 +174,26 @@ type routeKey struct{}
 type requestInfo struct {
 	route   string
 	waiting bool
+	started time.Time
 }
 
 // WithRoute gives the request's context a place for the route pattern that
 // matched it, filled by SetRoute deeper in, read back with Route.
-func WithRoute(ctx context.Context) context.Context {
-	return context.WithValue(ctx, routeKey{}, new(requestInfo))
+func WithRoute(ctx context.Context, at ...time.Time) context.Context {
+	started := time.Now()
+	if len(at) > 0 {
+		started = at[0]
+	}
+	return context.WithValue(ctx, routeKey{}, &requestInfo{started: started})
+}
+
+// RequestStart is the outer HTTP handler's local clock, before authentication.
+// It is zero when no request instrumentation wraps the handler.
+func RequestStart(ctx context.Context) time.Time {
+	if p, ok := ctx.Value(routeKey{}).(*requestInfo); ok {
+		return p.started
+	}
+	return time.Time{}
 }
 
 // SetRoute records the pattern that matched (no-op without WithRoute).

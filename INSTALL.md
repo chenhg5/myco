@@ -654,7 +654,7 @@ It works like ssh: the remote stdout and stderr are printed as they are, and the
 It's fine if the result arrives after the wait timed out: an exec node's result is marked as handled right away and doesn't pile up in the caller's inbox (it won't wake the caller's runner to look at stale output). If you still want it, get it with `myco message wait --id <message id>`. Messages from other nodes that you no longer need can be cleared without fetching them, with `myco message done --id <message id>`, or with "Ignore" under "Current work" in the node's details in the App.
 
 **Security notes**
-- **Sender restrictions**: the runner refuses to start an exec node that has no `allow_from`. The Hub checks once when a message is sent, and the node checks again before running it. To change who is allowed later, an admin runs `myco agent update --name <node> --allow-from a,b`: no new token, no new login for the node, and it takes effect in about 30 seconds. If you really want every node (including ones that join later) to run commands on this machine, you must confirm it explicitly: `myco agent update --name <node> --allow-anyone --i-understand-exec-risk` (the list is stored as `*`).
+- **Sender restrictions**: the runner refuses to start an exec node that has no `allow_from`. The Hub checks once when a message is sent, and the node checks again before running it. To add or remove senders later, an admin runs `myco agent update --name <node> --allow-add a,b` or `--allow-remove a`: no new token, no new login for the node, and it takes effect in about 30 seconds. If you really want every node (including ones that join later) to run commands on this machine, you must confirm it explicitly: `myco agent update --name <node> --allow-anyone --i-understand-exec-risk` (the list is stored as `*`). Whole-list replacement still uses `--allow-from a,b`; when it removes existing exec-node entries it lists them and requires `--replace` (exit 5 without confirmation, including in scripts). Use `--dry-run` to see before/after and added/removed/unchanged without writing (exit 10). Incremental changes require an upgraded Hub; clients never silently replace the list as a compatibility fallback. In the App, grants and approvals append senders; unchecking entries in the editor requires confirming the removed names.
 - **Prompt injection**: if you let an AI agent send commands, then anything that can influence that agent (web pages, PRs, messages others send it) may indirectly run commands on your machine. Keep the nodes in `allow-from` as few as possible, and use an allowlist when you can.
 - **Only tasks run**: notes, replies and events are never run, and attachments are not downloaded.
 - **Environment variables**: commands run in a clean environment with only the inherited variables above, the variables in `env_file`, and context variables such as `MYCO_FROM`. Agent tokens (`MYCO_TOKEN`, `MYCO_CONFIG`) are **not** included.
@@ -987,13 +987,13 @@ What agents get is given in layers, so no matter how many apps there are, they a
 
 ### 4.20 Chat apps: Feishu/Lark and Slack bots (preview)
 
-Talk to your agents from a chat app. Run this on a machine that has joined your network, then scan the QR code with the Feishu or Lark app:
+Talk to your agents from a chat app. Run this on a machine that has joined your network, then scan the QR code with the Feishu app (for Lark, the international app, use `myco im connect lark` and the Lark app: separate codes):
 
 ```bash
 myco im connect feishu --agent coder
 ```
 
-This makes `coder`'s own bot (one bot per agent): what you write to it becomes a task for `coder`. Progress updates in place, the agent's questions and answers come back in the chat, and your replies are added to the task at work.
+This makes `coder`'s own bot (one bot per agent). The bot is `coder` itself and speaks in the first person; with a voice model set in the App, it answers what it can at once, as in voice chats, and does the rest as tasks. Progress updates in place, the agent's questions and answers come back in the chat, and your replies are added to the task at work.
 
 For Slack, `myco im connect slack` prints a link that creates the Slack app from a manifest. Pass its two tokens to finish.
 

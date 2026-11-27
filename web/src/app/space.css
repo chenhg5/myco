@@ -1027,6 +1027,9 @@
 .ws-computer:hover:not(:disabled) {
   background: var(--nav-hover);
 }
+/* "更多 · N": the AIs not shown at once (a new agent's 用哪个 AI) */
+.ws-computer-more { border-style: dashed; color: var(--muted); }
+.ws-computer-more svg { width: 12px; height: 12px; }
 .ws-computer.active {
   border-color: color-mix(in srgb, var(--fg) 55%, transparent);
   color: var(--fg);
@@ -1455,6 +1458,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ms-fact-account { white-space: normal; overflow-wrap: anywhere; }
 /* Lately: three numbers, then the last few tasks. */
 .ms-stats {
   display: flex;
@@ -2084,6 +2088,12 @@
   text-underline-offset: 3px;
 }
 
+/* Folders used before, one click away: four, then "还有 N 个". */
+.add-recent { align-items: center; }
+.add-recent-label { font-size: 11.5px; color: var(--muted); margin-right: 2px; }
+.add-recent-more { color: var(--muted); border-style: dashed; }
+/* the folders a computer allows: one line, all of them on hover */
+.add-dirs-line { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Folders used before, one click away: short (home is ~), one line each. */
 .app-modal-add .app-convpick-folder {
   max-width: 240px;

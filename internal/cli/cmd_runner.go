@@ -16,11 +16,11 @@ import (
 	"github.com/myco-ai/myco/internal/client"
 	"github.com/myco-ai/myco/internal/config"
 	"github.com/myco-ai/myco/internal/harness"
-	"github.com/myco-ai/myco/internal/harness/acp"
 	"github.com/myco-ai/myco/internal/harness/builtin"
 	"github.com/myco-ai/myco/internal/harness/execnode"
 	"github.com/myco-ai/myco/internal/harness/machinenode"
 	"github.com/myco-ai/myco/internal/logkeep"
+	"github.com/myco-ai/myco/internal/processwatch"
 	"github.com/myco-ai/myco/internal/quota"
 	"github.com/myco-ai/myco/internal/runner"
 )
@@ -91,8 +91,14 @@ notes are never auto-answered. Logs go to stderr.`,
 			} else if lp := filepath.Join(config.Dir(e.defaultPath), "runner.log"); logkeep.IsStderr(lp) {
 				go logkeep.Run(lp, logkeep.Policy{}, keep)
 			}
+			processes := processwatch.NewPersistent(runnerInstance, filepath.Join(config.Dir(e.defaultPath), "process-scopes"))
+			defer processes.Close()
+			healthCtx, stopHealth := context.WithCancel(e.in.Ctx)
+			defer stopHealth()
+			go processes.Run(healthCtx)
 			shared := runnerShared{
-				once: e.in.Bool("once"), busyWindow: e.in.Duration("busy-window"), busyRetry: e.in.Duration("busy-retry"),
+				processes: processes,
+				once:      e.in.Bool("once"), busyWindow: e.in.Duration("busy-window"), busyRetry: e.in.Duration("busy-retry"),
 				scope: runner.SessionScope(e.in.String("session-scope")), rebind: e.in.Bool("rebind"), registry: harnesses,
 				trace: e.in.String("trace"), locks: runner.NewSessionLocks(filepath.Join(config.Dir(e.defaultPath), "locks")),
 			}
@@ -127,6 +133,7 @@ notes are never auto-answered. Logs go to stderr.`,
 
 // runnerShared holds settings common to every agent a process serves.
 type runnerShared struct {
+	processes  *processwatch.Manager
 	once       bool
 	busyWindow time.Duration
 	busyRetry  time.Duration
@@ -169,6 +176,12 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 // startup only bounds the initial Hub handshake. Runtime reporters and inbox
 // polling retain the service context after startup succeeds.
 func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *config.Config, sh runnerShared, ov runnerOverrides, log *slog.Logger) (*runner.Runner, error) {
+	startupStart := time.Now()
+	startupStamp := func(stage string) {
+		log.Info("runner startup latency", "agent", cfg.Agent, "stage", stage, "elapsed_ms", time.Since(startupStart).Milliseconds(), "observed_at_ms", time.Now().UnixMilli())
+	}
+	startupStamp("profile_build_start")
+	defer startupStamp("profile_build_end")
 	rc := cfg.Runner
 	first := func(vals ...string) string {
 		for _, v := range vals {
@@ -201,6 +214,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	if err != nil {
 		return nil, err
 	}
+	startupStamp("identity_ready")
 	var execSpec *harness.ExecSpec
 	if name == execnode.Name {
 		// Remote command execution: refuse to serve anyone-can-send agents.
@@ -214,7 +228,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 			spec = *rc.Exec
 		}
 		spec.Senders = me.AllowFrom
-		spec.CurrentSenders = cachedAllowFrom(e.in.Ctx, c, 30*time.Second)
+		spec.CurrentSenders = cachedExecSenders(e.in.Ctx, c, 30*time.Second)
 		spec.AuditLog = filepath.Join(config.Dir(e.defaultPath), "logs", me.Name+".exec.jsonl")
 		execSpec = &spec
 	}
@@ -224,7 +238,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 			return nil, err
 		}
 	} else {
-		h, err = sh.registry.New(name, harness.Options{Binary: first(ov.binary, rc.Binary), Args: args, Command: first(ov.command, rc.Command),
+		h, err = sh.registry.New(name, harness.Options{ClientVersion: Version, Binary: first(ov.binary, rc.Binary), Args: args, Command: first(ov.command, rc.Command),
 			Model: first(ov.model, rc.Model), Access: access, Template: rc.Template, Exec: execSpec, ACPTransport: rc.ACPTransport})
 		if err != nil {
 			return nil, errorf("invalid_argument", ExitUsage, "available harnesses: "+strings.Join(sh.registry.Names(), ", "), "%v", err)
@@ -245,6 +259,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 		return resolveProvider(h.Name(), ref, envFile)
 	}
 	initial := currentProvider()
+	startupStamp("initial_provider_ready")
 	workdir, err := filepath.Abs(first(ov.workdir, rc.Workdir, "."))
 	if err != nil {
 		return nil, err
@@ -281,6 +296,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	if me, err = c.Bind(startup, api.Binding{Harness: name, Environment: host, Workdir: workdir}); err != nil {
 		return nil, err
 	}
+	startupStamp("binding_ready")
 	var sessions runner.SessionStore = runner.NewHubSessions(c, me.Binding.SessionID)
 	if sh.scope == runner.ScopeThread {
 		if sessions, err = runner.NewFileSessions(filepath.Join(config.Dir(cfgPath), "sessions", me.Name+".json")); err != nil {
@@ -325,6 +341,9 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	var rep *runtimeReporter
 	if !sh.once {
 		rep = e.reportToHub(c, me, h, config.Runner{Model: first(ov.model, rc.Model)}, access, maxAccess, initial, workdir, log)
+		if sh.processes != nil {
+			go rep.watchHealth(e.in.Ctx, sh.processes, cfg.Hub, me.OwnerID)
+		}
 		go rep.watchMaxAccess(e.in.Ctx, 20*time.Second, maxAccess, e.machineMaxAccess)
 		if sh.slots != nil {
 			go rep.watchSlots(e.in.Ctx, sh.slots, runner.SlotOwner(cfg.Hub, me.Name))
@@ -366,7 +385,6 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	if initial.warn != "" {
 		alog.Warn("provider: "+initial.warn, "provider", initial.name)
 	}
-	acp.ClientVersion = Version
 	// The cap is on agent CLIs: a command node's shell commands and a
 	// machine node's own work (upgrade, start an agent) never wait for one.
 	slots := sh.slots
@@ -376,6 +394,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	alog.Info("runner ready", "hub", cfg.Hub, "provider", initial.name, "provider_source", initial.source, "harness", h.Name(), "access", orDefault(string(access), "default"), "workdir", workdir, "environment", host,
 		"session_scope", sh.scope, "session_id", me.Binding.SessionID)
 	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{
+		Processes: sh.processes, ProcessWorkspace: cfg.Hub, ProcessMember: me.OwnerID,
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
 		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, SlotPool: slots, OnSlots: rep.Slots, Trace: sh.trace, SessionLocks: sh.locks,
 		StatePath:      runnerStatePath(e.defaultPath, me.Name),
@@ -622,8 +641,19 @@ func markReplaced(path, token string, err error) {
 }
 
 // cachedAllowFrom returns the agent's current allow_from, asking the hub at
-// most once per ttl, so an admin's change reaches a running exec node.
+// most once per ttl, so an admin's change reaches a running machine node.
 func cachedAllowFrom(ctx context.Context, c *client.Client, ttl time.Duration) func() ([]string, error) {
+	return cachedSenders(ctx, c, ttl, false)
+}
+
+// cachedExecSenders derives the owner's console identity only from the Hub's
+// authenticated /me response. Keep it out of the static fallback: if refresh
+// fails, execnode must not retain an expired owner exception.
+func cachedExecSenders(ctx context.Context, c *client.Client, ttl time.Duration) func() ([]string, error) {
+	return cachedSenders(ctx, c, ttl, true)
+}
+
+func cachedSenders(ctx context.Context, c *client.Client, ttl time.Duration, execOwner bool) func() ([]string, error) {
 	var (
 		mu   sync.Mutex
 		last []string
@@ -639,9 +669,11 @@ func cachedAllowFrom(ctx context.Context, c *client.Client, ttl time.Duration) f
 		if err != nil {
 			return nil, err
 		}
-		last, at = me.AllowFrom, time.Now()
-		if last == nil {
-			last = []string{}
+		last, at = append([]string{}, me.AllowFrom...), time.Now()
+		// An empty allow_from still requires the existing exec-risk setup;
+		// knowing the owner must not turn an unconfigured node into an executor.
+		if execOwner && len(last) > 0 && me.Owner != "" {
+			last = append(last, "@console:"+me.Owner)
 		}
 		return last, nil
 	}

@@ -1,3 +1,4 @@
+import { localPreferences, saveWorkspaceAppearance } from "@/lib/localPreferences";
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
 import { openHelp } from "@/app/Help";
 import { CopyButton } from "@/app/copy";
@@ -12,8 +13,7 @@ import {
   type LocalTunnel, type StartLocalHubResult, type VoiceInfo, type VoiceTTSProvider, type TTSVoice, type ProxySetting, type ProxyInput, type OsGrantRow,
 } from "@/appapi";
 import { ver } from "@/app/nodes";
-import { renameHub } from "@/app/hubNames";
-import { setHubLook, useHubLooks, type HubLook } from "@/app/hubLooks";
+import { useHubLooks, type HubLook } from "@/app/hubLooks";
 import { colorIndex, HubFace } from "@/app/HubSwitcher";
 import { PictureButton } from "@/app/AvatarPicker";
 import { ErrorText, Modal, ConfirmDialog } from "@/app/dialogs";
@@ -259,7 +259,7 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
 // internet, its name and stopping it are there)
 const SIMPLE_HIDDEN: Section[] = ["members", "audit"];
 function simpleModeNow(): boolean {
-  try { return localStorage.getItem("myco-simple-mode") === "1"; } catch { return false; }
+  try { return localPreferences.getItem("myco-simple-mode") === "1"; } catch { return false; }
 }
 
 const SIZES: { size: TextSize; label: string }[] = [
@@ -462,11 +462,13 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 
   const isLocalHub = (h: Hub) => !!localWorkspaceOf(local, h.url);
 
-  const saveRename = () => {
-    if (!renameTarget) return;
-    renameHub(renameTarget.id, renameValue);
-    setHubLook(renameTarget.id, renameLook);
-    setRenameTarget(null);
+  const [renameSaving, setRenameSaving] = useState(false);
+  const saveRename = async () => {
+    if (!renameTarget || renameSaving) return;
+    setRenameSaving(true); setLookError(null);
+    try { await saveWorkspaceAppearance(renameTarget.id, renameValue, renameLook); setRenameTarget(null); }
+    catch { setLookError(new Error(L("未能保存名字和头像，请重试；原来的设置仍然保留。", "Could not save the name and picture. Please try again; your previous settings are preserved."))); }
+    finally { setRenameSaving(false); }
   };
   const openRename = (h: Hub) => {
     setRenameTarget(h);
@@ -872,9 +874,9 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
 
       <Modal
         open={!!renameTarget}
-        onOpenChange={(o) => { if (!o) setRenameTarget(null); }}
+        onOpenChange={(o) => { if (!o && !renameSaving) setRenameTarget(null); }}
         title={L("工作区的名字和头像", "The workspace's name and face")}
-        description={L("只在这个 App 里显示，不会改到工作区上。", "Shows only in this app and doesn’t change the Hub.")}
+        description={L("只在这台电脑的 App 里显示，升级后也会保留，不会改到工作区上。", "Saved on this computer across App upgrades; the shared workspace stays the same.")}
       >
         <div className="av-top">
           <HubFace name={renameValue || renameTarget?.name} id={renameTarget?.id} look={renameLook} size={56} />
@@ -910,8 +912,8 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
           />
         </label>
         <div className="app-modal-actions">
-          <button type="button" className="app-btn" onClick={() => setRenameTarget(null)}>{L("取消", "Cancel")}</button>
-          <button type="button" className="app-btn app-btn-primary" onClick={saveRename}>{L("保存", "Save")}</button>
+          <button type="button" className="app-btn" disabled={renameSaving} onClick={() => setRenameTarget(null)}>{L("取消", "Cancel")}</button>
+          <button type="button" className="app-btn app-btn-primary" disabled={renameSaving} onClick={() => void saveRename()}>{renameSaving ? L("保存中…", "Saving…") : L("保存", "Save")}</button>
         </div>
       </Modal>
 
@@ -1200,10 +1202,10 @@ function E2ERow({ hubId, ov, onChanged }: { hubId: string; ov?: HubOverview; onC
 
 /** The notch's island (Mac app): on unless turned off here. */
 function IslandLine() {
-  const [on, setOn] = useState(() => { try { return localStorage.getItem("myco-island") !== "off"; } catch { return true; } });
+  const [on, setOn] = useState(() => { try { return localPreferences.getItem("myco-island") !== "off"; } catch { return true; } });
   const set = (v: boolean) => {
     setOn(v);
-    try { localStorage.setItem("myco-island", v ? "on" : "off"); } catch { /* not kept */ }
+    try { localPreferences.setItem("myco-island", v ? "on" : "off"); } catch { /* not kept */ }
   };
   return (
     <div data-setting="island" className="app-setting-line">

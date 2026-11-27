@@ -336,12 +336,19 @@ func (b *Backend) testProvider(w http.ResponseWriter, r *http.Request, c *client
 		writeErr(w, &client.Error{Status: 400, Code: "invalid_argument", Message: "an address and a key are needed to test"})
 		return
 	}
-	ms, err := provider.FetchModels(r.Context(), nil, ep)
+	result, err := provider.TestModels(r.Context(), nil, ep)
 	if err != nil {
 		// (the error names the host and status only)
-		writeErr(w, &client.Error{Status: 502, Code: "provider_unreachable", Message: err.Error()})
+		failure := &client.Error{Status: 502, Code: "provider_unreachable", Message: err.Error()}
+		var status *provider.HTTPStatusError
+		if v, ok := provider.VendorOf(ep.Base); ok && v.ID == "minimax" && errors.As(err, &status) && status.Status == http.StatusUnauthorized {
+			failure.Code = "provider_region_or_key"
+			failure.Suggestion = "Check the MiniMax key and its region: international keys use api.minimax.io; China keys use api.minimaxi.com."
+		}
+		writeErr(w, failure)
 		return
 	}
+	ms := result.Models
 	models := make([]api.RuntimeModel, 0, len(ms))
 	for _, m := range ms {
 		models = append(models, api.RuntimeModel{ID: m.ID, Name: m.Name})
@@ -350,7 +357,7 @@ func (b *Backend) testProvider(w http.ResponseWriter, r *http.Request, c *client
 		now := time.Now().UTC()
 		_, _ = c.UpdateModelProvider(r.Context(), saved.ID, api.ModelProviderRequest{Models: &models, ModelsAt: &now})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"models": models})
+	writeJSON(w, http.StatusOK, api.ModelProviderTestResponse{Models: models, ModelsSource: result.From})
 }
 
 // pushProvider sends a provider's current key to every agent that has an

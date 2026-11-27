@@ -3166,6 +3166,22 @@ textarea.app-input {
   flex: 1;
   min-width: 0;
 }
+/* Its face and name open its profile (over the page). */
+.conv-head-faces.is-link { cursor: pointer; border-radius: 8px; }
+.conv-head-faces.is-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.conv-head-name { max-width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
+.conv-head-name:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--faint); }
+/* 查看并处理: its open work from elsewhere, settled in the chat. */
+.conv-elsewhere { max-height: min(60vh, 520px); overflow-y: auto; }
+/* (here what can be done is the point: the buttons in a row under each
+   task, always shown, not on hover at its corner) */
+.conv-elsewhere .app-msg { padding-bottom: 4px; }
+.conv-elsewhere .app-msg-actions { position: static; flex-wrap: wrap; padding: 0 12px 10px; }
+.conv-elsewhere .app-msg-dismiss { opacity: 1; }
+.app-msg.is-static { cursor: default; }
+.app-msg.is-static:hover { background: none; }
+
 .conv-head-titles h2 {
   margin: 0;
   font-size: 14px;
@@ -3490,6 +3506,35 @@ textarea.app-input {
 }
 .conv-timeline > .conv-msg.is-me:first-child {
   margin-top: 0;
+}
+/* What a workflow sent in your name (WorkflowNote.tsx): the workspace's, so
+   in the middle, on no one's side, framed rather than in your colour. */
+.conv-msg.is-me.is-system {
+  align-self: center;
+  align-items: center;
+  max-width: min(640px, 100%);
+  width: 100%;
+}
+/* (its time, tag and buttons at the card's right, shown on hover: the
+   card's own top line already says which workflow. In the flow, on a line
+   of their own, not floating: what follows a card (an agent's progress, a
+   line of its own) does not keep clear of a floating row, and would sit
+   under it) */
+.conv-msg.is-me.is-system .conv-msg-meta:not(.is-shown) {
+  position: static;
+  align-self: flex-end;
+  margin-top: 3px;
+  padding: 0 4px 0 0;
+  pointer-events: auto;
+}
+.conv-msg.is-me.is-system .conv-msg-meta.is-shown { align-self: flex-end; padding-right: 4px; }
+.conv-msg.is-me.is-system .conv-bubble {
+  --md-fade: var(--bg);
+  align-self: stretch;
+  max-width: 100%;
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: 12px;
 }
 /* Names matter only when you watch two nodes talk to each other. */
 .conv-msg-name {
@@ -3879,17 +3924,18 @@ button.conv-quote:hover {
 .conv-decision-fail {
   color: var(--red);
 }
+/* The hub's own line in a chat (a task that was not done, and why): quiet,
+   grey, across the column, not a red alarm. */
 .conv-event {
   align-self: stretch;
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--red-soft);
-  color: var(--red);
+  padding: 2px 2px;
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 .conv-event svg {
   width: 14px;
@@ -4747,6 +4793,28 @@ html.fp-docked .app-main .sp-side {
 }
 .conv-compose-tools:empty {
   display: none;
+}
+/* A narrow box (a side pane, a small window): the tools give way first,
+   cut short with an ellipsis, and the mic and Send always stay inside the
+   box. Nothing here hides overflow: the pills' menus hang below them. */
+.conv-compose-box { container: compose / inline-size; }
+.conv-compose-tools { flex: 0 1 auto; min-width: 0; }
+.conv-compose-tools > * { flex-shrink: 0; }
+.conv-compose-tools > :is(.run-pill-wrap, .quota-pill-wrap) { display: inline-flex; flex: 0 1 auto; min-width: 0; }
+/* (the quota's number and the access shield stay whole: the model's name
+   is what gets cut) */
+.conv-compose-tools > .quota-pill-wrap,
+.conv-compose-tools > .run-pill-wrap:has(.run-pill-icon) { flex-shrink: 0; }
+.conv-compose-tools :is(.run-pill, .quota-pill) { min-width: 0; max-width: 100%; }
+.conv-compose-bar > :not(.conv-compose-tools):not(.conv-compose-hint) { flex-shrink: 0; }
+/* (narrower still: the access pill is its shield, its words in its title;
+   the quota keeps its number) */
+@container compose (max-width: 520px) {
+  .conv-compose-tools .run-pill:has(.run-pill-icon) .run-pill-text { display: none; }
+  .conv-compose-tools .run-pill:has(.run-pill-icon) .run-pill-icon { margin-right: 0; }
+}
+@container compose (max-width: 420px) {
+  .conv-compose-tools .quota-pill-icon { display: none; }
 }
 /* How to send, shown only while the box has the caret. */
 .conv-compose-hint {
@@ -5960,6 +6028,51 @@ button.app-label:hover { filter: brightness(0.95); }
 .app-provider-manual .seg { display: inline-flex; }
 /* Clearing the custom address: quiet on the left, red only on hover. */
 .app-provider-clear { margin-right: auto; background: transparent; color: var(--muted); }
+/* Adding or editing a model provider (ProviderEditor): the vendor as a
+   select with MiniMax's region beside it and the address under both; the
+   key, the name; addresses and the small model folded in one row. */
+.pv-vendor-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.pv-vendor-row:has(> :nth-child(2)) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.app-modal .pv-vendor-row > .app-field { margin-top: 0; }
+.pv-vendor-hint { display: block; margin-top: 6px; }
+.pv-vendor-hint .mono { color: var(--fg-2); }
+.pv-bases { margin-top: 14px; border-radius: 10px; box-shadow: 0 0 0 0.5px var(--line); }
+.pv-bases-head {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
+  padding: 9px 12px; border: 0; border-radius: 10px; background: none;
+  color: var(--fg-2); font: inherit; font-size: 12.5px; text-align: left; cursor: default;
+}
+.pv-bases-head:hover:not(:disabled) { background: var(--nav-hover); }
+.pv-bases-head:disabled { color: var(--fg-2); opacity: 1; }
+.pv-bases-chev { flex: none; width: 14px; height: 14px; color: var(--muted); transform: rotate(-90deg); transition: transform .15s; }
+.pv-bases-head[aria-expanded="true"] .pv-bases-chev { transform: none; }
+.pv-bases-sum { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+.pv-bases-body { padding: 0 12px 12px; }
+.pv-bases-body > .app-field:first-child { margin-top: 2px; }
+/* 模型从哪来 in the new-agent dialog (ModelSource): one line per choice, its
+   detail beside the name, the picked one on a soft ground; adding a key is
+   an inset panel under the list, vendor and key on one row, one note and
+   the buttons at its foot. */
+.model-source .app-provider-list { gap: 2px; margin-bottom: 8px; max-height: 220px; }
+.model-source .app-provider-opt { align-items: center; padding: 7px 10px; border-radius: 8px; box-shadow: none; }
+.model-source .app-provider-opt input { margin-top: 0; flex: none; }
+.model-source .app-provider-opt > span { flex-direction: row; align-items: baseline; gap: 8px; min-width: 0; }
+.model-source .app-provider-opt b { flex: none; }
+.model-source .app-provider-opt small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.model-source .app-provider-opt.picked { background: var(--pill); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+.model-source .app-provider-manual { gap: 10px; margin: 0 0 8px; padding: 12px; border-radius: 10px; background: var(--pill); }
+.model-source .app-provider-manual :is(.app-input, .app-select-field) { background-color: var(--bg); }
+.ms-row { display: grid; grid-template-columns: minmax(0, 170px) minmax(0, 1fr); gap: 10px; }
+.model-source .ms-row > .app-field { margin: 0 !important; }
+/* (a custom address takes the whole row) */
+.ms-row > .app-field:not(.ms-vendor):not(.ms-key) { grid-column: 1 / -1; order: 3; }
+.ms-foot { display: flex; align-items: center; gap: 6px; }
+.model-source .ms-note { flex: 1; min-width: 0; margin: 0; padding: 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); opacity: 1; }
+@media (max-width: 560px) {
+  .ms-row { grid-template-columns: minmax(0, 1fr); }
+  .ms-foot { flex-wrap: wrap; }
+  .ms-note { flex-basis: 100%; }
+}
 .app-provider-clear:hover:not(:disabled) { background: var(--pill); color: var(--red); }
 .app-modal-note { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
 
@@ -10238,6 +10351,111 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 .app-provider-opt.is-off b, .app-provider-opt.is-off input { opacity: 0.45; }
 .conv-menu-hint { margin-left: auto; padding-left: 12px; font-size: 11px; color: var(--muted); }
 
+/* Running a workflow (StartDialog in Workflows.tsx): its inputs as rows,
+   what each is (and a line about it) on the left, the box on the right;
+   the ones it needs first, then the optional ones, folded behind one line
+   that says what they are set to when there are more than three. */
+.wf-start { display: flex; flex-direction: column; gap: 14px; }
+.wf-start-fields { display: flex; flex-direction: column; gap: 10px; }
+.wf-start-field {
+  display: grid;
+  grid-template-columns: minmax(0, 168px) minmax(0, 1fr);
+  align-items: start;
+  gap: 4px 16px;
+}
+/* (a long text: its name above, the box across the whole width) */
+.wf-start-field.is-long { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.wf-start-field.is-long .wf-start-label { padding-top: 0; flex-direction: row; align-items: baseline; gap: 8px; }
+.wf-start-field > .app-input,
+.wf-start-field > .app-select-field { height: 32px; }
+.wf-start-field.is-long > textarea { min-height: 72px; }
+.wf-start-field.is-switch { align-items: center; }
+.wf-start-field.is-switch > .app-switch { justify-self: start; }
+.wf-start-label { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding-top: 7px; }
+.wf-start-field.is-switch .wf-start-label { padding-top: 0; }
+.wf-start-name { font-size: 13px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+.wf-start-name.is-key { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; color: var(--fg-2); }
+.wf-start-desc {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.wf-start-more { display: flex; flex-direction: column; gap: 10px; }
+.wf-start-more-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--pill);
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: default;
+}
+.wf-start-more-head:hover { background: var(--pill-hover); }
+.wf-start-more-head.is-static { padding: 12px 0 0; border-radius: 0; background: none; border-top: 1px solid var(--line-2); color: var(--muted); }
+.wf-start-more-head.is-static:hover { background: none; }
+.wf-start-more-title { flex: none; font-weight: 500; }
+.wf-start-more-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.wf-start-chev { flex: none; width: 14px; height: 14px; color: var(--muted); transform: rotate(-90deg); transition: transform .15s; }
+.wf-start-more-head[aria-expanded="true"] .wf-start-chev { transform: none; }
+.wf-start-none { margin: 0; font-size: 13px; color: var(--muted); }
+.wf-start .app-modal-actions { margin-top: 2px; }
+@media (max-width: 560px) {
+  .wf-start-field { grid-template-columns: minmax(0, 1fr); }
+  .wf-start-label { padding-top: 0; }
+  .wf-start-field.is-switch { grid-template-columns: minmax(0, 1fr) auto; }
+}
+
+/* What a workflow says in a chat (WorkflowNote.tsx): a step it gives an
+   agent, or the end of a run. Quiet: a small grey line saying which
+   workflow (and step) with a way to its run, then what matters, the rest
+   folded. No icon, no coloured badges: the theme's greys only. */
+.conv-bubble:has(> .wfn) { max-width: min(620px, 100%); }
+.wfn { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.wfn-head { display: flex; align-items: center; gap: 10px; min-width: 0; padding-bottom: 6px; border-bottom: 1px solid var(--line-2); }
+.wfn-where { flex: 1; min-width: 0; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfn-open { flex: none; display: inline-flex; align-items: center; gap: 1px; padding: 2px 4px 2px 6px; border: 0; border-radius: 6px; background: none;
+  color: var(--muted); font: inherit; font-size: 11.5px; cursor: default; }
+.wfn-open:hover:not(:disabled) { background: var(--nav-hover); color: var(--fg); }
+.wfn-open svg { width: 12px; height: 12px; }
+.wfn-outcome { color: var(--fg); overflow-wrap: anywhere; }
+.wfn.is-failed .wfn-outcome { font-weight: 500; }
+.wfn-why { color: var(--fg-2); font-weight: 400; }
+.wfn-fold { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; margin-left: -4px; padding: 2px 6px 2px 4px; border: 0; border-radius: 6px;
+  background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: default; }
+.wfn-fold:hover { background: var(--nav-hover); color: var(--fg-2); }
+.wfn-chev { width: 13px; height: 13px; transform: rotate(-90deg); transition: transform .15s; }
+.wfn-fold[aria-expanded="true"] .wfn-chev { transform: none; }
+.wfn-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; font-size: 12.5px; }
+.wfn-steps li { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); column-gap: 8px; row-gap: 1px; padding: 5px 0; border-top: 1px solid var(--line-2); }
+.wfn-steps li:first-child { border-top: 0; }
+.wfn-step-label { color: var(--fg); font-weight: 500; overflow-wrap: anywhere; }
+.wfn-step-who { color: var(--muted); font-size: 11.5px; align-self: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfn-step-line { grid-column: 1 / -1; color: var(--fg-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* (a step that did not go well: its name says so in plain weight, not colour) */
+.wfn-steps li.is-bad .wfn-step-line { color: var(--fg); }
+.wfn-prompt, .wfn-rest { min-width: 0; }
+.wfn-failed { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.wfn-outcome .wfn-word { font-weight: inherit; }
+/* Not done (a step, or a run that failed): one touch of colour to find it
+   by, the card's edge tinted red and the words that say so in red; the
+   reason stays grey. Nothing else is coloured. */
+.wfn-failed b { font-weight: 500; color: var(--red); }
+.wfn.is-failed .wfn-word { color: var(--red); }
+.conv-msg.is-me.is-system .conv-bubble:has(.wfn-failed, .wfn.is-failed) {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 45%, var(--line));
+}
+.wfn-rest { padding: 6px 0 0; border-top: 1px solid var(--line-2); font-size: 12.5px; color: var(--fg-2); }
+
 /* ---------- 专注模式 (focus mode) ----------
    The chat you are in alone, on a plain background: no sidebar, no top
    bar, no members; the zoomed pane's conversation centred at a reading
@@ -10726,6 +10944,7 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .im-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; color: var(--fg-2); }
 .im-steps .app-input { display: block; width: 100%; margin-top: 6px; }
 .im-steps a { color: var(--accent); }
+.im-prompt { width: 100%; min-height: 160px; font-size: 13px; }
 /* where a run's steps will show once it comes near the view (TraceView) */
 .trace-lazy { display: block; height: 1px; }
 /* Settings › Appearance › 侧栏显示: a chip per sidebar entry, on = shown. */
@@ -10747,25 +10966,6 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .nav-show-chip:hover { background: var(--nav-hover); }
 .nav-show-chip.is-on { border-color: transparent; background: var(--pill); color: var(--fg); }
 .nav-show-chip svg { width: 12px; height: 12px; }
-/* The sidebar says when something is hidden (侧栏显示), faintly, at the end
-   of its lists; a click opens the setting. */
-.sp-nav-hidden-note {
-  display: block;
-  width: calc(100% - 16px);
-  margin: 10px 8px 4px;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  color: var(--faint);
-  font: inherit;
-  font-size: 11.5px;
-  text-align: left;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.sp-nav-hidden-note:hover { color: var(--muted); background: var(--nav-hover); }
 /* An error's request id (ErrorText): faint, selectable, to look it up in
    the logs. */
 .app-error-id { margin-top: 2px; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; user-select: text; }
@@ -10822,3 +11022,9 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .pc-list.au-cards .wf-row-actions { justify-content: flex-end; margin: 0 6px 6px; }
 .pc-list.au-cards > .au-row.is-off { opacity: .8; }
 
+/* Machine health uses the same status colours and controls as other details. */
+.machine-health { margin: 12px 0; padding: 12px; }
+.machine-health .app-row { display: flex; gap: 12px; justify-content: space-between; align-items: center; }
+.machine-health-process { min-width: 0; overflow-wrap: anywhere; }
+.machine-health-process div { color: var(--muted); font-size: 11.5px; }
+.machine-health-alert .pc-online { color: var(--amber); }

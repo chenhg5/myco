@@ -12,10 +12,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   mirror:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Check mirror failure and retry behavior
         run: python3 scripts/mirror-apps.test.py
       - name: Mirror verified public artifacts

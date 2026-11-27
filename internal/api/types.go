@@ -32,11 +32,14 @@ type Delivery struct {
 
 // Agent is the public view of a registered agent.
 type Agent struct {
-	Updating    bool        `json:"updating,omitempty"`
-	ID          string      `json:"id"`
-	Resume      *ResumeInfo `json:"resume,omitempty"`
-	Name        string      `json:"name"`
-	DisplayName string      `json:"display_name,omitempty"`
+	// MachineOwnerID is present only on /v1/me when the bound machine can be read.
+	// Nil means unknown (including older Hubs), while a pointer to empty means unowned.
+	MachineOwnerID *string     `json:"machine_owner_id,omitempty"`
+	Updating       bool        `json:"updating,omitempty"`
+	ID             string      `json:"id"`
+	Resume         *ResumeInfo `json:"resume,omitempty"`
+	Name           string      `json:"name"`
+	DisplayName    string      `json:"display_name,omitempty"`
 	// Avatar is the face people chose: "look:<parts>" (drawn by clients)
 	// or "pic:<hash>" (GET /v1/agents/{name}/avatar; the hash changes with
 	// the picture). Empty: draw the default one from the id.
@@ -77,6 +80,8 @@ type Agent struct {
 	// machine (a machine's node for starting sessions: not shown as a node).
 	Kind string `json:"kind,omitempty"`
 	// Owner is the member who added it (their name); OwnerID their id.
+	// /me resolves this on the Hub. Exec runners use it to authorize only
+	// that member's exact console identity, never a locally supplied owner.
 	Owner   string `json:"owner,omitempty"`
 	OwnerID string `json:"owner_id,omitempty"`
 	// MachineID is the machine it runs on (also "env:<host>" for machines
@@ -137,6 +142,10 @@ type RunnerQueuedTask struct {
 }
 
 type Runtime struct {
+	// Account is a private, locally reported email identity hint (not authentication).
+	Account string `json:"account,omitempty"`
+
+	MachineHealth *MachineHealth `json:"machine_health,omitempty"`
 	// RunnerInstance identifies a runner process; RestartingUntil is a
 	// short lease for planned restarts, cleared by the next instance.
 	RunnerInstance  string       `json:"runner_instance,omitempty"`
@@ -396,6 +405,13 @@ type ModelProviderList struct {
 	Providers []ModelProvider `json:"providers"`
 }
 
+// ModelProviderTestResponse is the local App's explicit connection test.
+// ModelsSource is "provider" or "catalog" (a verified completion fallback).
+type ModelProviderTestResponse struct {
+	Models       []RuntimeModel `json:"models"`
+	ModelsSource string         `json:"models_source,omitempty"`
+}
+
 // ModelProviderRequest adds one (POST: ID, Name, Vendor, KeySealed with
 // KeyVersion 1 required; the client picks the id, prv_..., since the key
 // is sealed for it) or changes one (PATCH: only what is set). A new
@@ -424,15 +440,17 @@ type ModelProviderRequest struct {
 
 // Machine is a computer, server or cloud environment agents run on.
 type Machine struct {
-	Updating    bool       `json:"updating,omitempty"`
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Hostname    string     `json:"hostname,omitempty"`
-	OS          string     `json:"os,omitempty"`
-	Arch        string     `json:"arch,omitempty"`
-	MycoVersion string     `json:"myco_version,omitempty"`
-	Online      bool       `json:"online"`
-	LastSeenAt  *time.Time `json:"last_seen_at,omitempty"`
+	Health         *MachineHealth `json:"machine_health,omitempty"`
+	CanStopProcess bool           `json:"can_stop_process,omitempty"`
+	Updating       bool           `json:"updating,omitempty"`
+	ID             string         `json:"id"`
+	Name           string         `json:"name"`
+	Hostname       string         `json:"hostname,omitempty"`
+	OS             string         `json:"os,omitempty"`
+	Arch           string         `json:"arch,omitempty"`
+	MycoVersion    string         `json:"myco_version,omitempty"`
+	Online         bool           `json:"online"`
+	LastSeenAt     *time.Time     `json:"last_seen_at,omitempty"`
 	// CanSpawn: its machine node is online, so sessions can be started on it.
 	CanSpawn bool `json:"can_spawn"`
 	// Node is that machine node's name (a provider is sealed for it, i115);
@@ -691,9 +709,26 @@ type ProfileRequest struct {
 	// AllowFrom replaces who may send tasks/notes (admin only; [] = anyone,
 	// refused for exec nodes). The agent's token is not changed.
 	AllowFrom *[]string `json:"allow_from,omitempty"`
+	// AllowAdd and AllowRemove atomically edit the current list. They cannot
+	// be combined with AllowFrom, or contain the same name in both lists.
+	AllowAdd    *[]string `json:"allow_add,omitempty"`
+	AllowRemove *[]string `json:"allow_remove,omitempty"`
 	// AcceptExecRisk confirms that an exec node with an empty allow_from
 	// should run commands from every agent (stored as "*").
 	AcceptExecRisk bool `json:"accept_exec_risk,omitempty"`
+}
+
+// ProfileResponse preserves the Agent response shape for older clients.
+type ProfileResponse struct {
+	Agent
+	AllowFromChange *AllowFromChange `json:"allow_from_change,omitempty"`
+}
+
+// AllowFromChange is the actual difference applied to the stored list.
+type AllowFromChange struct {
+	Added     []string `json:"added"`
+	Removed   []string `json:"removed"`
+	Unchanged []string `json:"unchanged"`
 }
 
 // Alias is a re-pointable address for an agent.
@@ -965,6 +1000,7 @@ type Overview struct {
 // session in a directory on its machine and join it to the network. It is
 // sent as the body of a task; see `myco agent spawn`.
 type SpawnRequest struct {
+	ProcessRef string `json:"process_ref,omitempty"`
 	// CLI is the agent CLI to start: claude, codex, or a preset (pi, kiro, ...).
 	CLI string `json:"cli"`
 	// Dir is the working directory on the node's machine ("~/..." allowed).
@@ -1074,11 +1110,12 @@ type MachineUpgrade struct {
 
 // SpawnResult is a machine node's answer to a SpawnRequest.
 type SpawnResult struct {
-	Agent     string `json:"agent,omitempty"`
-	SessionID string `json:"session_id,omitempty"`
-	CLI       string `json:"cli,omitempty"`
-	Workdir   string `json:"workdir,omitempty"`
-	Access    string `json:"access,omitempty"`
+	StoppedProcess *MachineProcess `json:"stopped_process,omitempty"`
+	Agent          string          `json:"agent,omitempty"`
+	SessionID      string          `json:"session_id,omitempty"`
+	CLI            string          `json:"cli,omitempty"`
+	Workdir        string          `json:"workdir,omitempty"`
+	Access         string          `json:"access,omitempty"`
 	// Reply is the new session's answer to its first turn.
 	Reply string `json:"reply,omitempty"`
 	// Denied: the machine refused the request (policy); Error says why.
@@ -1281,6 +1318,8 @@ type RecentItem struct {
 // TraceEvent is one step of the run that handled a task: what the agent
 // said, thought and did. Data is the step (harness.Event): kind, text,
 // tool, id, input, output, failed, and usage figures.
+// Data may also contain observed_at_ms (runner wall clock, Unix ms). At is
+// the Hub's ingestion clock; comparing the two requires clock-skew bounds.
 type TraceEvent struct {
 	Seq  int             `json:"seq"`
 	Kind string          `json:"kind"`
@@ -2652,4 +2691,26 @@ type NoticeQuiet struct {
 	From int    `json:"from"`
 	To   int    `json:"to"`
 	Zone string `json:"zone,omitempty"`
+}
+
+// LocalPreferences contains only this App profile's durable preferences.
+// Null values are deletion tombstones, retained for idempotent legacy import.
+type LocalPreferences struct {
+	Version int                `json:"version"`
+	Values  map[string]*string `json:"values"`
+}
+
+// LocalPreferencesPatch changes only the specified keys. The import endpoint
+// adds missing keys and never overwrites saved values or deletion tombstones.
+type LocalPreferencesPatch struct {
+	Values map[string]*string `json:"values"`
+}
+
+// LocalWorkspaceAppearance changes one workspace without replacing other aliases.
+type LocalWorkspaceAppearance struct {
+	Name string `json:"name"`
+	Look struct {
+		Color *int   `json:"color,omitempty"`
+		Pic   string `json:"pic,omitempty"`
+	} `json:"look"`
 }

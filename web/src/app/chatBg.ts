@@ -1,3 +1,4 @@
+import { localPreferences, savePreferenceImage } from "@/lib/localPreferences";
 import { useEffect, useState } from "react";
 import { L } from "@/lib/i18n";
 
@@ -29,14 +30,14 @@ export const PRESETS: { id: string; name: () => string; css: string }[] = [
 
 function read(): Kept {
   try {
-    const v = JSON.parse(localStorage.getItem(KEY) || "null") as Kept | null;
+    const v = JSON.parse(localPreferences.getItem(KEY) || "null") as Kept | null;
     return v && typeof v === "object" && v.by && typeof v.by === "object" ? v : { by: {} };
   } catch {
     return { by: {} };
   }
 }
 function write(k: Kept) {
-  try { localStorage.setItem(KEY, JSON.stringify(k)); } catch { /* not kept */ }
+  try { localPreferences.setItem(KEY, JSON.stringify(k)); } catch { /* not kept */ }
   window.dispatchEvent(new CustomEvent(EVENT));
 }
 
@@ -87,6 +88,7 @@ async function idb<T>(mode: IDBTransactionMode, f: (s: IDBObjectStore) => IDBReq
 }
 const urls = new Map<string, string>();
 async function imageUrl(id: string): Promise<string | null> {
+  if (/^\/app\/preferences\/images\/[a-f0-9]{64}\.(png|jpg|gif|webp)$/.test(id)) return id;
   const have = urls.get(id);
   if (have) return have;
   try {
@@ -115,6 +117,8 @@ export async function keepImage(file: File): Promise<string> {
     }
     bmp.close();
   } catch { /* kept as it is */ }
+  const saved = await savePreferenceImage(blob);
+  if (saved) return saved;
   const id = `img-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
   await idb("readwrite", (s) => s.put(blob, id));
   return id;

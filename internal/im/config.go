@@ -46,7 +46,25 @@ type Config struct {
 	ClaimFails   int       `json:"claim_fails,omitempty"`
 	// Lang is the language the bot speaks: zh or en (default by platform).
 	Lang string `json:"lang,omitempty"`
+	// The front desk's model (OpenAI-compatible; the App copies the one set
+	// for voice chats). Without one, messages go straight to the agent.
+	LLMBaseURL string `json:"llm_base_url,omitempty"`
+	LLMModel   string `json:"llm_model,omitempty"`
+	LLMKey     string `json:"llm_key,omitempty"`
+	// NoDesk: its owner turned the front desk off (the App then leaves it).
+	NoDesk bool `json:"no_desk,omitempty"`
+	// Prompt is the owner's own instructions for the front desk (this bot
+	// only; voice chats have their own): rules for whoever talks to it,
+	// such as what it may answer or do. Tasks from people other than the
+	// owner carry it too, so the agent keeps to it as well.
+	Prompt string `json:"prompt,omitempty"`
 }
+
+// MaxPrompt bounds a bot's own instructions.
+const MaxPrompt = 8000
+
+// HasDesk says whether the bot has a front-desk model.
+func (c Config) HasDesk() bool { return !c.NoDesk && c.LLMModel != "" && c.LLMKey != "" }
 
 // Secret values never leave the file; Redacted is what may be shown.
 func (c Config) Redacted() map[string]any {
@@ -55,6 +73,7 @@ func (c Config) Redacted() map[string]any {
 		"name": c.Name, "platform": c.Platform, "app_id": c.AppID, "owner": c.Owner,
 		"allow_from": c.AllowFrom, "agent": c.Agent, "lang": c.Lang, "claim_pending": c.ClaimUsable(time.Now()), "claim_expired": c.Owner == "" && !c.ClaimUsable(time.Now()), "project": c.Project, "profile": c.Profile,
 		"has_app_secret": set(c.AppSecret), "has_bot_token": set(c.BotToken), "has_app_token": set(c.AppToken),
+		"desk": c.HasDesk(), "llm_model": c.LLMModel, "prompt": c.Prompt,
 	}
 }
 
@@ -114,6 +133,9 @@ func (c Config) Validate() error {
 	}
 	if c.Profile == "" {
 		return errors.New("no myco node configured (profile)")
+	}
+	if len([]rune(c.Prompt)) > MaxPrompt {
+		return fmt.Errorf("the bot's instructions are too long (at most %d characters)", MaxPrompt)
 	}
 	return nil
 }

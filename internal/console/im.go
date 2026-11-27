@@ -11,11 +11,12 @@ package console
 // ~/.myco/im. This computer's runner service runs the bots configured there.
 //
 //	GET    /app/im?hub_id=&agent=     {bridges: [...], slack_create_url}  (that agent's bots)
-//	POST   /app/im/feishu             {hub_id, agent}  → {id, url, qr}  a QR code to scan
+//	POST   /app/im/feishu             {hub_id, agent, platform: feishu|lark} → {id, url, qr}  a QR code to scan
 //	GET    /app/im/feishu/{id}        {state: waiting|connecting|done|failed, error?, bridge?}
 //	DELETE /app/im/feishu/{id}        stop waiting for the scan
 //	POST   /app/im/slack              {hub_id, agent, bot_token, app_token} → {bridge}
 //	POST   /app/im/{name}/claim       a new claim code (the old one stops working) → {claim}
+//	PUT    /app/im/{name}/prompt      {prompt} the bot's own front-desk instructions
 //	DELETE /app/im/{name}
 
 import (
@@ -44,6 +45,7 @@ import (
 
 func (b *Backend) imRoutes(m *http.ServeMux) {
 	m.HandleFunc("GET /app/im", b.getIM)
+	m.HandleFunc("PUT /app/im/{name}/prompt", b.putIMPrompt)
 	m.HandleFunc("POST /app/im/feishu", b.postIMFeishu)
 	m.HandleFunc("GET /app/im/feishu/{id}", b.getIMFeishu)
 	m.HandleFunc("DELETE /app/im/feishu/{id}", b.deleteIMFeishu)
@@ -65,6 +67,10 @@ type IMBridge struct {
 	Node         string `json:"node,omitempty"`
 	Hub          string `json:"hub,omitempty"`
 	Online       bool   `json:"online"`
+	// Desk: it answers as the agent with the voice chats' model.
+	Desk bool `json:"desk,omitempty"`
+	// Prompt: its owner's own instructions for the front desk.
+	Prompt string `json:"prompt,omitempty"`
 }
 
 // imScan is a QR code being scanned.
@@ -117,10 +123,15 @@ func (b *Backend) imList(ctx context.Context) ([]IMBridge, error) {
 	var list []IMBridge
 	for _, r := range res.Bridges {
 		br := IMBridge{Name: r.Name, Platform: r.Platform, Agent: r.Agent, Owner: r.Owner != "", Node: r.Node, Hub: r.Hub, Online: r.Online, ClaimExpired: r.Expired}
-		if r.Claim && res.Dir != "" {
-			// The code is on this computer only, for its owner to send.
-			if c, err := im.Load(res.Dir, r.Name); err == nil {
-				br.Claim = c.Claim
+		if res.Dir != "" {
+			if c, err := im.Load(res.Dir, r.Name); err == nil && c != nil {
+				if r.Claim {
+					// The code is on this computer only, for its owner to send.
+					br.Claim = c.Claim
+				}
+				// Bots made before the front desk get it once voice is set.
+				br.Desk = b.imDesk(res.Dir, c)
+				br.Prompt = c.Prompt
 			}
 		}
 		list = append(list, br)
@@ -174,18 +185,41 @@ func (b *Backend) imConnect(ctx context.Context, hub string, args []string, secr
 	}
 	_ = json.Unmarshal(out, &res)
 	br := &IMBridge{Name: res.Bridge.Name, Platform: res.Bridge.Platform, Agent: res.Bridge.Agent, Owner: res.Bridge.Owner != "", Hub: hub}
-	if !br.Owner {
-		if c, err := im.Load(im.Dir(filepath.Join(b.Local.Home, ".myco")), br.Name); err == nil {
+	imDir := im.Dir(filepath.Join(b.Local.Home, ".myco"))
+	if c, err := im.Load(imDir, br.Name); err == nil && c != nil {
+		if !br.Owner {
 			br.Claim = c.Claim
 		}
+		br.Desk = b.imDesk(imDir, c)
 	}
 	return br, nil
 }
 
+// imDesk gives a new bot the voice chats' model as its front desk (it then
+// answers as the agent, as in voice chats). It writes the bot's config file
+// itself, so it works with CLIs from before the front desk too; the key
+// stays in that 0600 file.
+func (b *Backend) imDesk(dir string, c *im.Config) bool {
+	if c.HasDesk() || c.NoDesk {
+		return c.HasDesk()
+	}
+	vc := b.effectiveVoiceConfig()
+	key, _ := b.voiceKeys(vc)
+	if vc.LLMModel == "" || key == "" {
+		return false
+	}
+	c.LLMBaseURL, c.LLMModel, c.LLMKey = vc.LLMBaseURL, vc.LLMModel, key
+	if err := im.Save(dir, c); err != nil {
+		return false
+	}
+	return true
+}
+
 func (b *Backend) postIMFeishu(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		HubID string `json:"hub_id"`
-		Agent string `json:"agent"`
+		HubID    string `json:"hub_id"`
+		Agent    string `json:"agent"`
+		Platform string `json:"platform"` // feishu (default) or lark: separate apps, separate codes
 	}
 	if !decode(w, r, &in) {
 		return
@@ -194,12 +228,16 @@ func (b *Backend) postIMFeishu(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "which agent the bot is for (agent) is required"})
 		return
 	}
+	if in.Platform != "" && in.Platform != "feishu" && in.Platform != "lark" {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "platform is feishu or lark"})
+		return
+	}
 	hub, err := b.find(in.HubID)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	p, err := (&feishu.Registrar{}).Begin(r.Context())
+	p, err := (&feishu.Registrar{Lark: in.Platform == "lark"}).Begin(r.Context())
 	if err != nil {
 		writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "unavailable", Message: "Feishu could not be reached: " + err.Error()})
 		return
@@ -319,6 +357,40 @@ func (b *Backend) postIMClaim(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.Unmarshal(out, &res)
 	writeJSON(w, http.StatusOK, map[string]any{"name": name, "claim": res.Claim})
+}
+
+// putIMPrompt sets a bot's own front-desk instructions. It writes the bot's
+// config on this computer (a running bot picks it up within seconds), so it
+// works with CLIs from before them too.
+func (b *Backend) putIMPrompt(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !im.ValidName(name) {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "invalid bridge name"})
+		return
+	}
+	var in struct {
+		Prompt string `json:"prompt"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	in.Prompt = strings.TrimSpace(in.Prompt)
+	if len([]rune(in.Prompt)) > im.MaxPrompt {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: fmt.Sprintf("at most %d characters", im.MaxPrompt)})
+		return
+	}
+	dir := im.Dir(filepath.Join(b.Local.Home, ".myco"))
+	c, err := im.Load(dir, name)
+	if err != nil || c == nil {
+		writeErr(w, &client.Error{Status: http.StatusNotFound, Code: "not_found", Message: "no such bot on this computer"})
+		return
+	}
+	c.Prompt = in.Prompt
+	if err := im.Save(dir, c); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"name": name, "prompt": c.Prompt})
 }
 
 func (b *Backend) deleteIM(w http.ResponseWriter, r *http.Request) {

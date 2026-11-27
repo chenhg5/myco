@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useRef, useState } from "react";
 import { appApi } from "@/appapi";
 import { Modal } from "@/app/dialogs";
@@ -10,7 +11,7 @@ export const recoveryLabel = () => L("恢复旧本机文件", "Recover older loc
 
 function readCompleted(): string[] {
   try {
-    const entries: unknown = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    const entries: unknown = JSON.parse(localPreferences.getItem(storageKey) || "[]");
     return Array.isArray(entries) ? entries.filter((value): value is string => typeof value === "string") : [];
   } catch { return []; }
 }
@@ -113,7 +114,7 @@ export function PageRecovery({ enabled, template, language, showing, onClose, on
 
   const confirm = (id: string) => {
     completed.current = [...new Set([...readCompleted(), ...completed.current, id])];
-    try { localStorage.setItem(storageKey, JSON.stringify(completed.current)); } catch { /* Keep progress in this panel. */ }
+    try { localPreferences.setItem(storageKey, JSON.stringify(completed.current)); } catch { /* Keep progress in this panel. */ }
     setEntries(current => current.filter(item => item.id !== id));
     send("myco-recovery-complete", { id, index: sourceIndex });
   };

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"strings"
 	"time"
@@ -424,28 +425,61 @@ func (s *AgentService) SetStatus(ctx context.Context, name string, text string) 
 // UpdateProfile changes cosmetic fields and, for the admin, allow_from
 // (nil = unchanged). The agent's token is not touched.
 func (s *AgentService) UpdateProfile(ctx context.Context, name string, displayName, description *string, allowFrom *[]string, acceptExecRisk bool, avatar *Avatar) (*domain.Agent, error) {
-	a, err := s.Get(ctx, name)
+	a, _, err := s.ChangeProfile(ctx, name, displayName, description, domain.AllowFromEdit{Replace: allowFrom}, acceptExecRisk, avatar, nil)
+	return a, err
+}
+
+// ChangeProfile applies permission edits to the current stored list and records
+// their actual difference in the same transaction as the profile update.
+func (s *AgentService) ChangeProfile(ctx context.Context, name string, displayName, description *string, edit domain.AllowFromEdit, acceptExecRisk bool, avatar *Avatar, audit *domain.AuditEntry) (*domain.Agent, *domain.AllowFromChange, error) {
+	resolved, err := s.Get(ctx, name)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := a.SetProfile(displayName, description); err != nil {
-		return nil, err
-	}
+	n := resolved.Name
+	// AvatarStore may share this repository's SQL connection. Prepare its
+	// picture before taking the profile write lock, as the legacy path did.
 	if avatar != nil {
-		if err := s.setAvatar(ctx, a, *avatar); err != nil {
-			return nil, err
+		if err := resolved.SetProfile(displayName, description); err != nil {
+			return nil, nil, err
+		}
+		if err := s.setAvatar(ctx, resolved, *avatar); err != nil {
+			return nil, nil, err
 		}
 	}
-	if allowFrom != nil {
-		names, err := domain.ParseAgentNames(*allowFrom)
-		if err != nil {
-			return nil, err
-		}
-		if err := a.SetAllowFrom(names, acceptExecRisk); err != nil {
-			return nil, err
-		}
+	if audit != nil {
+		audit.Target = string(n)
 	}
-	return a, s.agents.Save(ctx, a)
+	var diff *domain.AllowFromChange
+	a, err := s.agents.MutateProfile(ctx, n, func(a *domain.Agent) error {
+		if err := a.SetProfile(displayName, description); err != nil {
+			return err
+		}
+		if avatar != nil {
+			a.Avatar = resolved.Avatar
+		}
+		if edit.Present() {
+			var err error
+			diff, err = edit.Apply(a, acceptExecRisk)
+			if err != nil {
+				return err
+			}
+			if audit != nil {
+				detail, err := json.Marshal(struct {
+					Actor   string   `json:"actor"`
+					Node    string   `json:"node"`
+					Added   []string `json:"added"`
+					Removed []string `json:"removed"`
+				}{audit.ActorName, string(n), diff.Added, diff.Removed})
+				if err != nil {
+					return err
+				}
+				audit.Detail = string(detail)
+			}
+		}
+		return nil
+	}, audit)
+	return a, diff, err
 }
 
 // Avatar is a face chosen for an agent: a drawn one (Look, "" for the

@@ -1,3 +1,4 @@
+import { localPreferences, PREFERENCES_CHANGED, PREFERENCES_ERROR, preferencesProblem, flushPreferences } from "@/lib/localPreferences";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpDown, Bell, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
@@ -27,7 +28,7 @@ import { Prepare, preparePending, setPreparePending } from "@/app/Prepare";
 import { Checklist, startOnboarding, type ChecklistStep } from "@/app/Onboard";
 import { ProjectSpace, isLoose, looseRowsOf, type SpaceRef } from "@/app/ProjectSpace";
 import { dragAgent } from "@/app/Panes";
-import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog, isNobody } from "@/app/AddToProject";
+import { AddAgentDialog, AddWorkspaceDialog, NewProjectDialog } from "@/app/AddToProject";
 import { MemberSheet, MembersPage } from "@/app/Members";
 import { HubSwitcher } from "@/app/HubSwitcher";
 import { useSimpleMode } from "@/app/simpleMode";
@@ -47,6 +48,7 @@ import { NoticesPanel } from "@/app/NoticesPanel";
 import type { Notice } from "@/api";
 import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
+import { ErrorText } from "@/app/dialogs";
 import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { setSystemDictation } from "@/app/Dictate";
@@ -89,7 +91,7 @@ type Page = "space" | "members" | "computers" | "usage" | "automations" | "workf
 
 function initialCollapsed() {
   try {
-    const v = localStorage.getItem(SIDEBAR_KEY);
+    const v = localPreferences.getItem(SIDEBAR_KEY);
     if (v === "open") return false;
     if (v === "closed") return true;
   } catch { /* storage unavailable */ }
@@ -184,6 +186,13 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // What the hubs showed last (also from before a restart) until they answer.
   const [ov, setOv] = useState<AppOverview | null>(() => recall<AppOverview>("overview") ?? null);
   const [error, setError] = useState<unknown>(null);
+  const [permissionError, setPermissionError] = useState<unknown>(null);
+  const [prefsError, setPrefsError] = useState(preferencesProblem);
+  useEffect(() => {
+    const changed = () => setPrefsError(preferencesProblem());
+    window.addEventListener(PREFERENCES_ERROR, changed); window.addEventListener(PREFERENCES_CHANGED, changed);
+    return () => { window.removeEventListener(PREFERENCES_ERROR, changed); window.removeEventListener(PREFERENCES_CHANGED, changed); };
+  }, []);
   const [now, setNow] = useState(Date.now());
   const [localTick, setLocalTick] = useState(0);
   const [page, setPageRaw] = useState<Page>("space");
@@ -198,19 +207,19 @@ export default function AppMode({ initialHubs, initialInfo }: {
   };
   // The workspace on show, chosen at the bottom of the sidebar. Workspaces
   // are kept apart: everything shown and done is in this one.
-  const [hubPick, setHubPickState] = useState<string>(() => { try { return localStorage.getItem(HUB_KEY) || ""; } catch { return ""; } });
+  const [hubPick, setHubPickState] = useState<string>(() => { try { return localPreferences.getItem(HUB_KEY) || ""; } catch { return ""; } });
   const setHubPick = (v: string) => {
     // Leaving a workspace: where you were in it is kept, to come back to.
     if (v !== hubId && hubId) {
       places.current[hubId] = { space: shown || undefined, page: page === "members" || page === "computers" || page === "automations" || page === "workflows" || page === "templates" || page === "usage" ? page : "space" };
-      try { localStorage.setItem(PLACES_KEY, JSON.stringify(places.current)); } catch { /* not kept */ }
+      try { localPreferences.setItem(PLACES_KEY, JSON.stringify(places.current)); } catch { /* not kept */ }
     }
     setHubPickState(v);
-    try { localStorage.setItem(HUB_KEY, v); } catch { /* not kept */ }
+    try { localPreferences.setItem(HUB_KEY, v); } catch { /* not kept */ }
   };
   // Each workspace's place: the space (and its page) you were on there.
   const places = useRef<Record<string, { space?: SpaceRef; page?: Page }>>((() => {
-    try { return JSON.parse(localStorage.getItem(PLACES_KEY) || "{}"); } catch { return {}; }
+    try { return JSON.parse(localPreferences.getItem(PLACES_KEY) || "{}"); } catch { return {}; }
   })());
   // Switching workspaces (the switcher, ⌘1…⌘9): back where you were in it.
   const switchHub = (v: string) => {
@@ -225,11 +234,11 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const switchRef = useRef(switchHub);
   switchRef.current = switchHub;
   const [space, setSpaceState] = useState<SpaceRef | null>(() => {
-    try { const v = localStorage.getItem(SPACE_KEY); return v ? JSON.parse(v) as SpaceRef : null; } catch { return null; }
+    try { const v = localPreferences.getItem(SPACE_KEY); return v ? JSON.parse(v) as SpaceRef : null; } catch { return null; }
   });
   const setSpace = (s: SpaceRef | null) => {
     setSpaceState(s);
-    try { if (s) localStorage.setItem(SPACE_KEY, JSON.stringify(s)); } catch { /* not kept */ }
+    try { if (s) localPreferences.setItem(SPACE_KEY, JSON.stringify(s)); } catch { /* not kept */ }
   };
   const [projects, setProjects] = useState<{ hubId: string; p: Project }[] | null>(() => recall<{ hubId: string; p: Project }[]>("projects") ?? null);
   const [connectOpen, setConnectOpen] = useState(false);
@@ -291,8 +300,10 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // An agent's profile (its open work), from anywhere: { hubId, name }.
   useEffect(() => {
     const on = (e: Event) => {
-      const d = (e as CustomEvent<{ hubId: string; name: string }>).detail;
+      const d = (e as CustomEvent<{ hubId: string; name: string; stay?: boolean }>).detail;
       if (!d) return;
+      // (from a chat's head: its profile over the page you are on)
+      if (d.stay) { setProfile({ hubId: d.hubId, name: d.name, details: false }); return; }
       setNavChat(null);
       setPage("members");
       // Its details open: where its open work is.
@@ -531,6 +542,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // A project's computers are for every agent in it: one that joined by
   // itself (myco join --project) is let in here. Each pair is tried once.
   const shared = useRef(new Set<string>());
+  useEffect(() => { setPermissionError(null); }, [hubId]);
   useEffect(() => {
     for (const x of projects || []) {
       if (x.p.archived) continue;
@@ -544,7 +556,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
         if (!missing.length) continue;
         missing.forEach((a) => shared.current.add(`${x.hubId}\u0000${w.st.agent.name}\u0000${a}`));
         // A computer added before any agent was locked to nobody: they take its place.
-        void appApi.updateAllowFrom(x.hubId, w.st.agent.name, [...allow.filter((n) => !isNobody(n)), ...missing]).catch(() => undefined);
+        void appApi.addAllowedSenders(x.hubId, w.st.agent.name, missing).catch(setPermissionError);
       }
     }
   }, [projects, allRows]);
@@ -570,19 +582,19 @@ export default function AppMode({ initialHubs, initialInfo }: {
   // The sidebar's chat list: everyone you can talk to, one click into a
   // chat, in the order picked (kept on this computer).
   const [chatSort, setChatSort] = useState<ChatSort>(() => {
-    try { const v = localStorage.getItem(CHAT_SORT_KEY); return v === "busy" || v === "name" ? v : "recent"; } catch { return "recent"; }
+    try { const v = localPreferences.getItem(CHAT_SORT_KEY); return v === "busy" || v === "name" ? v : "recent"; } catch { return "recent"; }
   });
-  const pickChatSort = (v: ChatSort) => { setChatSort(v); try { localStorage.setItem(CHAT_SORT_KEY, v); } catch { /* not kept */ } };
+  const pickChatSort = (v: ChatSort) => { setChatSort(v); try { localPreferences.setItem(CHAT_SORT_KEY, v); } catch { /* not kept */ } };
   const [navChat, setNavChat] = useState<string | null>(null);
   // Pinned conversations stay on top whatever the order (per workspace,
   // kept on this computer).
   const pinKey = `myco-nav-pinned:${hubId}`;
   const [pinnedByHub, setPinnedByHub] = useState<Record<string, string[]>>({});
-  const pinned = pinnedByHub[pinKey] ?? (() => { try { return JSON.parse(localStorage.getItem(pinKey) || "[]") as string[]; } catch { return []; } })();
+  const pinned = pinnedByHub[pinKey] ?? (() => { try { return JSON.parse(localPreferences.getItem(pinKey) || "[]") as string[]; } catch { return []; } })();
   const pinChat = (name: string, on: boolean) => {
     const next = on ? [...pinned.filter((n) => n !== name), name] : pinned.filter((n) => n !== name);
     setPinnedByHub((m) => ({ ...m, [pinKey]: next }));
-    try { localStorage.setItem(pinKey, JSON.stringify(next)); } catch { /* not kept */ }
+    try { localPreferences.setItem(pinKey, JSON.stringify(next)); } catch { /* not kept */ }
   };
   // Your superagent in the workspace on show (bottom-left menu): its chat,
   // or setting one up. It is not one of the chats in the sidebar: it is
@@ -941,7 +953,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [autoCount, setAutoCount] = useState<number | null>(null);
   useEffect(() => {
     let off = false;
-    if (!hubId || (() => { try { return localStorage.getItem("myco-onboard") !== "1" || localStorage.getItem("myco-checklist-off") === "1"; } catch { return true; } })()) return;
+    if (!hubId || (() => { try { return localPreferences.getItem("myco-onboard") !== "1" || localPreferences.getItem("myco-checklist-off") === "1"; } catch { return true; } })()) return;
     const read = () => appApi.automations(hubId).then((r) => { if (!off) setAutoCount((r.automations || []).length); }, () => undefined);
     void read();
     const t = window.setInterval(read, 60_000);
@@ -1067,7 +1079,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const toggleSidebar = () => {
     setCollapsed((c) => {
       const next = !c;
-      try { localStorage.setItem(SIDEBAR_KEY, next ? "closed" : "open"); } catch { /* storage unavailable */ }
+      try { localPreferences.setItem(SIDEBAR_KEY, next ? "closed" : "open"); } catch { /* storage unavailable */ }
       return next;
     });
   };
@@ -1102,7 +1114,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   }, []);
   const sidebar = useSidebarWidth(() => {
     setCollapsed(true);
-    try { localStorage.setItem(SIDEBAR_KEY, "closed"); } catch { /* storage unavailable */ }
+    try { localPreferences.setItem(SIDEBAR_KEY, "closed"); } catch { /* storage unavailable */ }
   });
   const dragStyle = { "--wails-draggable": "drag" } as React.CSSProperties;
   const isMac = info?.shell === "mac";
@@ -1435,15 +1447,6 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 )}
               </>)}
             </div>}
-            {/* Something hidden (侧栏显示): never silently gone; a click
-                shows what and brings it back. */}
-            {navHidden.size > 0 && (
-              <button type="button" className="sp-nav-hidden-note" data-testid="nav-hidden-note"
-                onClick={() => { openSettingsSection("appearance"); setPage("settings"); }}
-                title={L(`已隐藏：${[...navHidden].map(navEntryLabel).join("、")}。点一下管理`, `Hidden: ${[...navHidden].map(navEntryLabel).join(", ")}. Click to manage`)}>
-                {L(`已隐藏 ${navHidden.size} 项：${[...navHidden].map(navEntryLabel).join("、")}`, `${navHidden.size} hidden: ${[...navHidden].map(navEntryLabel).join(", ")}`)}
-              </button>
-            )}
           </nav>
 
           <div className="app-sidebar-foot">
@@ -1482,6 +1485,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
           <PageToggle />
         </header>
 
+        {permissionError !== null && <div className="app-banner-wrap"><ErrorText error={permissionError} /></div>}
+        {prefsError && <div className="app-banner-wrap"><div className="app-error-row" role="alert"><span className="err">{L("本机设置暂时无法读取或保存，请重试。", "Local settings could not be read or saved. Please retry.")}</span><button type="button" className="app-btn app-btn-small" onClick={() => void flushPreferences().catch(() => undefined)}>{L("重试", "Retry")}</button></div></div>}
         {error !== null && (
           <div className="app-banner-wrap">
             <div className="app-error-row">
@@ -1747,8 +1752,8 @@ function hostName(u: string): string {
 
 /** Whether a sidebar list is folded, kept on this computer. */
 function useFold(key: string): [boolean, (v: boolean) => void] {
-  const [v, setV] = useState(() => { try { return localStorage.getItem(key) === "1"; } catch { return false; } });
-  return [v, (n: boolean) => { setV(n); try { localStorage.setItem(key, n ? "1" : "0"); } catch { /* not kept */ } }];
+  const [v, setV] = useState(() => { try { return localPreferences.getItem(key) === "1"; } catch { return false; } });
+  return [v, (n: boolean) => { setV(n); try { localPreferences.setItem(key, n ? "1" : "0"); } catch { /* not kept */ } }];
 }
 
 /** A sidebar heading, the same for every section: a fold arrow (or its

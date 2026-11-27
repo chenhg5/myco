@@ -96,6 +96,7 @@ var superRules = map[string]superRule{
 	"POST /v1/agents/{name}/kick":                   ask("重启 {name}"),
 	"PUT /v1/agents/{name}/visibility":              ask("改 {name} 谁能看到"),
 	"PUT /v1/agents/{name}/owner":                   ask("把 {name} 交给别人"),
+	"PUT /v1/agents/{name}/profile":                 ask("修改 {name} 的资料或追加派任务权限"),
 	"DELETE /v1/machines/{id}":                      ask("移除电脑 {id}"),
 	"PUT /v1/machines/{id}/owner":                   ask("把电脑 {id} 交给别人"),
 	"POST /v1/admin/upgrade":                        ask("升级工作区"),
@@ -151,6 +152,17 @@ func (s *Server) superagentGate(w http.ResponseWriter, r *http.Request) *http.Re
 		return nil
 	}
 	what = whatOf(rule.what, pattern, r.URL.Path)
+	if pattern == "PUT /v1/agents/{name}/profile" {
+		var names []string
+		body, names, err = appendOnlyPermissionApproval(body)
+		if err != nil {
+			writeError(w, err)
+			return nil
+		}
+		if len(names) > 0 {
+			what = "允许 " + strings.Join(names, ", ") + " 派任务给 " + whatOf("{name}", pattern, r.URL.Path)
+		}
+	}
 	ap, err := s.superagents.Ask(r.Context(), owner, a.Name, what, r.Header.Get("X-Myco-Reason"), r.Method,
 		r.URL.RequestURI(), r.Header.Get("Content-Type"), body)
 	if err != nil {
@@ -189,7 +201,17 @@ func (s *Server) replayApproval(ctx context.Context, ap *domain.Approval, owner 
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
 	defer cancel()
 	ctx = context.WithValue(ctx, superKey{}, &superCall{agent: agent, member: owner})
-	req, err := http.NewRequestWithContext(ctx, ap.Method, ap.Path, bytes.NewReader(ap.Body))
+	body := ap.Body
+	// Also protect approvals queued by an older Hub: a grant is an append,
+	// never a replacement of unrelated senders at the time of approval.
+	if ap.Method == http.MethodPut && strings.HasSuffix(strings.Split(ap.Path, "?")[0], "/profile") {
+		var err error
+		body, _, err = appendOnlyPermissionApproval(body)
+		if err != nil {
+			return http.StatusBadRequest, err.Error()
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, ap.Method, ap.Path, bytes.NewReader(body))
 	if err != nil {
 		return http.StatusInternalServerError, err.Error()
 	}
@@ -199,6 +221,41 @@ func (s *Server) replayApproval(ctx context.Context, ap *domain.Approval, owner 
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, req)
 	return rec.Code, rec.Body.String()
+}
+
+func appendOnlyPermissionApproval(body []byte) ([]byte, []string, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return nil, nil, domain.Errf(domain.CodeInvalidArgument, "invalid profile request")
+	}
+	if _, ok := fields["allow_remove"]; ok {
+		return nil, nil, domain.Errf(domain.CodeInvalidArgument, "sender approvals only append permissions; remove senders in the App editor")
+	}
+	if _, ok := fields["accept_exec_risk"]; ok {
+		return nil, nil, domain.Errf(domain.CodeInvalidArgument, "sender approvals cannot allow everyone")
+	}
+	raw, replace := fields["allow_from"]
+	if replace {
+		if _, ok := fields["allow_add"]; ok {
+			return nil, nil, domain.Errf(domain.CodeInvalidArgument, "allow_from and allow_add conflict")
+		}
+	} else {
+		raw = fields["allow_add"]
+	}
+	if raw == nil {
+		return body, nil, nil
+	}
+	var names []string
+	if err := json.Unmarshal(raw, &names); err != nil || len(names) == 0 {
+		return nil, nil, domain.Errf(domain.CodeInvalidArgument, "sender approvals must name who to add")
+	}
+	if _, err := domain.ParseAgentNames(names); err != nil {
+		return nil, nil, err
+	}
+	delete(fields, "allow_from")
+	fields["allow_add"] = raw
+	out, err := json.Marshal(fields)
+	return out, names, err
 }
 
 // ---- routes ----

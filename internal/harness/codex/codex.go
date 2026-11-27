@@ -145,7 +145,13 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 		before, known := tokenTotal{}, true
 		if req.SessionID != "" {
 			// A resumed (or copied) session: Codex reports its running total.
+			if req.OnTiming != nil {
+				req.OnTiming("usage_baseline_start")
+			}
 			before, known = sessionTokens(req.SessionID)
+			if req.OnTiming != nil {
+				req.OnTiming("usage_baseline_done")
+			}
 		}
 		stream := newEventStream(time.Now(), before, known)
 		proc.OnStdoutLine = func(line []byte) {
@@ -154,6 +160,7 @@ func (c *codex) Run(ctx context.Context, req harness.Request) (harness.Result, e
 			}
 		}
 	}
+	harness.ObserveProcess(&proc, req, Name)
 	out, runErr := harness.Exec(ctx, proc)
 	res, failure := parseEvents(out.Stdout)
 	if b, err := os.ReadFile(lastMsg); err == nil && strings.TrimSpace(string(b)) != "" {

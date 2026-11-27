@@ -62,6 +62,10 @@ type MachineRepository interface {
 // Runtime is what an agent runs on: its CLI, the CLI's version and model,
 // and the permission level, as reported by its runner.
 type Runtime struct {
+	// Account is a private, locally reported email identity hint (not authentication).
+	Account string `json:"account,omitempty"`
+
+	MachineHealth   string    `json:"machine_health,omitempty"`
 	RunnerInstance  string    `json:"runner_instance,omitempty"`
 	RestartingUntil time.Time `json:"restarting_until,omitzero"`
 	// RunnerSlots is JSON, like Models, to keep Runtime comparable.
@@ -320,9 +324,26 @@ func orNone(h string) string {
 
 // Validate keeps runtime fields short single lines.
 func (r Runtime) Validate() error {
+	if len(r.Account) > 320 || strings.ContainsAny(r.Account, "\x00\n\r\t") {
+		return Errf(CodeInvalidArgument, "invalid runtime account")
+	}
+
 	if err := r.Quota.Validate(); err != nil {
 		return err
 	}
+	if len(r.MachineHealth) > 32768 {
+		return Errf(CodeInvalidArgument, "machine health report is too large")
+	}
+	if r.MachineHealth != "" {
+		var h MachineHealth
+		if err := json.Unmarshal([]byte(r.MachineHealth), &h); err != nil {
+			return Errf(CodeInvalidArgument, "invalid machine health report")
+		}
+		if err := h.Validate(); err != nil {
+			return err
+		}
+	}
+
 	if len(r.Providers) > 32768 {
 		return Errf(CodeInvalidArgument, "provider inventory too large")
 	}

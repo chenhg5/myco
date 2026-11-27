@@ -109,6 +109,7 @@ const WorkflowTick = app.WorkflowTick
 
 // Hub is an assembled hub: the HTTP handler plus background workers.
 type Hub struct {
+	TaskMonitor     *app.TaskMonitorService
 	PageAttachments *app.PageAttachmentService
 	Actions         *app.ActionService
 	Handler         http.Handler
@@ -234,6 +235,7 @@ func Build(o Options) (*Hub, error) {
 	overview := app.NewOverviewService(agentsRepo, msgRepo, clock, o.OnlineWindow)
 	overview.SetPresence(messages.Presence())
 	srv.SetOverview(overview)
+	srv.SetCoordinationStats(app.NewCoordinationService(sqlite.NewCoordinationRepo(db)))
 	machineSvc := app.NewMachineService(sqlite.NewMachineRepo(db), agentsRepo, messages, ids, clock, o.OnlineWindow)
 	machineSvc.SetRemovalDeps(agents, enroll)
 	srv.SetMachines(machineSvc)
@@ -267,6 +269,7 @@ func Build(o Options) (*Hub, error) {
 	}
 	agents.SetDefaultVisibility(defaultVisibility)
 	projectRepo := sqlite.NewProjectRepo(db)
+	machineSvc.SetHealthProjects(projectRepo)
 	agents.SetProjects(projectRepo)
 	messages.SetProjects(projectRepo)
 	projectSvc := app.NewProjectService(projectRepo, agentsRepo, ids, clock)
@@ -280,6 +283,8 @@ func Build(o Options) (*Hub, error) {
 		return err == nil && m != nil
 	})
 	srv.SetProjects(projectSvc)
+	taskMonitor := app.NewTaskMonitorService(sqlite.NewTaskMonitorRepo(db), projectSvc, messages, bus, ids, clock, agents.OnlineWindow())
+	srv.SetTaskMonitor(taskMonitor)
 	projectInvites := app.NewProjectInvitationService(sqlite.NewProjectInvitationRepo(db), projectSvc, sqlite.NewMemberRepo(db), superagents, enroll, audit, ids, clock)
 	srv.SetProjectInvitations(projectInvites)
 	enroll.SetDefaultVisibility(defaultVisibility)
@@ -426,7 +431,7 @@ func Build(o Options) (*Hub, error) {
 		return nil, fmt.Errorf("open private browser screenshots: %w", err)
 	}
 	actionSvc.SetBrowserScreenshots(screenshots)
-	h := &Hub{PageAttachments: pageAttachments, Actions: actionSvc, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows, Watches: watches, Goals: goals,
+	h := &Hub{TaskMonitor: taskMonitor, PageAttachments: pageAttachments, Actions: actionSvc, Handler: srv, Server: srv, Dispatcher: dispatcher, Files: files, Traces: traces, Automations: automations, Workflows: workflows, Watches: watches, Goals: goals,
 		browserScreenshotsPath: screenshotPath, Close: func() error { return errors.Join(screenshots.Close(), db.Close()) }, SetPublicURL: srv.SetPublicURL, SetLAN: srv.SetLAN}
 	if bk != nil {
 		// The first a few minutes after start, spread so that the
@@ -463,6 +468,7 @@ func Run(ctx context.Context, o Options) error {
 	go hub.Traces.Run(ctx, time.Hour)
 	go hub.Automations.Run(ctx, AutomationTick)
 	go hub.Workflows.Run(ctx, WorkflowTick)
+	go hub.TaskMonitor.Run(ctx)
 	go hub.Watches.Run(ctx)
 	go hub.Goals.Run(ctx)
 	if hub.RunBackups != nil {
@@ -588,7 +594,7 @@ func logRequests(h http.Handler, log *slog.Logger, slow time.Duration, rec *perf
 		}
 		w.Header().Set(requestid.Header, id)
 		sr := &statusRecorder{ResponseWriter: w, status: 200}
-		r = r.WithContext(perf.WithRoute(requestid.With(r.Context(), id)))
+		r = r.WithContext(perf.WithRoute(requestid.With(r.Context(), id), start))
 		h.ServeHTTP(sr, r)
 		if rec != nil && !waitsOnPurpose(r) {
 			route := perf.Route(r.Context())

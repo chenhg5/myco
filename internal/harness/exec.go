@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/myco-ai/myco/internal/processwatch"
 )
 
 // Process describes a child process run by a harness.
@@ -31,6 +33,8 @@ type Process struct {
 	OnStdoutLine func(line []byte)
 	// OnStderrLine is the same for stderr; the two may be called concurrently.
 	OnStderrLine func(line []byte)
+	// OnStarted runs after the OS has successfully started the child process.
+	OnStarted func()
 	// SilentStart, when set, stops a process that has written nothing to
 	// stdout this long after it started (an agent CLI stuck before its
 	// first event: no network to its model, a login prompt, a hung tool
@@ -58,7 +62,40 @@ const maxCapture = 8 << 20
 // Command prepares p (binary, arguments, directory, environment) in its own
 // process group: when ctx is done the group is interrupted, then killed.
 // Stdin, stdout and stderr are left for the caller.
-func Command(ctx context.Context, p Process) *exec.Cmd {
+// ManagedCommand retains its process scope after Wait succeeds.
+type ManagedCommand struct {
+	*exec.Cmd
+	scope      *processwatch.Scope
+	prepareErr error
+}
+
+func (c *ManagedCommand) Start() error {
+	if c.prepareErr != nil {
+		return c.prepareErr
+	}
+	if c.scope != nil {
+		return c.scope.Start()
+	}
+	return c.Cmd.Start()
+}
+
+// StopForeground closes a transport after a successful turn without ending
+// the scope: background children remain owned until explicit session cleanup.
+func (c *ManagedCommand) StopForeground() error {
+	if c.Process == nil {
+		return os.ErrProcessDone
+	}
+	return c.Process.Kill()
+}
+
+func (c *ManagedCommand) Run() error {
+	if err := c.Start(); err != nil {
+		return err
+	}
+	return c.Wait()
+}
+
+func Command(ctx context.Context, p Process) *ManagedCommand {
 	cmd := exec.CommandContext(ctx, p.Binary, p.Args...)
 	cmd.Dir = p.Workdir
 	if p.CleanEnv {
@@ -68,7 +105,14 @@ func Command(ctx context.Context, p Process) *exec.Cmd {
 	}
 	setProcessGroup(cmd)
 	cmd.WaitDelay = interruptGrace + 2*time.Second
-	return cmd
+	managed := &ManagedCommand{Cmd: cmd}
+	if manager, owner := processwatch.FromContext(ctx); manager != nil {
+		managed.scope, managed.prepareErr = manager.PrepareContext(ctx, cmd, owner)
+		if managed.scope != nil {
+			cmd.Cancel = managed.scope.Cancel
+		}
+	}
+	return managed
 }
 
 // Exec runs p, killing its whole process group when ctx is done.
@@ -106,7 +150,13 @@ func Exec(parent context.Context, p Process) (ProcessResult, error) {
 			}
 		}()
 	}
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil {
+		if p.OnStarted != nil {
+			p.OnStarted()
+		}
+		err = cmd.Wait()
+	}
 	if lines != nil {
 		lines.flush()
 	}

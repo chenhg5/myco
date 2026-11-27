@@ -38,8 +38,6 @@ func (f *fakeDesktop) Input(ctx context.Context, frameID string, events json.Raw
 // agent reads; an input still running when the owner revokes is stopped at
 // once and reported as maybe-happened.
 func TestDesktopJobsObserveAndStopOnRevoke(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 	h, err := hubserver.Build(hubserver.Options{DBPath: filepath.Join(t.TempDir(), "hub.db"), AdminToken: "admin-token-123456",
 		Policy: app.DefaultMessagePolicy(), OnlineWindow: time.Minute, FilesDir: t.TempDir(), Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {
@@ -47,6 +45,10 @@ func TestDesktopJobsObserveAndStopOnRevoke(t *testing.T) {
 	}
 	hs := httptest.NewServer(h.Handler)
 	defer func() { hs.Close(); h.Close() }()
+	// Start the budget once the hub is up: building it under -race on a slow
+	// Windows runner has taken longer than the whole budget on its own.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	admin, _ := client.New(hs.URL, "admin-token-123456")
 	ct, err := admin.CreateConsoleToken(ctx, "alice-mac")
 	if err != nil {

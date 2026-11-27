@@ -2,7 +2,11 @@
 
 > **Preview.** This works, but has had little real-world use yet; tell us what goes wrong. A bot runs on the computer it was bound on (that computer's runner service), so **it is offline while that computer is off or asleep**: bind it on a computer that stays on if it should always answer.
 
-A **bridge** is an agent's own bot in a chat app. Each agent can have one Feishu/Lark bot and one Slack bot, the same way voice is per agent:
+A **bridge** is an agent's own bot in a chat app. Each agent can have one Feishu bot, one Lark bot and one Slack bot, the same way voice is per agent. Feishu (China) and Lark (international) are separate apps with separate accounts, so each has its own QR code.
+
+The bot *is* the agent: it speaks in the first person ("Got it, on it", "A quick question: …", "Done"), never as a go-between.
+
+**Front desk.** When a model is set for voice chats (Settings › Voice), the bot uses it the same way voice does: a fast model, speaking as the agent, answers what it can at once (who it is, what it is on, how far it got, what came of it). Real work it hands to the agent with the request written out in full, and it says a word first ("Sure, on it"). "Stop" stops the task at work. The App gives each bot that model when it is bound, and gives it to bots bound earlier when they are listed; the model's key is stored in the bot's config file (mode 0600). Without a model, every message goes straight to the agent:
 
 - What you write to the bot becomes a task for that agent.
 - The agent's progress updates one status message in place.
@@ -23,7 +27,8 @@ The machine's runner service, the one a join link installs, runs the bridges con
 
 Open an agent's details. Under "Name and access", the "Chat apps" row has:
 
-- **Bind Feishu:** shows a QR code to scan with the Feishu or Lark phone app.
+- **Bind Feishu:** shows a QR code to scan with the Feishu phone app.
+- **Bind Lark:** the same with the Lark phone app (Lark's own code, from larksuite.com).
 - **Bind Slack:** has a "Create in Slack" link that fills in the app's settings, and boxes for its two tokens.
 
 The row lists the agent's bots, whether each is online, and the `/claim` line of a bot that has no owner yet. Each bot has **Unbind**. Only people who may manage the agent see the row.
@@ -39,13 +44,25 @@ myco im connect feishu --agent coder
 ```
 
 1. The command prints a QR code. Pass `--qr-png qr.png` to also save it as an image.
-2. Scan it with the Feishu or Lark phone app and approve. Feishu creates a personal bot for you, with its permissions and events already set up.
+2. Scan it with the Feishu phone app and approve. Feishu creates a personal bot for you, with its permissions and events already set up.
 3. The command then:
    - saves the bot's credentials in `~/.myco/im/feishu-coder.json` (mode 0600);
    - makes you the bot's owner, the only person it takes tasks from;
    - creates the `im-feishu-coder` node on the hub.
 
-Lark tenants are detected from the scan; `myco im connect lark` works the same way.
+For Lark, the international app, run `myco im connect lark --agent coder`: its code comes from larksuite.com and is scanned with the Lark app. A Feishu code does not work in Lark, nor the other way round.
+
+To give a bot a front-desk model from the command line (the App does this for you):
+
+```bash
+myco im set --name feishu-coder --llm-base-url https://api.example.com/v1 --llm-model fast-model --llm-key-file key.txt
+myco im set --name feishu-coder --no-desk     # straight to the agent again
+myco im set --name feishu-coder --prompt-file rules.txt   # its own instructions (an empty file clears them)
+```
+
+**Instructions.** Each bot can have its owner's own instructions for the front desk, separate from voice chats: in the App, **Instructions** next to the bot; or `--prompt-file` above. They matter most when people other than the owner talk to the bot: how to talk to them, what it may answer, what it must not do. The front desk is told whether the person is the owner, and the instructions win over its defaults. Tasks it hands over for anyone other than the owner carry the instructions too, so the agent keeps to them as well. They are stored in the bot's config file on that computer (at most 8000 characters).
+
+Instructions guide the model; they are not a permission boundary. Someone talking to the bot may persuade the model past them. Who can talk to the bot at all is decided by `myco im allow`; what must never be touched has to be limited by the agent's own permissions and its project's settings.
 
 Then:
 
@@ -121,7 +138,7 @@ myco im allow --name feishu-coder --user ou_123     # --remove to take it back; 
 
 People who aren't allowed get a one-line answer saying how to be let in. Nothing is sent to an agent for them.
 
-Every task goes out from the bridge's node, which belongs to you. The task's text ends with who wrote it in the chat app, for example `（经飞书转述，来自 glenn）` or `(relayed from Slack, by U0123)`. Agents therefore treat it as coming from you: grant access to people you trust.
+Every task goes out from the bridge's node, which belongs to you. The task's text ends with who wrote it in the chat app, for example `（飞书 上 glenn 说的）` or `(said by U0123 on Slack)`; with a front desk, the person's own words are quoted too. Agents therefore treat it as coming from you: grant access to people you trust.
 
 Other agents' messages to the bridge's node (`im-feishu-coder`) are forwarded to the owner in a direct message.
 

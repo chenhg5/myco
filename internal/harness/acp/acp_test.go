@@ -78,6 +78,8 @@ func fakeAgent(scenario string) {
 		note("call %s", method)
 		switch method {
 		case "initialize":
+			info, _ := params["clientInfo"].(map[string]any)
+			note("client-version %v", info["version"])
 			if scenario == "exit" {
 				fmt.Fprintln(os.Stderr, "unknown flag: --acp")
 				os.Exit(2)
@@ -107,6 +109,9 @@ func fakeAgent(scenario string) {
 			switch scenario {
 			case "cancel":
 				chunk(sid, "agent_message_chunk", "working on it")
+				// Text steps flush on the next update: publish that step before
+				// waiting for the test's protocol cancellation barrier.
+				chunk(sid, "agent_thought_chunk", "")
 				for {
 					c := read()
 					note("call %v", c["method"])
@@ -189,10 +194,14 @@ func newFake(t *testing.T, scenario string, opts harness.Options, spec Spec) *fa
 }
 
 func (f *fake) run(ctx context.Context, req harness.Request) (harness.Result, error) {
+	onEvent := req.OnEvent
 	req.OnEvent = func(e harness.Event) {
 		f.mu.Lock()
 		f.events = append(f.events, e)
 		f.mu.Unlock()
+		if onEvent != nil {
+			onEvent(e)
+		}
 	}
 	return f.h.Run(ctx, req)
 }
@@ -317,12 +326,17 @@ func TestRunContinuesTheSession(t *testing.T) {
 
 func TestRunCancelsOverTheProtocol(t *testing.T) {
 	f := newFake(t, "cancel", harness.Options{}, Spec{})
-	ctx, cancel := context.WithCancelCause(context.Background())
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		cancel(errors.New("interrupted by a steer"))
-	}()
-	res, err := f.run(ctx, harness.Request{Prompt: "long job"})
+	parent, stop := context.WithTimeout(t.Context(), 10*time.Second)
+	defer stop()
+	ctx, cancel := context.WithCancelCause(parent)
+	defer cancel(nil)
+	// A fixed wall-clock delay can cancel initialization on a busy host.
+	// Test protocol cancellation only after the prompt has actually started.
+	res, err := f.run(ctx, harness.Request{Prompt: "long job", OnEvent: func(e harness.Event) {
+		if e.Kind == "text" && strings.Contains(e.Text, "working on it") {
+			cancel(errors.New("interrupted by a steer"))
+		}
+	}})
 	if err == nil || !strings.Contains(err.Error(), "interrupted by a steer") {
 		t.Fatalf("err = %v", err)
 	}
@@ -420,6 +434,62 @@ func TestPolicy(t *testing.T) {
 		p := policy{access: c.access, dirs: []string{work}}
 		if got := p.allows(c.call); got != c.want {
 			t.Errorf("%s %+v: %v, want %v", c.access, c.call, got, c.want)
+		}
+	}
+}
+
+// Concurrent runner construction used to write a process-global ACP version.
+// Exercise the actual initialize messages, including the library default,
+// with independently configured agents running at the same time.
+func TestClientVersionIsPerHarness(t *testing.T) {
+	t.Setenv("MYCO_FAKE_ACP", "ok")
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	type check struct {
+		harness harness.Harness
+		log     string
+		version string
+	}
+	var checks []check
+	for i, version := range []string{"v-test-one", "v-test-two", ""} {
+		opts := harness.Options{Binary: exe, ClientVersion: version, Access: harness.AccessReadonly}
+		var h harness.Harness
+		if i == 0 {
+			h, err = New(opts)
+		} else {
+			h, err = Preset("fake", Spec{Binary: exe})(opts)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if version == "" {
+			version = "dev"
+		}
+		checks = append(checks, check{h, filepath.Join(t.TempDir(), "initialize.log"), version})
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results := make(chan error, len(checks))
+	for _, item := range checks {
+		go func(item check) {
+			_, err := item.harness.Run(ctx, harness.Request{Prompt: "check", Workdir: t.TempDir(), Env: []string{"MYCO_FAKE_LOG=" + item.log}})
+			results <- err
+		}(item)
+	}
+	for range checks {
+		if err := <-results; err != nil {
+			t.Error(err)
+		}
+	}
+	for _, item := range checks {
+		data, err := os.ReadFile(item.log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), "client-version "+item.version+"\n") {
+			t.Errorf("initialize did not retain per-harness version %q", item.version)
 		}
 	}
 }

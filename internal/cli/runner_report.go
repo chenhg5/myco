@@ -22,6 +22,7 @@ import (
 	"github.com/myco-ai/myco/internal/harness"
 	"github.com/myco-ai/myco/internal/harness/codex"
 	"github.com/myco-ai/myco/internal/machineid"
+	"github.com/myco-ai/myco/internal/processwatch"
 	"github.com/myco-ai/myco/internal/provider"
 	"github.com/myco-ai/myco/internal/quota"
 	"github.com/myco-ai/myco/internal/runner"
@@ -61,7 +62,8 @@ type runtimeReporter struct {
 	stopped   bool
 	// models lists the models the CLI offers, read again for each report
 	// (its list changes as the CLI updates); nil when it does not say.
-	models func() []api.RuntimeModel
+	models  func() []api.RuntimeModel
+	account func() string
 	// provModels is the list of the provider the agent uses with an API
 	// key (startModels), target where that provider is; refresh* follow
 	// the App's requests to list again.
@@ -83,6 +85,21 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 	// may take seconds on a busy computer). Enrich the same base later.
 	base := api.Runtime{RunnerInstance: runnerInstance, CLI: h.Name(), Access: string(access), MaxAccess: string(maxAccess), Features: runnerFeatures(h), Env: runnerEnv()}
 	rep := &runtimeReporter{restartPath: runnerRestartPath(e.defaultPath), c: c, log: log, cfg: rc.Model, choice: choice, models: cliModels(h.Name()), base: &base}
+	rep.account = func() string {
+		vars, _ := config.ReadEnvFile(rc.EnvFile)
+		env := map[string]string{}
+		for _, kv := range vars {
+			k, v, _ := strings.Cut(kv, "=")
+			env[k] = v
+		}
+		get := func(key string) string {
+			if value, ok := env[key]; ok {
+				return value
+			}
+			return e.in.Getenv(key)
+		}
+		return runtimeAccount(h.Name(), accountHome(get), get)
+	}
 	rep.flushLater() // clear any prior restart lease before slow CLI/tool discovery
 	go func() {
 		ctx, cancel := context.WithTimeout(e.in.Ctx, 30*time.Second)
@@ -114,6 +131,9 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 			}
 		}
 		rep.mu.Lock()
+		// Health may arrive while CLI/tool discovery is running. Keep that
+		// latest observation when publishing the enriched immutable base.
+		rt.MachineHealth = rep.base.MachineHealth
 		rep.base = &rt
 		rep.mu.Unlock()
 		rep.flush(ctx)
@@ -293,6 +313,9 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		rt.RunnerSlots = r.slots
 		if r.maxAccess != "" {
 			rt.MaxAccess = r.maxAccess
+		}
+		if r.account != nil {
+			rt.Account = r.account()
 		}
 		if reflect.DeepEqual(rt, r.last) {
 			r.mu.Unlock()
@@ -486,5 +509,29 @@ func (r *runtimeReporter) watchSlots(ctx context.Context, p *runner.SlotPool, ow
 		case <-tick.C:
 		}
 		r.Slots(p.Snapshot(owner))
+	}
+}
+
+// watchHealth reads the shared sampler; there is no per-profile OS sampling.
+func (r *runtimeReporter) watchHealth(ctx context.Context, m *processwatch.Manager, workspace, owner string) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		h := m.Snapshot(workspace, owner)
+		r.mu.Lock()
+		if r.base != nil {
+			// The discovery goroutine still holds the initial base value.
+			// Publish a copy instead of mutating that shared value in place.
+			next := *r.base
+			next.MachineHealth = h
+			r.base = &next
+		}
+		r.mu.Unlock()
+		r.flushLater()
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }

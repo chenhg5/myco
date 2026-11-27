@@ -105,7 +105,7 @@ export function ErrorText({ error, onRetry, summary }: { error: unknown; onRetry
   React.useEffect(() => setDetails(false), [error]);
   const ask = useCopy(error ? debugPrompt(errorDetail(error)) : "");
   if (!error) return null;
-  const old = !summary && isOldHub(error);
+  const old = !summary && (isOldHub(error) || (error instanceof ApiError && error.code === "upgrade_required"));
   const transient = !summary && isTransient(error);
   const message = summary ? summary.message : old
     ? L("你的工作区版本有点旧，还不支持这个功能。", "This hub runs an older version that doesn't support this yet.")

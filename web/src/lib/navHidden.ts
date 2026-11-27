@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useState } from "react";
 import { L } from "@/lib/i18n";
 
@@ -29,7 +30,7 @@ const EVENT = "myco-nav-hidden";
 
 export function storedNavHidden(): Set<NavEntry> {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) || "[]");
+    const raw = JSON.parse(localPreferences.getItem(KEY) || "[]");
     return new Set((Array.isArray(raw) ? raw : []).filter((x): x is NavEntry => NAV_ENTRIES.includes(x)));
   } catch {
     return new Set();
@@ -48,7 +49,7 @@ export function useNavHidden() {
   const set = (entry: NavEntry, hide: boolean) => {
     const next = storedNavHidden();
     if (hide) next.add(entry); else next.delete(entry);
-    try { localStorage.setItem(KEY, JSON.stringify([...next])); } catch { /* not kept */ }
+    try { localPreferences.setItem(KEY, JSON.stringify([...next])); } catch { /* not kept */ }
     setHidden(next);
     window.dispatchEvent(new Event(EVENT));
   };

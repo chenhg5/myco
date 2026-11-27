@@ -122,8 +122,11 @@ func (n *node) Run(ctx context.Context, req harness.Request) (harness.Result, er
 			senders = cur
 		}
 	}
+	// The runner may include the Hub-confirmed owner's exact console identity
+	// in CurrentSenders. No prefix matching or sender-supplied ownership applies.
+	allowed := slices.Contains(senders, req.From) || slices.Contains(senders, "*")
 	switch {
-	case len(senders) > 0 && !slices.Contains(senders, req.From) && !slices.Contains(senders, "*"):
+	case len(senders) > 0 && !allowed:
 		res = denied(fmt.Sprintf("sender %q is not allowed to run commands on this node", req.From))
 	case len(senders) == 0:
 		res = denied("this exec node has no allowed senders configured (set allow_from on the agent)")

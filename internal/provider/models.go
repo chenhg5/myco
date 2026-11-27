@@ -246,6 +246,31 @@ var errNoModels = errors.New("no models")
 // FetchModels asks the endpoint's vendor for its models, with its key, on
 // this computer. Errors name the host and status only.
 func FetchModels(ctx context.Context, client *http.Client, e Endpoint) ([]Model, error) {
+	ms, err, _ := discoverModels(ctx, client, e)
+	return ms, err
+}
+
+func discoverModels(ctx context.Context, client *http.Client, e Endpoint) ([]Model, error, bool) {
+	c := modelClient(client)
+	var last error = errNoModels
+	mayProbe := true
+	for _, u := range modelURLs(e) {
+		ms, err := fetchList(ctx, c, u, e.Key)
+		if err == nil && len(ms) > 0 {
+			return ms, nil, false
+		}
+		if err != nil {
+			last = err
+			mayProbe = mayProbe && modelListUnavailable(err)
+		}
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return nil, last, mayProbe
+}
+
+func modelClient(client *http.Client) *http.Client {
 	if client == nil {
 		client = &http.Client{}
 	}
@@ -260,20 +285,17 @@ func FetchModels(ctx context.Context, client *http.Client, e Endpoint) ([]Model,
 		}
 		return nil
 	}
-	var last error = errNoModels
-	for _, u := range modelURLs(e) {
-		ms, err := fetchList(ctx, &c, u, e.Key)
-		if err == nil && len(ms) > 0 {
-			return ms, nil
-		}
-		if err != nil {
-			last = err
-		}
-		if ctx.Err() != nil {
-			break
-		}
-	}
-	return nil, last
+	return &c
+}
+
+// HTTPStatusError deliberately excludes the response body, URL and credentials.
+type HTTPStatusError struct {
+	Host   string
+	Status int
+}
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("models from %s: HTTP %d", e.Host, e.Status)
 }
 
 // authStyles: both headers first (most vendors take either); a vendor that
@@ -351,7 +373,7 @@ func get(ctx context.Context, c *http.Client, u, key, style string) ([]byte, int
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 64<<10))
-		return nil, res.StatusCode, fmt.Errorf("models from %s: HTTP %d", hostOf(u), res.StatusCode)
+		return nil, res.StatusCode, &HTTPStatusError{Host: hostOf(u), Status: res.StatusCode}
 	}
 	b, err := io.ReadAll(io.LimitReader(res.Body, 1<<20+1))
 	if err != nil {

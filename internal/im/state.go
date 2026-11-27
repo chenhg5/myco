@@ -19,6 +19,12 @@ type conversation struct {
 	Status string    `json:"status_message,omitempty"` // the status message's id
 	User   string    `json:"user,omitempty"`           // who gave the open task
 	At     time.Time `json:"at"`
+	// For the front desk: the open task's question and latest progress, the
+	// last result, and the recent talk.
+	Asking     string    `json:"asking,omitempty"`
+	Progress   string    `json:"progress,omitempty"`
+	LastAnswer string    `json:"last_answer,omitempty"`
+	Desk       []deskMsg `json:"desk,omitempty"`
 }
 
 // state is a bridge's memory, kept next to its config.

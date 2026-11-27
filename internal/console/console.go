@@ -159,6 +159,7 @@ func randomHex(n int) string {
 
 // Backend serves the /app/ API.
 type Backend struct {
+	preferenceMu  sync.Mutex
 	backupLoop    sync.Once // the hourly copy of backups to this computer
 	remoteDesktop remoteDesktop
 	browser       browserState
@@ -266,6 +267,7 @@ func (b *Backend) clientForToken(h Hub, tok string) (*client.Client, error) {
 // Handler returns the /app/ API.
 func (b *Backend) Handler() http.Handler {
 	m := http.NewServeMux()
+	b.preferenceRoutes(m)
 	b.cacheRoutes(m)
 	b.uiLangRoutes(m)
 	b.noticeRoutes(m)
@@ -931,16 +933,18 @@ func (b *Backend) Handler() http.Handler {
 	}))
 	m.HandleFunc("PUT /app/hubs/{id}/agents/{name}/allow_from", b.withHub(func(w http.ResponseWriter, r *http.Request, c *client.Client) {
 		var in struct {
-			AllowFrom *[]string `json:"allow_from"`
+			AllowFrom   *[]string `json:"allow_from,omitempty"`
+			AllowAdd    *[]string `json:"allow_add,omitempty"`
+			AllowRemove *[]string `json:"allow_remove,omitempty"`
 		}
 		if !decode(w, r, &in) {
 			return
 		}
-		if in.AllowFrom == nil {
-			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "allow_from is required ([] = anyone)"})
+		if in.AllowFrom == nil && in.AllowAdd == nil && in.AllowRemove == nil {
+			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "allow_from, allow_add or allow_remove is required"})
 			return
 		}
-		a, err := c.UpdateProfile(r.Context(), r.PathValue("name"), api.ProfileRequest{AllowFrom: in.AllowFrom})
+		a, err := c.UpdateProfileWithChanges(r.Context(), r.PathValue("name"), api.ProfileRequest{AllowFrom: in.AllowFrom, AllowAdd: in.AllowAdd, AllowRemove: in.AllowRemove})
 		if err != nil {
 			writeErr(w, err)
 			return

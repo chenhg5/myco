@@ -4,6 +4,76 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.8
+
+Brief release notes, generated from commit titles. Formal notes will follow.
+- App: ` Hide offline computers in the Add agent dialog ` (ac8d612d)
+- App: ` App: adding a model provider picks the vendor from a select ` (cf6cf4ce)
+- App: ` App: the mic and Send stay inside a narrow box you write in ` (781789e2)
+- App: ` Observe delayed first-character rendering in latency diagnostics ` (7b904063)
+- App, Runner, CLI, Hub: ` Measure message startup and first-text delivery stages ` (b892ba85)
+
+**中文**
+
+简要说明，直接列出提交原标题；正式说明稍后补充。
+- 桌面应用：` Hide offline computers in the Add agent dialog ` (ac8d612d)
+- 桌面应用：` App: adding a model provider picks the vendor from a select ` (cf6cf4ce)
+- 桌面应用：` App: the mic and Send stay inside a narrow box you write in ` (781789e2)
+- 桌面应用：` Observe delayed first-character rendering in latency diagnostics ` (7b904063)
+- 桌面应用、任务执行器、命令行、Hub：` Measure message startup and first-text delivery stages ` (b892ba85)
+
+https://github.com/myco-ai/myco/compare/06f778050761ab1cf9f59c6a4ffb30e94f40b228...09b238382f1f5c63c3cab4c297d9ab6ffd085428
+
+## v0.23.7
+
+- App and CLI: each chat-app bot can have its own instructions for the front desk, separate from voice chats — how it should talk, what it may answer and what it must not do — written under Instructions next to the bot, or read from a file with `myco im set --prompt-file` (an empty file clears them); at most 8000 characters, and work handed over for anyone other than the owner carries them too. They guide the model without being a permission boundary — someone may talk the model past them.
+- App: a MiniMax model provider now has a MiniMax region setting — international or China — and uses that region's endpoints, and lists MiniMax-M3 and MiniMax-M3.1-Flash instead of MiniMax-M2; its connection test result also says whether the models it found came from the provider or from myco's built-in catalog.
+- App: the new-agent dialog is tidier — the field that names the agent now says 它的名字 (it can be left blank, e.g. 后端小助手) and comes before the folder, and the model source is a short list of choices instead of two tall cards.
+- App: the new-agent dialog's 用哪个 AI now shows Claude Code, Codex, Gemini CLI and Cursor first, plus any AI this computer has installed and the one already picked; the rest are behind 更多 · N.
+- App and CLI: an agent's runtime report now carries a private account email reported locally — an identity hint, not authentication — and the App shows it next to the agent's machine name.
+- App: the handover dialog now notices within a few seconds once the command is used — before, its 3-second check was torn down every second and never asked the hub, so it kept saying it was waiting — and closing and reopening it finds the same handover (only its id is kept, not the command).
+- App: a queued message's Edit and Withdraw buttons stay clickable while it is still on its way to the hub — before, the row greyed them out and a disabled button swallowed the first click — so one click waits for the message to reach the hub, then edits or withdraws that one.
+
+**中文**
+
+- 桌面应用与命令行：每个聊天软件机器人可以有自己的接待设定，和语音聊天分开——怎么说话、能答什么、不能做什么——在机器人旁边的「Instructions」里写，或用 `myco im set --prompt-file` 从文件读入（空文件即清除）；最多 8000 字符，主人以外的人交下去的活也会带上它。它只是给模型的指引，不是权限边界，别人有可能把模型说动绕过它。
+- 桌面应用：MiniMax 模型供应商现在有「MiniMax 地区」设置——国际版或国内版——并使用对应地区的接口，模型列表改为 MiniMax-M3 和 MiniMax-M3.1-Flash（取代 MiniMax-M2）；连接测试的结果还会说明找到的模型来自供应商还是 myco 内置的模型目录。
+- 桌面应用：新建 agent 的对话框更清爽——给 agent 起名的字段现在写作「它的名字」（可以不填，比如「后端小助手」），并排在文件夹之前；模型来源是一份短的选项列表，不再是两张高卡片。
+- 桌面应用：新建 agent 的「用哪个 AI」现在先显示 Claude Code、Codex、Gemini CLI 和 Cursor，以及这台电脑上装了的其他 AI 和已选的那个；其余收在「更多 · N」里。
+- 桌面应用与命令行：agent 的运行时上报现在会带上一份本地提供的账号邮箱——只是身份提示，不是认证——App 会在 agent 的机器名旁把它显示出来。
+- 桌面应用：交棒对话框现在会在命令被用掉后几秒内发现——以前那次 3 秒检查每秒都被拆掉、从没问过 Hub，于是一直显示还在等待——关掉再打开还是同一个交棒（只保留 id，不保留命令）。
+- 桌面应用：排队中的消息在发往 Hub 途中，「编辑」和「撤回」按钮仍可点击——以前这一行会把它们变灰，被禁用的按钮会吞掉第一次点击——现在点一次会等消息到达 Hub，再编辑或撤回那一条。
+
+## v0.23.6
+
+- CLI and App: a chat-app bot (Feishu, Lark, Slack) now speaks as the agent itself — status and replies are in the first person, never "passed to X" — and Feishu and Lark are separate apps, each with its own Bind button and QR code.
+- CLI and App: with the voice model set in the App, a fast front desk answers a chat-app bot's messages as the agent — who it is, what it is on, progress and results — and hands real work over to it; without a model, or when it fails, messages go straight to the agent. The App gives new and existing bots that model, and `myco im connect`/`set` take --llm-* to choose it, with --no-desk to turn the front desk off.
+- App: preferences are now kept in the App's own profile instead of the window's built-in browser storage, so they stay as you left them across restarts and updates.
+- App: a workflow's run dialog now reads as a form — the line under the title names the first step and who gets it; inputs are rows with the name on the left and the box on the right, long text spans the width, a yes/no is a switch, required inputs come first, and optional ones follow under "optional", with more than three folded behind one line that says what they are set to; ⌘↵ starts the run.
+- App: the faint "N items hidden" line at the foot of the sidebar is gone; what the sidebar shows is still set in Settings → Appearance and from an entry's right-click menu.
+- App: in the clean style, a project's head and a chat's head are one line — a project's shows only its name, with the goal on hover — and both are the same, shorter height.
+- App: automations and workflows are shown as cards, and a failed last run keeps its red dot while its reason becomes one quiet line, elided when long, with the whole reason on hover instead of a red sentence.
+- App: Settings › Model providers puts its title, the workspace (when there are several) and the add button in one head row, and says what to do — when there is nothing yet, or it cannot be used yet — in a short card with the way forward.
+- Hub: a key the hub keeps no longer shows a last-four hint when it is under 12 characters — before, a short key was kept in the clear and an 8-character key by half — so a short key no longer appears in the hint.
+- Hub: a computer that starts more than six agents with a model provider in a minute is no longer refused — each spawn's one-use grant is now its own limit, while other provider-setting reads stay at six a minute per caller.
+- Hub: model providers now work whether or not a workspace turns end-to-end encryption on — with it off the hub keeps the key, sealed with the workspace's own key, and responses show only who holds the key and its last four characters; a missing key file is reported as "key lost" instead of being quietly remade, and backups carry it with the database and restores put it back.
+- Browser automation: ending a recording or run no longer makes Chrome on macOS crash — Chrome itself is asked to quit first and given up to 3 seconds, instead of the whole process group being told to quit, so "Google Chrome quit unexpectedly" stops appearing after a session ends; a Chrome that does not quit is killed outright.
+
+**中文**
+
+- 命令行与桌面应用：聊天应用里的机器人现在以 agent 本人的口吻说话——状态和回复都用第一人称，不再说「已转给 X」；飞书和 Lark 是两个独立应用，各有自己的绑定按钮和二维码。
+- 命令行与桌面应用：在 App 里设好语音模型后，一个快速的前台会以 agent 的身份回应聊天应用里的消息——它是谁、在做什么、进展和结果——并把真正的工作交给 agent；没有模型或模型出错时，消息直接交给 agent。App 会把前台用的语音模型交给新建和已有的机器人；`myco im connect`/`set` 可用 --llm-* 指定模型，--no-desk 可关闭前台。
+- 桌面应用：偏好设置现在保存在 App 自己的配置里，不再依赖窗口内置浏览器的存储，重启和升级后仍保持原样。
+- 桌面应用：工作流的运行对话框现在像一张表单——标题下的一行写明第一步和由谁执行；每个输入是一行，名称在左、输入框在右，长文本占满整行，是/否用开关，必填项在前，可选项放在「可选」下、超过三项时折叠为一行并写明当前取值；⌘↵ 即可开始运行。
+- 桌面应用：侧栏底部那行淡淡的「已隐藏 N 项：…」已去掉；侧栏显示哪些条目仍在 设置 → 外观 和条目的右键菜单里调整。
+- 桌面应用：清爽模式下，项目页和对话页的标题都只有一行——项目只显示名称，目标悬停可见——两者高度一致，也比之前矮。
+- 桌面应用：自动化和工作流改为卡片显示；最近一次运行失败时仍保留红点，但原因改成一行安静的说明、过长会截断，悬停可看全文，不再是一整句红字。
+- 桌面应用：设置 › 模型供应商 把标题、工作区（有多个时）和「新增」放在同一行；还没有供应商或暂时不能用时，用一张小卡片说明下一步怎么做。
+- Hub：Hub 代管的 Key 不足 12 个字符时不再显示末四位提示——以前短 Key 等于明文留存、8 位的 Key 也被留了一半——短 Key 因此不再出现在提示里。
+- Hub：一台电脑一分钟内为超过六个 agent 启动并带模型供应商时不再被拒——每次启动的一次性授权现在各自计数，其他读取供应商设置仍按每个调用者每分钟六次限制。
+- Hub：无论工作区是否开启端到端加密，模型供应商都能用——关闭时由 Hub 代管 Key，用工作区自己的密钥封装，返回值只显示由谁保管和末四位字符；密钥文件丢失时会报告「key lost」而不是悄悄重建，备份会连同数据库一起带上它，恢复时也一并放回。
+- 网页自动化：录制或运行结束时，macOS 上的 Chrome 不会再崩溃——现在先只请 Chrome 自己退出、最多等 3 秒，而不是先给整个进程组发终止信号，因此会话结束后不再弹出「Google Chrome quit unexpectedly」；Chrome 若不退出则直接强制结束。
+
 ## v0.23.5
 
 - CLI: `myco hub perf` now also reports the workspace's database pool — connections in use and idle, and the wait count and wait time accumulated since the pool opened (not just the requested minutes) — so time spent waiting for a connection is visible apart from statement time.

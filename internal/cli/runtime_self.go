@@ -152,7 +152,11 @@ func reportSessionRuntime(ctx context.Context, c *client.Client, getenv func(str
 		return
 	}
 	cli, model, effort := sessionRuntime(getenv)
-	if model == "" {
+	if getenv("CLAUDE_CODE_REMOTE_SESSION_ID") != "" {
+		cli = "claude-cloud"
+	}
+	account := runtimeAccount(cli, accountHome(getenv), getenv)
+	if model == "" && account == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -166,12 +170,18 @@ func reportSessionRuntime(ctx context.Context, c *client.Client, getenv func(str
 		rt = *me.Runtime
 	}
 	if rt.ModelSource != "" && rt.ModelSource != "self" {
+		if me.Binding.Harness != "claude-cloud" {
+			return
+		}
+		model, effort = "", rt.Effort
+	}
+	if rt.Account == account && rt.Model == model && rt.Effort == effort && rt.ModelSource == "self" {
 		return
 	}
-	if rt.Model == model && rt.Effort == effort && rt.ModelSource == "self" {
-		return
+	rt.Account = runtimeAccount(me.Binding.Harness, accountHome(getenv), getenv)
+	if model != "" {
+		rt.Model, rt.ModelSource = model, "self"
 	}
-	rt.Model, rt.ModelSource = model, "self"
 	rt.Effort, rt.EffortSource = effort, ""
 	if effort != "" {
 		rt.EffortSource = "self"

@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { CSSProperties } from "react";
@@ -11,7 +12,7 @@ import { PRESETS } from "@/app/chatBg";
  * a dark shade each) or one of the chat backgrounds' gradients and patterns.
  * It covers the whole page, or only what is around the conversation (which
  * then keeps the theme's own, like a sheet on a desk). Kept on this
- * computer, in localStorage.
+ * computer, in the local App profile.
  */
 
 export type FocusScope = "all" | "outside";
@@ -59,7 +60,7 @@ export function readable(hex: string, dark: boolean): boolean {
 
 function read(): FocusBgChoice {
   let raw = "";
-  try { raw = localStorage.getItem(KEY) || ""; } catch { /* not kept */ }
+  try { raw = localPreferences.getItem(KEY) || ""; } catch { /* not kept */ }
   let v: Partial<FocusBgChoice> = {};
   try { v = raw.startsWith("{") ? JSON.parse(raw) as Partial<FocusBgChoice> : { id: raw }; } catch { /* as none */ }
   const custom = {
@@ -78,7 +79,7 @@ export function useFocusBg(): [FocusBgChoice, (c: FocusBgChoice) => void] {
   const [c, setC] = useState<FocusBgChoice>(read);
   const set = (next: FocusBgChoice) => {
     setC(next);
-    try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* not kept */ }
+    try { localPreferences.setItem(KEY, JSON.stringify(next)); } catch { /* not kept */ }
   };
   return [c, set];
 }

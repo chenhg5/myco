@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
 import { L } from "@/lib/i18n";
@@ -22,9 +23,9 @@ const SEEN = "myco-intro-seen";
 const DID = "myco-onboard-did";
 const EVENT = "myco-onboard-changed";
 
-const get = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
+const get = (k: string) => { try { return localPreferences.getItem(k); } catch { return null; } };
 const set = (k: string, v: string | null) => {
-  try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* not kept */ }
+  try { if (v === null) localPreferences.removeItem(k); else localPreferences.setItem(k, v); } catch { /* not kept */ }
   window.dispatchEvent(new CustomEvent(EVENT));
 };
 

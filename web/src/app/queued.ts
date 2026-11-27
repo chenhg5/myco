@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 /*
  * Messages put after the running task (⌘/Ctrl+Enter) on a workspace that
  * cannot hold them itself: kept per conversation, like a draft, so they
@@ -24,7 +25,7 @@ function all(): Map<string, Queued[]> {
   if (queues) return queues;
   queues = new Map();
   try {
-    const raw = localStorage.getItem(STORE);
+    const raw = localPreferences.getItem(STORE);
     if (raw) {
       for (const [k, v] of JSON.parse(raw) as [string, Queued[]][]) {
         if (!Array.isArray(v)) continue;
@@ -41,7 +42,7 @@ function save() {
   if (saving !== null) return;
   saving = window.setTimeout(() => {
     saving = null;
-    try { localStorage.setItem(STORE, JSON.stringify([...all()])); } catch { /* not kept */ }
+    try { localPreferences.setItem(STORE, JSON.stringify([...all()])); } catch { /* not kept */ }
   }, 300);
 }
 

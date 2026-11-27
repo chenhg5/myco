@@ -1,3 +1,5 @@
+import { parseWorkflowNote, parseWorkflowStep, WorkflowNoteCard, WorkflowStepCard } from "@/app/WorkflowNote";
+import { localPreferences } from "@/lib/localPreferences";
 import { runnerUpdating } from "@/lib/runner-state";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Focus as FocusIcon, AlertTriangle, ArrowDown, ArrowLeft, ArrowRightLeft, ArrowUp, ArrowUpRight, Check, ChevronRight, Copy, AudioLines, Download, Images, Lock, MoreHorizontal, Paintbrush, Pin as PinIcon, PinOff, Search, Settings2, Square, Target, Trash2, WifiOff, X } from "lucide-react";
@@ -20,7 +22,7 @@ import { forkAgent } from "@/app/Fork";
 import { HandoffCard, handoffsFrom, withStale } from "@/app/Handoff";
 import { TurnRail, type Turn } from "@/app/TurnRail";
 import { summarize } from "@/app/summary";
-import { ErrorText } from "@/app/dialogs";
+import { ErrorText, Modal } from "@/app/dialogs";
 import { recall, remember as rememberMemo } from "@/lib/memo";
 import { useCopy } from "@/app/copy";
 import { cn, timeAgo } from "@/lib/utils";
@@ -250,7 +252,7 @@ const STARTERS_PROJECT: [string, string][] = [
   ["找出成员之间重复或冲突的工作", "Find work members are duplicating or clashing on"],
 ];
 const STARTERS_OFF = "myco-starters-off";
-const startersOff = () => { try { return localStorage.getItem(STARTERS_OFF) === "1"; } catch { return false; } };
+const startersOff = () => { try { return localPreferences.getItem(STARTERS_OFF) === "1"; } catch { return false; } };
 
 /** An empty chat: the agent's face, large, a question to start with, and
  *  a few things to ask (a click puts one in the box, to send or change). */
@@ -278,7 +280,7 @@ function EmptyChat({ agent, name, project, onStarter }: { agent?: Agent; name: s
           <div className="conv-starters-foot">
             <button type="button" onClick={() => setPage((n) => n + 3)}>{L("换一批", "Others")}</button>
             <span aria-hidden>·</span>
-            <button type="button" onClick={() => { try { localStorage.setItem(STARTERS_OFF, "1"); } catch { /* not kept */ } setOff(true); }}>{L("不再显示", "Don't show again")}</button>
+            <button type="button" onClick={() => { try { localPreferences.setItem(STARTERS_OFF, "1"); } catch { /* not kept */ } setOff(true); }}>{L("不再显示", "Don't show again")}</button>
           </div>
         </div>
       )}
@@ -443,6 +445,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // (One put after the running round, ⌘↩, shows in the queue above the box
   // at once instead: it is queued, not sending.)
   const [pending, setPending] = useState<{ body: string; files: { id: string; name: string; size: number; preview?: string }[]; queued?: boolean; at?: number } | null>(null);
+  // The queued message the hub just took: a click on its row while it is
+  // still on its way acts on that one once it is there (a files-only
+  // message is worded differently once sent, so its words do not find it).
+  const queuedLanded = useRef<Message | null>(null);
   // Files going with the next message (pasted, dropped or picked).
   const att = useAttachments(target.hubId, draftKey);
   // Messages put after the running one, while the workspace cannot hold
@@ -960,6 +966,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const hiddenMessage = (m: Message): boolean => withdrawn.has(m.id) || afterOpen(m) || neverSent(m) || hiddenIds.has(m.id)
     || ((m.type === "progress" || m.type === "steer") && !!m.reply_to && hiddenIds.has(m.reply_to));
   const hubQueue = (messages || []).filter((m) => afterOpen(m) && !withdrawn.has(m.id));
+  // What unqueue re-chains from: awaited queue actions act on the latest
+  // list, not the one of the click (a message may have landed meanwhile).
+  const hubQueueRef = useRef(hubQueue);
+  hubQueueRef.current = hubQueue;
 
   // Everything shown: in the exchange view, older pages before the newest.
   const alsoSet = new Set(others || []);
@@ -1589,11 +1599,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // carries it, not this clock's).
   const clearKey = `myco-term-clear:${target.hubId}/${target.agent}`;
   const [clearedAfter, setClearedAfter] = useState<string | null>(() => {
-    try { return localStorage.getItem(clearKey); } catch { return null; }
+    try { return localPreferences.getItem(clearKey); } catch { return null; }
   });
   const setCleared = (id: string | null) => {
     setClearedAfter(id);
-    try { if (id) localStorage.setItem(clearKey, id); else localStorage.removeItem(clearKey); } catch { /* storage unavailable */ }
+    try { if (id) localPreferences.setItem(clearKey, id); else localPreferences.removeItem(clearKey); } catch { /* storage unavailable */ }
   };
   const clearScreen = () => {
     // The latest by time, which is not always the last in the list.
@@ -1680,6 +1690,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         if (queueOnHub) {
           // Behind the last one already waiting: they go one after another.
           m = await sendNew(threadId, hubQueue[hubQueue.length - 1]?.id || openTask!.id);
+          queuedLanded.current = m;
         } else {
           // This hub cannot hold it: keep it here and send it when the
           // round ends (queued.ts).
@@ -1731,10 +1742,20 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (draft.trim() === sendLater.text) void send(sendLater.mode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sending, sendLater]);
-  // While a message is on its way into the queue (or waits to go), the
-  // queue's rows are not changed: taking one out needs all of them on the
-  // hub, or one still on its way would be let go behind it.
-  const queueSettling = sending || !!sendLater;
+  // A queue row's buttons stay usable while a message is on its way: a
+  // click waits for it, then acts. Taking one out re-chains those behind it
+  // from what is on the hub, and one still on its way has no id to take out
+  // yet (once it is there, it does).
+  const queueWaiters = useRef<(() => void)[]>([]);
+  const queueSettled = () => (sending || sendLater)
+    ? new Promise<void>((resolve) => { queueWaiters.current.push(resolve); })
+    : Promise.resolve();
+  useEffect(() => {
+    if (sending || sendLater) return;
+    const waiters = queueWaiters.current;
+    queueWaiters.current = [];
+    waiters.forEach((resolve) => resolve());
+  }, [sending, sendLater]);
   /** A message of yours with this text, sent since then, if the hub has it. */
   const landed = async (body: string, since: number): Promise<Message | null> => {
     await new Promise((r) => setTimeout(r, 1500));
@@ -1845,6 +1866,28 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     }
   };
 
+  // Its open work from elsewhere, handled here (查看并处理): a small dialog
+  // listing it, each with the ways to settle it, instead of a trip to its
+  // profile. What is settled leaves the list at once.
+  const [elsewhereOpen, setElsewhereOpen] = useState(false);
+  const [settled, setSettled] = useState<Set<string>>(new Set());
+  const settle = async (task: Message, how: "done" | "stop") => {
+    setStopError(null);
+    setResending(task.id);
+    try {
+      if (how === "done") await appApi.dismissMessage(target.hubId, task.id);
+      else await appApi.stop(target.hubId, task.id);
+      setSettled((s) => new Set(s).add(task.id));
+      onRefresh?.();
+    } catch (e) {
+      setStopError(e);
+    } finally {
+      setResending(null);
+    }
+  };
+  // Its profile, over this page (the head's face or name): nothing moves.
+  const openProfileHere = () => window.dispatchEvent(new CustomEvent("myco-open-profile", { detail: { hubId: target.hubId, name: target.agent, stay: true } }));
+
   // Commands other nodes sent to the computer in view. The terminal shows
   // only your own conversation with it, so these have no row there: the
   // overview knows what it is on, and which of it may have gone quiet.
@@ -1934,9 +1977,24 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const queueRows: QueueItem[] = [
     ...localQueue.map((q) => ({ key: q.id, body: q.body, local: q })),
     ...hubQueue.map((m) => ({ key: m.id, body: m.body, server: m })),
-    // (on its way to the hub's queue: in it at once, its buttons once it is there)
+    // (on its way to the hub's queue: in it at once; a click on its buttons
+    // waits until it is there, then acts)
     ...(pending?.queued ? [{ key: "pending", body: pending.body || pending.files.map((f) => f.name).join("、"), sending: true }] : []),
   ];
+  const queueRowsRef = useRef(queueRows);
+  queueRowsRef.current = queueRows;
+  // One row acted on at a time: two take-outs re-chain the same messages.
+  const queueActing = useRef(false);
+  // The row a click meant, once anything on its way is through: a row that
+  // was still on its way is the hub's copy now (same words), with an id.
+  const queueRowNow = (item: QueueItem): QueueItem | undefined => {
+    if (item.sending && queuedLanded.current) {
+      const landed = queueRowsRef.current.find((r) => r.key === queuedLanded.current!.id);
+      if (landed) return landed;
+    }
+    return queueRowsRef.current.find((r) => r.key === item.key)
+      ?? [...queueRowsRef.current].reverse().find((r) => !!r.server && r.body === item.body);
+  };
   const dropLocal = (id: string) => {
     writeQueue(localQueue.filter((x) => x.id !== id));
     setFlushStalled(false);
@@ -1947,7 +2005,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const unqueue = async (gone: Message) => {
     const chain: Message[] = [];
     for (let cur = gone.id; ;) {
-      const next = hubQueue.find((x) => x.after === cur);
+      const next = hubQueueRef.current.find((x) => x.after === cur);
       if (!next || chain.includes(next)) break;
       chain.push(next);
       cur = next.id;
@@ -1970,13 +2028,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const withdrawQueueItem = async (item: QueueItem) => {
     setQueueError(null);
     if (item.local) { dropLocal(item.local.id); return; }
-    if (!item.server || queueBusy) return;
+    if (queueActing.current) return;
+    queueActing.current = true;
     setQueueBusy(item.key);
     try {
-      await unqueue(item.server);
+      let row = item;
+      if (sending || sendLater) {
+        await queueSettled();
+        row = queueRowNow(item) || item;
+        if (row !== item) setQueueBusy(row.key);
+      }
+      if (row.server) await unqueue(row.server);
     } catch (e) {
       setQueueError(e);
     } finally {
+      queueActing.current = false;
       setQueueBusy(null);
     }
   };
@@ -1993,13 +2059,21 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       inputRef.current?.focus();
       return;
     }
-    if (!item.server || queueBusy) return;
+    if (queueActing.current) return;
+    queueActing.current = true;
     setQueueError(null);
     setQueueBusy(item.key);
     try {
-      await unqueue(item.server);
-      const files = item.server.attachments || [];
-      writeDraft(filesOnly(item.body, files.length) ? "" : item.body);
+      let row = item;
+      if (sending || sendLater) {
+        await queueSettled();
+        row = queueRowNow(item) || item;
+        if (row !== item) setQueueBusy(row.key);
+      }
+      if (!row.server) return;
+      await unqueue(row.server);
+      const files = row.server.attachments || [];
+      writeDraft(filesOnly(row.body, files.length) ? "" : row.body);
       att.restore(files.map((a) => ({
         id: a.file_id, name: a.name, size: a.size,
         preview: /^image\//.test(a.content_type || "") ? appApi.attachmentUrl(target.hubId, a.file_id) : undefined,
@@ -2008,6 +2082,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     } catch (e) {
       setQueueError(e);
     } finally {
+      queueActing.current = false;
       setQueueBusy(null);
     }
   };
@@ -2254,10 +2329,16 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         );
       }
       if (m.type === "event") {
+        // (the hub's own line, "task failed: why": said in words, quietly)
+        const failed = /^task failed:\s*/i.exec(m.body);
+        // A workflow's step that was not done says so in its own card: the
+        // hub's line about it would say the same thing twice.
+        const about = failed && m.reply_to ? byId.get(m.reply_to) : undefined;
+        if (about?.workflow && about.type === "task" && !about.unreadable && parseWorkflowStep(about.body)) return null;
         return (
-          <div className="conv-event" key={m.id}>
+          <div className="conv-event" key={m.id} data-msg={m.id}>
             <AlertTriangle />
-            <span>{m.body}</span>
+            <span>{failed ? L(`这条任务没完成：${m.body.slice(failed[0].length)}`, `This task was not done: ${m.body.slice(failed[0].length)}`) : m.body}</span>
             <span className="conv-event-time">{clockTime(m.created_at)}</span>
           </div>
         );
@@ -2289,10 +2370,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       // words, and sending it again is one click.
       const retry = m.type === "task" && m.status === "failed" && !!m.error && m.error !== STOPPED && isMe(m.from, row?.hub) && !observed;
       const receipt = receiptOf(m);
+      // A workflow's run ended (the note it sends whoever started it): a card.
+      const wfNote = m.workflow && m.type === "note" && !m.unreadable ? parseWorkflowNote(m.body) : null;
+      // A step it gave an agent: what to do, the rest folded.
+      const wfStep = m.workflow && m.type === "task" && !m.unreadable ? parseWorkflowStep(m.body) : null;
+      // Sent by a workflow in your name: the workspace's, shown as such.
+      const bySystem = !!(wfNote || wfStep) && isMe(m.from, row?.hub);
       return (
         <Fragment key={m.id}>
-        <div className={cn("conv-msg", mine ? "is-me" : "is-agent", (fromOther || toOther || (alsoSet.size > 0 && showName && isMe(m.from, row?.hub))) && "is-other")} data-msg={m.id} data-turn={turnIds.has(m.id) ? m.id : undefined}>
-          {fromOther ? <div className="conv-msg-name">{nameOf(m.from)}</div>
+        <div className={cn("conv-msg", mine ? "is-me" : "is-agent", bySystem && "is-system", (fromOther || toOther || (alsoSet.size > 0 && showName && isMe(m.from, row?.hub))) && "is-other")} data-msg={m.id} data-turn={turnIds.has(m.id) ? m.id : undefined}>
+          {/* (what a workflow sent in your name is the workspace's, not yours:
+              no "你" over it; its card says which workflow) */}
+          {bySystem ? null
+            : fromOther ? <div className="conv-msg-name">{nameOf(m.from)}</div>
             : alsoSet.size > 0 && isMe(m.from, row?.hub) ? (showName ? <div className="conv-msg-name">{L("你", "You")}</div> : null)
             : toOther ? <div className="conv-msg-name">{L(`回复 ${nameOf(m.to)}`, `To ${nameOf(m.to)}`)}</div>
             : showName && <div className="conv-msg-name">{nameOf(m.from)}</div>}
@@ -2306,9 +2396,12 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             ) : (
               <span className="conv-quote is-gone">{L("回复更早的一条消息", "Replying to an earlier message")}</span>
             ))}
-            {m.type === "note" && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
+            {m.type === "note" && !wfNote && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
             {mine && voiced && <VoiceMark heard={voiced.heard} />}
-            {m.unreadable
+            {wfNote ? <WorkflowNoteCard hubId={target.hubId} note={wfNote} />
+              : wfStep && m.workflow ? <WorkflowStepCard hubId={target.hubId} runId={m.workflow} step={wfStep}
+                failed={m.status === "failed" && m.error && m.error !== STOPPED ? m.error : ""} />
+              : m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : mine && voiced ? <MessageContent body={voiced.text} />
               : growsIn(m) ? <Reveal body={m.body} foldId={m.id} files={filesOf(m)} finish={m.id !== newestId} onDone={() => { revealed.add(m.id); setRevealedTick((n) => n + 1); }} />
@@ -2325,7 +2418,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               const rest = f.items.filter((a) => !inText.has(a.file_id));
               return rest.length > 0 ? <MessageAttachments hubId={target.hubId} items={rest} /> : null;
             })()}
-            {!growsIn(m) && !m.unreadable && <PageCards body={m.body} />}
+            {!growsIn(m) && !m.unreadable && !wfNote && !wfStep && <PageCards body={m.body} />}
             {(steersOf.get(m.id) || []).map((s) => (
               <div className="conv-supplement" key={s.id} data-supplement={s.id}>
                 <div className="conv-supplement-head">
@@ -2346,14 +2439,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
           {/* The time and copy stay out of the way until the pointer is on the
               message; a failure or an encryption mark is always shown. */}
-          <div className={cn("conv-msg-meta", (failedNote || receipt || m.automation || m.workflow) && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
+          <div className={cn("conv-msg-meta", !bySystem && (failedNote || receipt || m.automation || m.workflow) && "is-shown", !bySystem && m.status === "failed" && m.error !== STOPPED && "is-failed", !bySystem && (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
             {m.e2e && <Lock className="conv-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
             {usage && <span className="conv-usage">{usage}</span>}
             {m.automation && <span className="conv-auto" data-testid="via-automation" title={L("由自动化替你发出", "Sent for you by an automation")}>{L("自动", "Auto")}</span>}
-            {m.workflow && <span className="conv-auto" data-testid="via-workflow" title={L("工作流里的一步，由工作区替你发出", "A step of a workflow, sent for you by the workspace")}>{L("工作流", "Workflow")}</span>}
+            {m.workflow && !bySystem && <span className="conv-auto" data-testid="via-workflow" title={L("工作流里的一步，由工作区替你发出", "A step of a workflow, sent for you by the workspace")}>{L("工作流", "Workflow")}</span>}
             {receipt && <span className="conv-receipt" title={receipt.title}>{receipt.text}</span>}
-            {failedNote || clockTime(m.created_at)}
+            {/* (a workflow's card says a failure itself, in its own words) */}
+            {(!bySystem && failedNote) || clockTime(m.created_at)}
             {!m.unreadable && !mine && m.type !== "event" && <TranslateToggle id={m.id} body={m.body} />}
             {!m.unreadable && <CopyMessage text={m.body} />}
             {pins && !m.unreadable && (() => {
@@ -2370,7 +2464,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               title={L("删除（只从你这边去掉）", "Delete (from your view only)")} aria-label={L("删除", "Delete")}><Trash2 /></button>
           </div>
         </div>
-        {retry && (
+        {/* (a workflow's step is retried by the workflow, not sent again by hand) */}
+        {retry && !bySystem && (
           <div className="conv-stuck is-failed" data-failed={m.id}>
             <span className="dot failed" aria-hidden />
             <span className="conv-stuck-text">{failureWords(m.error!).long}</span>
@@ -2517,14 +2612,19 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </button>
         )}
         {/* Who this is with: their faces, their names, and what they do. */}
-        <span className="conv-head-faces">
+        <span className={cn("conv-head-faces", !observed && agent && "is-link")} {...(!observed && agent ? {
+          role: "button", tabIndex: 0, title: L("看它的资料", "See its profile"), "data-testid": "chat-head-profile",
+          onClick: openProfileHere, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openProfileHere(); } },
+        } : {})}>
           {(observed ? parties : [target.agent]).map((n) => {
             const r = rows.find((x) => x.hub.id === target.hubId && x.st.agent.name === n);
             return r ? <Avatar key={n} agent={r.st.agent} size={30} badge={false} /> : null;
           })}
         </span>
         <div className="conv-head-titles">
-          <h2 title={headWhat || undefined}>{observed ? parties.map(nameOf).join(" 和 ") : agentName}</h2>
+          {!observed && agent
+            ? <h2 title={headWhat || undefined}><button type="button" className="conv-head-name" onClick={openProfileHere} data-testid="chat-head-name">{agentName}</button></h2>
+            : <h2 title={headWhat || undefined}>{observed ? parties.map(nameOf).join(" 和 ") : agentName}</h2>}
           {/* 清爽 keeps the head to one line: the description goes (it
               stays on hover over the name); a hub it cannot reach still
               says so. */}
@@ -2835,11 +2935,50 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 `; ${askingOthers.length} wait${askingOthers.length > 1 ? "" : "s"} on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question`)}
               {L("。", ".")}
             </span>
-            <button type="button" className="conv-steer-btn"
-              onClick={() => window.dispatchEvent(new CustomEvent("myco-open-profile", { detail: { hubId: target.hubId, name: target.agent } }))}>
+            <button type="button" className="conv-steer-btn" onClick={() => setElsewhereOpen(true)} data-testid="open-elsewhere-handle">
               {L("查看并处理", "See and handle")}
             </button>
           </div>
+        )}
+        {elsewhereOpen && (
+          <Modal open onOpenChange={(o) => !o && setElsewhereOpen(false)} wide title={L(`${agentName} 手上别处来的任务`, `${agentName}'s open work from elsewhere`)}
+            description={L("别的成员或 agent 交给它、还没做完的任务。可以催一下，做完了就标记完成，不用再做就停掉。", "Tasks other members or agents gave it that are not done yet. Ask where one stands, mark it done, or stop it.")}>
+            <div className="app-list conv-elsewhere" data-testid="elsewhere-list">
+              {elsewhere.filter((m) => !settled.has(m.id)).length === 0 && <div className="app-empty-note">{L("都处理完了。", "All settled.")}</div>}
+              {elsewhere.filter((m) => !settled.has(m.id)).map((m) => {
+                const quiet = staleTasks.has(m.id);
+                const fromAgent = (row?.hub.overview?.agents || []).some((y) => y.agent.name === m.from);
+                return (
+                  <div key={m.id} className="app-msg-wrap" data-testid="elsewhere-item">
+                    <div className="app-msg is-static">
+                      <span className="meta">
+                        <span className={cn("app-msg-status", m.status, quiet && "is-stuck")}>{m.status === "held" && m.asking
+                          ? L(`在等 ${whoIs(m.from)} 回答`, `Waiting on ${whoIs(m.from)} to answer`) : quiet ? L("好一阵没动静", "Quiet for a while") : m.status === "held" ? L("暂挂", "On hold") : L("在做", "In progress")}</span>
+                        <span className="who">{L(`${whoIs(m.from)} 交来`, `from ${whoIs(m.from)}`)}</span>
+                        <span className="time">{timeAgo(m.active_at || m.updated_at, now)}</span>
+                      </span>
+                      <span className="body">{m.body}</span>
+                    </div>
+                    <span className="app-msg-actions">
+                      {fromAgent && onOpenExchange && (
+                        <button type="button" className="app-msg-dismiss" onClick={() => { setElsewhereOpen(false); onOpenExchange(target.agent, m.from, m.id); }}>{L("看对话", "Open")}</button>
+                      )}
+                      <button type="button" className="app-msg-dismiss" disabled={resending === m.id || nudged.has(m.id)} onClick={() => void nudge(m)}
+                        title={L("问它这条现在怎么样了（它会接着做或回复结果）", "Ask where it stands (it carries on or replies)")}>{nudged.has(m.id) ? L("已催", "Asked") : L("催一下", "Ask")}</button>
+                      {canClose && <button type="button" className="app-msg-dismiss" disabled={resending === m.id} onClick={() => void settle(m, "done")}
+                        title={L("不回复，直接关掉：已经做完了，或者不用再做", "Close it without a reply: it is done, or no longer needed")}>{L("标记完成", "Mark done")}</button>}
+                      {canClose && <button type="button" className="app-msg-dismiss" disabled={resending === m.id} onClick={() => void settle(m, "stop")}
+                        title={L("停止这条任务（交来的一方会收到「已停止」）", "Stop it (whoever gave it is told it was stopped)")}>{L("停止", "Stop")}</button>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <ErrorText error={stopError} />
+            <div className="app-modal-actions">
+              <button type="button" className="app-btn" onClick={() => setElsewhereOpen(false)}>{L("好了", "Done")}</button>
+            </div>
+          </Modal>
         )}
         {!busy && offline && (
           <div className="conv-busy">
@@ -2859,11 +2998,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                   <span className="conv-queue-label">{L("排队中：", "Queued: ")}</span>
                   {item.body.split("\n")[0].trim() || L("（附件）", "(files)")}
                 </span>
-                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key || item.sending || queueSettling}
+                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key}
                   onClick={(e) => { e.stopPropagation(); void editQueueItem(item); }}>
                   {L("编辑", "Edit")}
                 </button>
-                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key || item.sending || queueSettling}
+                <button type="button" className="conv-queue-btn" disabled={queueBusy === item.key}
                   onClick={(e) => { e.stopPropagation(); void withdrawQueueItem(item); }}>
                   {L("撤回", "Withdraw")}
                 </button>

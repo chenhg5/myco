@@ -73,6 +73,9 @@ export interface RunSettings {
 
 /** One of the member's model providers (i115), as the App's backend lists it:
  *  never the key, only whether this device can open it and its last four characters. */
+/** Local App connection test; older App backends omit models_source. */
+export interface ModelProviderTestResponse { models: RuntimeModel[]; models_source?: "provider" | "catalog" }
+
 export interface ModelProvider {
   id: string;
   name: string;
@@ -115,11 +118,14 @@ export interface RunnerSlots {
   queue?: { message_id: string; position: number }[];
 }
 export interface Runtime {
+ machine_health?: MachineHealth;
   runner_instance?: string;
   restarting_until?: string;
   runner_slots?: RunnerSlots;
   cli: string;
   cli_version?: string;
+  /** Private account email; returned only to its owner and workspace admins. */
+  account?: string;
   model?: string;
   model_source?: ModelSource;
   /** reasoning effort (low/medium/high/... depends on the CLI) */
@@ -194,6 +200,9 @@ export interface ProjectMember {
 }
 /** One step of a task's run (GET …/messages/{id}/trace). */
 export interface TraceStep {
+  /** Runner observation time, Unix ms; Hub event.at is later ingestion time.
+   * Cross-host subtraction requires measured clock-skew bounds. */
+  observed_at_ms?: number;
   kind: "text" | "thinking" | "tool" | "tool_result" | "usage" | "error" | "output" | "delta" | string;
   /** output: stdout/stderr; delta: text/thinking (pieces share a block id). */
   stream?: string;
@@ -210,6 +219,8 @@ export interface ProjectDoc {
   binary?: boolean;
 }
 export interface Agent {
+  /** Current bound-machine owner, only from /v1/me; absent means unknown. */
+  machine_owner_id?: string;
   updating?: boolean;
   /** what it is watching for in the background (myco watch); absent on older hubs */
   watching?: number;
@@ -247,7 +258,11 @@ export interface AgentResume {
   last_used_env?: string;
 }
 /** A real computer (or server) that runs nodes. Cloud sessions are not machines. */
+export interface MachineProcess { pid: number; name: string; created: string; cpu: number; memory: number; agent?: string; suspicious: boolean; ref?: string }
+export interface MachineHealth { owner_id?: string; incident?: string; at: string; runner_instance: string; complete: boolean; alert: boolean; load_ratio: number; load_metric: "load1_per_core" | "cpu_busy" | ""; cores: number; memory_total: number; memory_available: number; processes: MachineProcess[] }
 export interface Machine {
+ machine_health?: MachineHealth;
+ can_stop_process?: boolean;
   updating?: boolean;
   id: string; name: string; hostname: string;
   os: "darwin" | "linux" | "windows" | "cloud";
@@ -687,3 +702,6 @@ export interface BrowserReplayResult {
 }
 
 export type { PerfReport, PerfStat, DatabasePoolStats } from "@/lib/perf";
+
+/** Durable, device-local App profile choices. Null is a deletion tombstone. */
+export interface LocalPreferences { version: number; values: Record<string, string | null> }

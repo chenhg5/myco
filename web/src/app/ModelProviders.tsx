@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { KeyRound, Plus } from "lucide-react";
-import { appApi, type HubOverview, type ModelProviderInput } from "@/appapi";
-import type { ModelProvider, RuntimeModel } from "@/api";
+import { ChevronDown, KeyRound, Plus } from "lucide-react";
+import { ApiError, appApi, type HubOverview, type ModelProviderInput } from "@/appapi";
+import type { ModelProvider, ModelProviderTestResponse } from "@/api";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { recall, remember } from "@/lib/memo";
 import { L } from "@/lib/i18n";
@@ -22,6 +22,46 @@ export const VENDORS: { id: string; name: string; anthropic: string; openai: str
 
 export const vendorName = (id: string) => VENDORS.find((v) => v.id === id)?.name || L("自定义", "Custom");
 const hostOf = (u?: string) => { try { return u ? new URL(u).host : ""; } catch { return u || ""; } };
+
+const MINIMAX_REGIONS = {
+  international: { anthropic_base: "https://api.minimax.io/anthropic", openai_base: "https://api.minimax.io/v1" },
+  china: { anthropic_base: "https://api.minimaxi.com/anthropic", openai_base: "https://api.minimaxi.com/v1" },
+};
+type MiniMaxRegionID = keyof typeof MINIMAX_REGIONS;
+function miniMaxRegion(input: ModelProviderInput): MiniMaxRegionID | "" {
+  const bases = [input.anthropic_base, input.openai_base].filter(Boolean);
+  for (const region of ["international", "china"] as const) {
+    const expected = MINIMAX_REGIONS[region];
+    if (bases.length && (!input.anthropic_base || input.anthropic_base === expected.anthropic_base) && (!input.openai_base || input.openai_base === expected.openai_base)) return region;
+  }
+  return "";
+}
+function MiniMaxRegion({ value, onChange, disabled, testId, compact }: { value: MiniMaxRegionID | ""; onChange: (value: MiniMaxRegionID) => void; disabled: boolean; testId: string;
+  /** beside the vendor (the provider dialog): "地区", its hint said under both */
+  compact?: boolean }) {
+  return <label className="app-field">
+    <span className="app-field-label">{compact ? L("地区", "Region") : L("MiniMax 地区", "MiniMax region")}</span>
+    <select className="app-select-field" value={value} onChange={(e) => onChange(e.target.value as MiniMaxRegionID)} disabled={disabled} data-testid={testId}>
+      {!value && <option value="" disabled>{L("自定义地址", "Custom addresses")}</option>}
+      <option value="international">{compact ? L("国际", "International") : L("国际 · api.minimax.io", "International · api.minimax.io")}</option>
+      <option value="china">{compact ? L("国内", "China") : L("国内 · api.minimaxi.com", "China · api.minimaxi.com")}</option>
+    </select>
+    {!compact && <span className="app-field-hint">{L("key 在哪个站创建，就选哪个地区；两站的 key 不通用。", "Choose the region where you created the key; keys are not shared between the two sites.")}</span>}
+  </label>;
+}
+function testResultText(result: ModelProviderTestResponse) {
+  const ms = result.models;
+  const names = ms.slice(0, 4).map((m) => m.id);
+  return result.models_source === "catalog"
+    ? L(`对话验证通过，可选 ${ms.length} 个预设模型：${names.join("、")}`, `Completion verified; ${ms.length} preset models: ${names.join(", ")}`)
+    : L(`读到 ${ms.length} 个模型：${names.join("、")}${ms.length > 4 ? " 等" : ""}`, `${ms.length} models: ${names.join(", ")}${ms.length > 4 ? " and more" : ""}`);
+}
+function providerErrorSummary(error: unknown) {
+  return error instanceof ApiError && error.code === "provider_region_or_key" ? {
+    message: L("MiniMax 返回 HTTP 401：key 或地区不匹配。", "MiniMax returned HTTP 401: check the key and region."),
+    suggestion: L("选择创建 key 的地区（国际或国内），再测试；也请确认 key 仍然有效。", "Choose the region where the key was created (International or China), then test again; also check that the key is still valid."),
+  } : undefined;
+}
 
 /** The member's model providers on a hub, kept while the App is open. */
 export function useModelProviders(hubId: string | undefined) {
@@ -83,7 +123,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
     setNote("");
     try {
       const r = await appApi.testModelProvider(hub.id, p.id);
-      setNote(L(`「${p.name}」读到 ${r.models.length} 个模型。`, `“${p.name}”: ${r.models.length} models listed.`));
+      setNote(r.models_source === "catalog" ? testResultText(r) : L(`「${p.name}」读到 ${r.models.length} 个模型。`, `“${p.name}”: ${r.models.length} models listed.`));
       await load();
     } catch (e) {
       setActionError(e);
@@ -158,7 +198,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
         )}
       </div>
       <section className="app-setting-card app-members" data-testid="providers">
-        <ErrorText error={error || actionError} />
+        <ErrorText error={error || actionError} summary={providerErrorSummary(error || actionError)} />
         {note && <p className="app-small-note app-offline-ok">{note}</p>}
         {!e2e && (
           // Who keeps keys, said once (i119): nothing is in the way.
@@ -276,21 +316,30 @@ function ProviderEditor({ hubId, e2e, provider, onClose, onSaved }: { hubId: str
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [tested, setTested] = useState<RuntimeModel[] | null>(null);
-  const [showBases, setShowBases] = useState(!!provider || false);
+  const [tested, setTested] = useState<ModelProviderTestResponse | null>(null);
+  const [showBases, setShowBases] = useState(!!provider && !VENDORS.some((v) => v.id === provider.vendor));
+  const custom = !VENDORS.some((v) => v.id === form.vendor);
   const pick = (id: string) => {
     const v = VENDORS.find((x) => x.id === id);
     const named = !form.name.trim() || VENDORS.some((x) => x.name === form.name) || form.name === L("自定义", "Custom");
     setForm({ ...form, vendor: id, name: named ? (v?.name || L("自定义", "Custom")) : form.name,
-      anthropic_base: v ? v.anthropic : form.anthropic_base, openai_base: v ? v.openai : form.openai_base });
+      // (a custom address starts empty: not the last vendor's, passed off as its own)
+      anthropic_base: v ? v.anthropic : VENDORS.some((x) => x.id === form.vendor) ? "" : form.anthropic_base,
+      openai_base: v ? v.openai : VENDORS.some((x) => x.id === form.vendor) ? "" : form.openai_base });
     setTested(null);
+    // a custom address must be given; a vendor's own are its defaults
     if (!v) setShowBases(true);
+    else if (!provider) setShowBases(false);
   };
   const badBase = useMemo(() => [form.anthropic_base, form.openai_base].some((u) => {
     if (!u?.trim()) return false;
     try { const x = new URL(u.trim()); return !/^https?:$/.test(x.protocol) || !!x.username || !!x.search || !!x.hash; } catch { return true; }
   }), [form.anthropic_base, form.openai_base]);
   const canSave = !!form.name.trim() && !badBase && !!(form.anthropic_base?.trim() || form.openai_base?.trim()) && (!!provider || !!key.trim());
+  // With no newly entered key, testing uses the saved, sealed addresses.
+  // Do not show a test of the old region as a test of an unsaved new one.
+  const testNeedsSave = !!provider && !key.trim() && (form.vendor !== provider.vendor
+    || (form.anthropic_base || "") !== (provider.anthropic_base || "") || (form.openai_base || "") !== (provider.openai_base || ""));
   const input = (): ModelProviderInput => ({
     name: form.name.trim(), vendor: form.vendor, anthropic_base: form.anthropic_base?.trim() || "", openai_base: form.openai_base?.trim() || "",
     small_model: form.small_model?.trim() || "", ...(key.trim() ? { api_key: key.trim() } : {}),
@@ -301,7 +350,7 @@ function ProviderEditor({ hubId, e2e, provider, onClose, onSaved }: { hubId: str
     setTested(null);
     try {
       const r = key.trim() || !provider ? await appApi.testModelProvider(hubId, null, input()) : await appApi.testModelProvider(hubId, provider.id);
-      setTested(r.models);
+      setTested(r);
     } catch (e) {
       setError(e);
     } finally {
@@ -324,38 +373,24 @@ function ProviderEditor({ hubId, e2e, provider, onClose, onSaved }: { hubId: str
   return (
     <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={provider ? L("编辑模型供应商", "Edit model provider") : L("新增模型供应商", "Add a model provider")}
       description={L("选一家，填上它给你的 key。以后在任何一台电脑上新增 agent 都能直接选它。", "Pick a vendor and enter the key it gave you. Pick it whenever you add an agent on any of your computers.")}>
-      <div className="app-provider-list" role="radiogroup" data-testid="provider-vendors">
-        {[...VENDORS, { id: "custom", name: L("自定义", "Custom"), anthropic: "", openai: "" }].map((v) => (
-          <label key={v.id} className={cn("app-provider-opt", form.vendor === v.id && "picked")}>
-            <input type="radio" name="vendor" checked={form.vendor === v.id} onChange={() => pick(v.id)} disabled={busy} />
-            <span><b>{v.name}</b><small>{v.id === "custom" ? L("Anthropic 或 OpenAI 兼容的地址", "An Anthropic- or OpenAI-compatible address") : hostOf(v.anthropic)}</small></span>
-          </label>
-        ))}
+      {/* Which vendor: a select (its catalogue, then a custom address), the
+          region beside it for MiniMax, and the address it uses under both. */}
+      <div className="pv-vendor-row" data-testid="provider-vendors">
+        <label className="app-field">
+          <span className="app-field-label">{L("供应商", "Vendor")}</span>
+          <select className="app-select-field" value={VENDORS.some((v) => v.id === form.vendor) ? form.vendor : "custom"} onChange={(e) => pick(e.target.value)} disabled={busy} data-testid="provider-vendor">
+            {VENDORS.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+            <option value="custom">{L("自定义地址…", "A custom address…")}</option>
+          </select>
+        </label>
+        {form.vendor === "minimax" && <MiniMaxRegion compact value={miniMaxRegion(form)} onChange={(region) => { setForm({ ...form, ...MINIMAX_REGIONS[region] }); setTested(null); }} disabled={busy} testId="provider-minimax-region" />}
       </div>
-      <label className="app-field">
-        <span className="app-field-label">{L("名字", "Name")}</span>
-        <input className="app-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={busy} data-testid="provider-name" />
-      </label>
-      {!showBases ? (
-        <button type="button" className="app-kv-link" onClick={() => setShowBases(true)}>{L("地址和小模型", "Addresses and small model")}<span className="app-chev">›</span></button>
-      ) : (
-        <>
-          <label className="app-field">
-            <span className="app-field-label">{L("Anthropic 地址（Claude Code 用）", "Anthropic address (for Claude Code)")}</span>
-            <input className="app-input" value={form.anthropic_base} spellCheck={false} onChange={(e) => setForm({ ...form, anthropic_base: e.target.value })} disabled={busy} data-testid="provider-anthropic" />
-          </label>
-          <label className="app-field">
-            <span className="app-field-label">{L("OpenAI 地址（Codex 用）", "OpenAI address (for Codex)")}</span>
-            <input className="app-input" value={form.openai_base} spellCheck={false} onChange={(e) => setForm({ ...form, openai_base: e.target.value })} disabled={busy} />
-            {badBase && <span className="app-field-hint is-bad">{L("地址要以 http:// 或 https:// 开头，不带用户名、? 或 #", "Addresses start with http:// or https://, with no user name, ? or #")}</span>}
-          </label>
-          <label className="app-field">
-            <span className="app-field-label">{L("小模型（可不填）", "Small model (optional)")}</span>
-            <input className="app-input" value={form.small_model} spellCheck={false} placeholder={L("Claude Code 的后台小任务用；不填就用这家默认的", "For Claude Code's background work; blank: the vendor's usual one")}
-              onChange={(e) => setForm({ ...form, small_model: e.target.value })} disabled={busy} />
-          </label>
-        </>
-      )}
+      <span className="app-field-hint pv-vendor-hint" data-testid="provider-host">
+        {custom
+          ? L("填它的 Anthropic 或 OpenAI 兼容的地址（在下面），至少一个。", "Enter its Anthropic- or OpenAI-compatible address below; at least one.")
+          : <>{L("地址：", "Address: ")}<span className="mono">{hostOf(form.anthropic_base || form.openai_base) || "—"}</span>
+            {form.vendor === "minimax" && L("。key 在哪个站创建，就选哪个地区；两站的 key 不通用。", ". Choose the region where you created the key; keys are not shared between the sites.")}</>}
+      </span>
       <label className="app-field">
         <span className="app-field-label">{L("密钥", "Key")}</span>
         <input className="app-input" type="password" autoComplete="new-password" value={key} onChange={(e) => { setKey(e.target.value); setTested(null); }} disabled={busy}
@@ -365,10 +400,42 @@ function ProviderEditor({ hubId, e2e, provider, onClose, onSaved }: { hubId: str
           : e2e ? L("在这台电脑上加密后才存到工作区，只有你自己的设备能解开。", "Encrypted on this computer before it is kept in the workspace; only your own devices open it.")
           : L("由 Hub 保管（Hub 管理员能看到），只发给你选的那台电脑上的 agent。", "The hub keeps it (its administrator could see it) and sends it only to the agent you pick.")}</span>
       </label>
-      {tested && <p className="app-small-note app-offline-ok" data-testid="provider-tested">{L(`读到 ${tested.length} 个模型：${tested.slice(0, 4).map((m) => m.id).join("、")}${tested.length > 4 ? " 等" : ""}`, `${tested.length} models: ${tested.slice(0, 4).map((m) => m.id).join(", ")}${tested.length > 4 ? " and more" : ""}`)}</p>}
-      <ErrorText error={error} />
+      <label className="app-field">
+        <span className="app-field-label">{L("名字", "Name")}</span>
+        <input className="app-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} disabled={busy} data-testid="provider-name" />
+      </label>
+      {/* Addresses and the small model: folded unless they must be given (a
+          custom address) or are being edited. */}
+      <div className={cn("pv-bases", showBases && "is-open")}>
+        <button type="button" className="pv-bases-head" aria-expanded={showBases} onClick={() => setShowBases((x) => !x)} disabled={busy || custom}>
+          <ChevronDown className="pv-bases-chev" />
+          <span>{L("地址和小模型", "Addresses and small model")}</span>
+          {!showBases && <span className="pv-bases-sum">{L("用这家的默认值", "This vendor's defaults")}</span>}
+        </button>
+        {showBases && <div className="pv-bases-body">
+          <label className="app-field">
+            <span className="app-field-label">{L("Anthropic 地址（Claude Code 用）", "Anthropic address (for Claude Code)")}</span>
+            <input className="app-input mono" value={form.anthropic_base} spellCheck={false} onChange={(e) => setForm({ ...form, anthropic_base: e.target.value })} disabled={busy} data-testid="provider-anthropic"
+              placeholder="https://api.example.com/anthropic" />
+          </label>
+          <label className="app-field">
+            <span className="app-field-label">{L("OpenAI 地址（Codex 用）", "OpenAI address (for Codex)")}</span>
+            <input className="app-input mono" value={form.openai_base} spellCheck={false} onChange={(e) => setForm({ ...form, openai_base: e.target.value })} disabled={busy}
+              placeholder="https://api.example.com/v1" />
+            {badBase && <span className="app-field-hint is-bad">{L("地址要以 http:// 或 https:// 开头，不带用户名、? 或 #", "Addresses start with http:// or https://, with no user name, ? or #")}</span>}
+          </label>
+          <label className="app-field">
+            <span className="app-field-label">{L("小模型（可不填）", "Small model (optional)")}</span>
+            <input className="app-input mono" value={form.small_model} spellCheck={false} placeholder={L("Claude Code 的后台小任务用；不填就用这家默认的", "For Claude Code's background work; blank: the vendor's usual one")}
+              onChange={(e) => setForm({ ...form, small_model: e.target.value })} disabled={busy} />
+          </label>
+        </div>}
+      </div>
+      {tested && <p className="app-small-note app-offline-ok" data-testid="provider-tested">{testResultText(tested)}</p>}
+      {testNeedsSave && <p className="app-field-hint" data-testid="provider-test-save-first">{L("先保存地区或地址的修改，再测试；也可以重新填 key 后立即测试。", "Save the region or address change before testing, or enter the key again to test it now.")}</p>}
+      <ErrorText error={error} summary={providerErrorSummary(error)} />
       <div className="app-modal-actions">
-        <button type="button" className="app-btn" onClick={() => void test()} disabled={busy || (!key.trim() && !provider) || badBase} data-testid="provider-test">
+        <button type="button" className="app-btn" onClick={() => void test()} disabled={busy || (!key.trim() && !provider) || badBase || testNeedsSave} data-testid="provider-test">
           {busy && !tested ? L("正在测试", "Testing") : L("测试", "Test")}
         </button>
         <button type="button" className="app-btn app-btn-primary" onClick={() => void save()} disabled={busy || !canSave} data-testid="provider-save-workspace">
@@ -405,7 +472,7 @@ export function ModelSource({ hubId, cli, machineName, value, onChange, model, o
   const program = cli === "codex" ? "Codex" : "Claude Code";
   const models = chosen?.models || [];
   return (
-    <div className="app-field" data-testid="model-source">
+    <div className="app-field model-source" data-testid="model-source">
       <span className="app-field-label">{L("模型从哪来", "Where its model comes from")}</span>
       <div className="app-provider-list" role="radiogroup" aria-label={L("模型从哪来", "Where its model comes from")}>
         <label className={cn("app-provider-opt", !value && !adding && "picked")}>
@@ -427,7 +494,7 @@ export function ModelSource({ hubId, cli, machineName, value, onChange, model, o
         <label className={cn("app-provider-opt", adding && "picked")} data-testid="model-source-add">
           <input type="radio" name="model-source" checked={adding} onChange={() => setAdding(true)} disabled={busy} />
           <span>
-            <b>{L("+ 用自己的 API key", "+ Use your own API key")}</b>
+            <b>{L("用自己的 API key", "Use your own API key")}</b>
             <small>{usable.length
               ? L("再接一家", "Add another vendor")
               : L("有自己的 key（DeepSeek、Kimi、MiniMax、OpenCode Go……）可以直接接", "Have your own key (DeepSeek, Kimi, MiniMax, OpenCode Go…)? Use it directly")}</small>
@@ -452,7 +519,7 @@ export function ModelSource({ hubId, cli, machineName, value, onChange, model, o
           )}
         </label>
       )}
-      {(chosen || adding) && <span className="app-field-hint" data-testid="model-source-custody">{custodyLine(e2e)}</span>}
+      {chosen && !adding && <span className="app-field-hint" data-testid="model-source-custody">{custodyLine(e2e)}</span>}
     </div>
   );
 }
@@ -467,18 +534,19 @@ function QuickProvider({ hubId, cli, e2e, busy, onSaved }: {
   onSaved: (p: ModelProvider, firstModel: string) => Promise<void>;
 }) {
   const [vendor, setVendor] = useState(VENDORS[0].id);
+  const [region, setRegion] = useState<MiniMaxRegionID>("international");
   const [base, setBase] = useState("");
   const [key, setKey] = useState("");
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [tested, setTested] = useState<RuntimeModel[] | null>(null);
+  const [tested, setTested] = useState<ModelProviderTestResponse | null>(null);
   const v = VENDORS.find((x) => x.id === vendor);
   const custom = !v;
   const input = (): ModelProviderInput => {
     const name = v?.name || (() => { try { return new URL(base.trim()).host; } catch { return L("自定义", "Custom"); } })();
     return custom
       ? { name, vendor: "custom", anthropic_base: cli === "claude" ? base.trim() : "", openai_base: cli === "codex" ? base.trim() : "", small_model: "", api_key: key.trim() }
-      : { name, vendor, anthropic_base: v.anthropic, openai_base: v.openai, small_model: "", api_key: key.trim() };
+      : { name, vendor, ...(vendor === "minimax" ? MINIMAX_REGIONS[region] : { anthropic_base: v.anthropic, openai_base: v.openai }), small_model: "", api_key: key.trim() };
   };
   const badBase = custom && (() => { try { const x = new URL(base.trim()); return !/^https?:$/.test(x.protocol) || !!x.username || !!x.search || !!x.hash; } catch { return true; } })();
   const ready = !!key.trim() && !badBase && !working && !busy;
@@ -487,7 +555,7 @@ function QuickProvider({ hubId, cli, e2e, busy, onSaved }: {
     setError(null);
     setTested(null);
     try {
-      setTested((await appApi.testModelProvider(hubId, null, input())).models);
+      setTested(await appApi.testModelProvider(hubId, null, input()));
     } catch (e) {
       setError(e);
     } finally {
@@ -511,13 +579,15 @@ function QuickProvider({ hubId, cli, e2e, busy, onSaved }: {
   };
   return (
     <div className="app-provider-manual" data-testid="model-source-new">
-      <label className="app-field">
+      <div className="ms-row">
+      <label className="app-field ms-vendor">
         <span className="app-field-label">{L("哪一家", "Which vendor")}</span>
         <select className="app-select-field" value={vendor} onChange={(e) => { setVendor(e.target.value); setTested(null); }} disabled={working || busy} data-testid="model-source-vendor">
           {VENDORS.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           <option value="custom">{L("自定义地址", "A custom address")}</option>
         </select>
       </label>
+      {vendor === "minimax" && <MiniMaxRegion value={region} onChange={(next) => { setRegion(next); setTested(null); }} disabled={working || !!busy} testId="model-source-minimax-region" />}
       {custom && (
         <label className="app-field">
           <span className="app-field-label">{cli === "codex" ? L("OpenAI 兼容的地址", "OpenAI-compatible address") : L("Anthropic 兼容的地址", "Anthropic-compatible address")}</span>
@@ -526,22 +596,26 @@ function QuickProvider({ hubId, cli, e2e, busy, onSaved }: {
           {base.trim() && badBase && <span className="app-field-hint is-bad">{L("地址要以 http:// 或 https:// 开头，不带用户名、? 或 #", "Addresses start with http:// or https://, with no user name, ? or #")}</span>}
         </label>
       )}
-      <label className="app-field">
+      <label className="app-field ms-key">
         <span className="app-field-label">{L("API key", "API key")}</span>
         <input className="app-input" type="password" autoComplete="new-password" value={key} onChange={(e) => { setKey(e.target.value); setTested(null); }}
           disabled={working || busy} placeholder={L("填上这家给你的 key", "The key this vendor gave you")} data-testid="model-source-key" />
       </label>
-      {tested && <p className="app-small-note app-offline-ok" data-testid="model-source-tested">{L(`读到 ${tested.length} 个模型：${tested.slice(0, 4).map((m) => m.id).join("、")}${tested.length > 4 ? " 等" : ""}`, `${tested.length} models: ${tested.slice(0, 4).map((m) => m.id).join(", ")}${tested.length > 4 ? " and more" : ""}`)}</p>}
-      <ErrorText error={error} />
-      <div className="app-setting-actions">
+      </div>
+      {tested && <p className="app-small-note app-offline-ok" data-testid="model-source-tested">{testResultText(tested)}</p>}
+      <ErrorText error={error} summary={providerErrorSummary(error)} />
+      {/* One line about where it goes and who can read it; the buttons beside it. */}
+      <div className="ms-foot">
+        <span className="ms-note" data-testid="model-source-custody">
+          {!e2e && L("存进「我的模型供应商」，以后哪台电脑都能直接选。", "Saved to My model providers, for any computer later. ")}{custodyLine(e2e)}
+        </span>
         <button type="button" className="app-btn app-btn-small" onClick={() => void test()} disabled={!ready} data-testid="model-source-test">
           {working && !tested ? L("正在测试", "Testing") : L("测试", "Test")}
         </button>
-        <button type="button" className="app-btn app-btn-small" onClick={() => void save()} disabled={!ready} data-testid="model-source-save">
+        <button type="button" className="app-btn app-btn-small app-btn-primary" onClick={() => void save()} disabled={!ready} data-testid="model-source-save">
           {L("保存并选用", "Save and use")}
         </button>
       </div>
-      {!e2e && <span className="app-field-hint">{L("存进「我的模型供应商」，以后在任何一台电脑上新增 agent 都能直接选。", "Saved to My model providers: pick it whenever you add an agent on any computer.")}</span>}
     </div>
   );
 }

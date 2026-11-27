@@ -9,6 +9,7 @@ import { projectsOf } from "@/app/Members";
 import { isNobody, nobody } from "@/app/AddToProject";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { L } from "@/lib/i18n";
+import { senderEdit, removedSenders } from "@/lib/allow-from";
 import { cn } from "@/lib/utils";
 
 type Projects = { hubId: string; p: Project }[];
@@ -37,6 +38,8 @@ export function ComputerSettings({ row, focus, rows, projects, onClose, onChange
     .sort((x, y) => nodeName(x.st.agent, x.hub).localeCompare(nodeName(y.st.agent, y.hub))), [rows, hubId]);
   const anyone = !!a?.allow_from.includes("*");
   const [allow, setAllow] = useState<string[]>([]);
+  const [allowBefore, setAllowBefore] = useState<string[]>([]);
+  const [confirmAllow, setConfirmAllow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [saved, setSaved] = useState(false);
@@ -48,6 +51,8 @@ export function ComputerSettings({ row, focus, rows, projects, onClose, onChange
   const key = a ? `${hubId}/${a.name}` : "";
   useEffect(() => {
     if (!a) return;
+    setAllowBefore(a.allow_from);
+    setConfirmAllow(false);
     setAllow(a.allow_from.filter((n) => n !== "*" && !isNobody(n)));
     setError(null);
     setSaved(false);
@@ -82,7 +87,13 @@ export function ComputerSettings({ row, focus, rows, projects, onClose, onChange
     }
   };
   // Nobody ticked: a placeholder no agent is called, so none may.
-  const save = () => run(() => appApi.updateAllowFrom(hubId, a.name, allow.length ? allow : [nobody()])).then((ok) => ok && setSaved(true));
+  const removals = removedSenders(allowBefore, allow);
+  const commitAllow = () => run(async () => {
+    const result = await appApi.changeAllowFrom(hubId, a.name, senderEdit(allowBefore, allow, nobody()));
+    setAllowBefore(result.allow_from);
+    setAllow(result.allow_from.filter((n) => n !== "*" && !isNobody(n)));
+  }).then((ok) => { if (ok) { setConfirmAllow(false); setSaved(true); } });
+  const save = () => removals.length ? setConfirmAllow(true) : void commitAllow();
   // Into a project: it is in it, and the project's agents may use it too.
   const addTo = (name: string) => run(async () => {
     const p = projects.find((x) => x.hubId === hubId && x.p.name === name)?.p;
@@ -90,7 +101,8 @@ export function ComputerSettings({ row, focus, rows, projects, onClose, onChange
     const theirs = (p?.members || []).map((m) => m.name).filter((n) => agents.some((r) => r.st.agent.name === n));
     if (!anyone && theirs.some((n) => !allow.includes(n))) {
       const next = [...new Set([...allow, ...theirs])];
-      await appApi.updateAllowFrom(hubId, a.name, next);
+      const result = await appApi.addAllowedSenders(hubId, a.name, theirs);
+      setAllowBefore(result.allow_from);
       setAllow(next);
     }
     setAdding("");
@@ -102,7 +114,7 @@ export function ComputerSettings({ row, focus, rows, projects, onClose, onChange
 
   return (
     <>
-      <Modal open={!removing} onOpenChange={(o) => !o && !busy && onClose()} title={nodeName(a, row.hub)}
+      <Modal open={!removing && !confirmAllow} onOpenChange={(o) => !o && !busy && onClose()} title={nodeName(a, row.hub)}
         description={[whereOf(row), row.st.state === "offline" ? L("不在线", "Away") : L("在线", "Online")].filter(Boolean).join(" · ")}
         className="pcs">
         <div data-testid="computer-settings">
@@ -174,6 +186,11 @@ export function ComputerSettings({ row, focus, rows, projects, onClose, onChange
           </div>
         </div>
       </Modal>
+      <ConfirmDialog open={confirmAllow} onOpenChange={setConfirmAllow}
+        title={L("移除这些派任务权限？", "Remove these sender permissions?")}
+        description={removals.map((n) => n === "*" ? L("任何 agent", "Any agent") : n).join(", ")}
+        confirmLabel={L("保存", "Save")} onConfirm={() => void commitAllow()} busy={busy}
+        error={error ? <ErrorText error={error} /> : undefined} />
       <ConfirmDialog open={removing} onOpenChange={(o) => { if (!o) { setRemoving(false); if (focus === "remove") onClose(); } }}
         title={L("移除这个终端？", "Remove this terminal?")}
         subject={<><Avatar agent={a} size={24} badge={false} /><span>{nodeName(a, row.hub)}</span></>}

@@ -1,3 +1,4 @@
+import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useMemo, useState } from "react";
 import { Gauge } from "lucide-react";
 import type { Agent, Project } from "@/api";
@@ -20,10 +21,10 @@ import "@/app/usage.css";
 
 const RANGE_KEY = "myco-usage-days";
 function savedDays(): number {
-  try { const n = Number(localStorage.getItem(RANGE_KEY)); return [7, 30, 90].includes(n) ? n : 30; } catch { return 30; }
+  try { const n = Number(localPreferences.getItem(RANGE_KEY)); return [7, 30, 90].includes(n) ? n : 30; } catch { return 30; }
 }
 function savedProject(hub: string): string {
-  try { return localStorage.getItem(`myco-usage-project:${hub}`) || ""; } catch { return ""; }
+  try { return localPreferences.getItem(`myco-usage-project:${hub}`) || ""; } catch { return ""; }
 }
 const percent = (n: number, total: number) => total ? `${(100 * n / total).toFixed(1)}%` : "—";
 const money = (n: number) => n > 0 ? new Intl.NumberFormat(locale(), { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(n) : "—";
@@ -167,7 +168,7 @@ export function UsagePage({ hubId, projects, rows, onOpenAgent }: {
   for (const [name] of summary.projects) if (name && !projectNames.has(name)) projectNames.set(name, name);
   const changeProject = (value: string) => {
     setProject(value);
-    try { localStorage.setItem(`myco-usage-project:${hubId}`, value); } catch { /* optional */ }
+    try { localPreferences.setItem(`myco-usage-project:${hubId}`, value); } catch { /* optional */ }
   };
   const t = summary.total;
   const nDays = usageDays(range.from, range.to).length;
@@ -185,7 +186,7 @@ export function UsagePage({ hubId, projects, rows, onOpenAgent }: {
     <div className="usage-filters">
       <div className="wf-chips usage-range" role="group" aria-label={L("时间范围", "Date range")}>
         {[7, 30, 90].map((n) => <button key={n} type="button" className={cn("wf-chip", days === n && "is-on")} aria-pressed={days === n} onClick={() => {
-          setDays(n); try { localStorage.setItem(RANGE_KEY, String(n)); } catch { /* optional */ }
+          setDays(n); try { localPreferences.setItem(RANGE_KEY, String(n)); } catch { /* optional */ }
         }}>{L(`${n} 天`, `${n} days`)}</button>)}
       </div>
       <select className="app-select-field" aria-label={L("项目", "Project")} value={project} onChange={(e) => changeProject(e.target.value)}>

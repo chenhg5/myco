@@ -435,3 +435,63 @@ func TestCopiedProfileRecordCannotKillSourceBrowser(t *testing.T) {
 		t.Fatal("source profile browser was killed")
 	}
 }
+
+// Chrome is asked to quit before its helpers: a SIGTERM to the whole group
+// kills helpers under a browser still running, which crashes it ("Google
+// Chrome quit unexpectedly" on macOS). Here the leader ends its helper
+// itself; the helper notes a SIGTERM that reaches it directly.
+func TestBrowserGroupStopsLeaderFirst(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "profiles", "p_leader")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	dir, _ = filepath.EvalSymlinks(dir)
+	// Every process starts before the group is recorded and lives until
+	// signalled (nothing short-lived: other tests make this process a
+	// subreaper, and an unrecorded orphan would never be reaped).
+	script := `M="$1"
+sh -c 's=; trap "echo term > \"$0/helper-term\"; kill \$s; exit 0" TERM; sleep 1000 & s=$!; echo ready > "$0/helper.ready"; wait $s' "$M" &
+c=$!
+sleep 1000 &
+s=$!
+trap 'kill -KILL $c $s; exit 0' TERM
+while [ ! -f "$M/helper.ready" ]; do :; done
+echo $c > "$M/helper.pid"
+wait $s`
+	cmd := exec.Command("/bin/sh", "-c", script, "leader", dir)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	t.Cleanup(func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) })
+	for i := 0; ; i++ {
+		if _, err := os.Stat(filepath.Join(dir, "helper.pid")); err == nil {
+			break
+		}
+		if i > 500 {
+			t.Fatal("helper did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	owner, err := ownProcess()
+	if err != nil {
+		t.Fatal(err)
+	}
+	members, err := groupProcesses(cmd.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := browserGroup{Version: 1, Profile: filepath.Base(dir), Nonce: "test-fixture-generation", PGID: cmd.Process.Pid, Owner: owner, Members: members}
+	if err := saveBrowserGroup(dir, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := terminateBrowserGroup(dir, r, false); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	if _, err := os.Stat(filepath.Join(dir, "helper-term")); err == nil {
+		t.Fatal("the helper was sent SIGTERM directly, not ended by its browser")
+	}
+}

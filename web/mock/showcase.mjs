@@ -47,7 +47,7 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
       name: "cloud-research", display_name: T("调研（claude.ai）", "Research (claude.ai)"),
       description: T("在云端做调研和对比。", "Researches and compares options in the cloud."),
       labels: [research],
-      runtime: { cli: "claude-cloud", model: "claude-opus-5-5", model_source: "observed" },
+      runtime: { cli: "claude-cloud", account: "research@example.com", model: "claude-opus-5-5", model_source: "observed" },
       binding: { harness: "claude-cloud", environment: "claude.ai" }, last_seen_at: iso(15),
     }),
     makeAgent({
@@ -235,7 +235,7 @@ export function showcase(lang, { makeAgent, makeMessage, iso, CONSOLE }) {
       name: "cloud-copy", display_name: T("文案（claude.ai）", "Copy (claude.ai)"),
       description: T("写中英文的页面文案。", "Writes the page copy in English and Chinese."),
       labels: [site, "copy"],
-      runtime: { cli: "claude-cloud", model: "claude-opus-5-5", model_source: "observed" },
+      runtime: { cli: "claude-cloud", account: "research@example.com", model: "claude-opus-5-5", model_source: "observed" },
       binding: { harness: "claude-cloud", environment: "claude.ai" }, last_seen_at: iso(25),
     }),
     makeAgent({

@@ -107,6 +107,15 @@ OUT="$(myco message send --to worker --body "smoke test" --wait 20s 2>>"$T/cli.l
 grep -q 'SMOKE TEST' <<<"$OUT" || fail "unexpected reply: $OUT"
 ok
 
+step "agent statistics and selection"
+myco agent stats --name worker --since 1h >"$T/agent-stats.json" || fail "agent stats"
+python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); a=s["agents"][0]; assert s["version"]==1 and a["done"]>=1 and a["queue_wait"]["samples"]>=1' "$T/agent-stats.json" || fail "agent stats samples"
+myco agent pick --cli shell --count 1 --strict >"$T/agent-pick.json" || fail "agent pick"
+python3 -c 'import json,sys; c=json.load(open(sys.argv[1]))["candidates"]; assert len(c)==1 and c[0]["name"]=="worker" and c[0]["reason"]' "$T/agent-pick.json" || fail "agent pick result"
+myco stats coordinator --name alice --since 1h >"$T/coordinator-stats.json" || fail "coordinator stats"
+python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); assert s["delegated_tasks"]>=1 and s["person_tasks"]==0' "$T/coordinator-stats.json" || fail "coordinator stats result"
+ok
+
 step "thread export (Markdown)"
 TID="$(grep -o '"thread_id": *"[^"]*"' <<<"$OUT" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
 [ -n "$TID" ] || fail "no thread id in: $OUT"

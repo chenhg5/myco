@@ -246,3 +246,39 @@ func TestRuntimeModelSourceFallsBackForOlderHubs(t *testing.T) {
 		t.Fatalf("old Hub fallback: %v calls %d", err, calls)
 	}
 }
+
+func TestRuntimeAccountOlderHubAndOtherErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		status  int
+		message string
+		calls   int
+	}{{"old-hub", 400, `unknown field "account"`, 2}, {"validation", 400, "invalid runtime", 1}, {"unauthorized", 401, `unknown field "account"`, 1}} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				n := calls.Add(1)
+				var body map[string]any
+				json.NewDecoder(r.Body).Decode(&body)
+				if n == 1 {
+					w.WriteHeader(tc.status)
+					json.NewEncoder(w).Encode(api.Error{Code: "invalid_argument", Message: tc.message})
+					return
+				}
+				if _, ok := body["account"]; ok {
+					t.Error("legacy retry retained account")
+				}
+				if body["cli"] != "claude" || body["model"] != "test-model" {
+					t.Error("legacy retry dropped ordinary fields")
+				}
+				w.Write([]byte("{}"))
+			}))
+			defer srv.Close()
+			c, _ := New(srv.URL, "fixture")
+			err := c.ReportRuntime(context.Background(), api.Runtime{CLI: "claude", Model: "test-model", Account: "alice@example.com"})
+			if (err == nil) != (tc.name == "old-hub") || int(calls.Load()) != tc.calls {
+				t.Fatal("compatibility retry mismatch")
+			}
+		})
+	}
+}

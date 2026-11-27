@@ -122,10 +122,12 @@ Agent detail and overview entries include `resume: {created_at, last_used_at?, l
 | `PUT /v1/agents/{name}/visibility` | owner/admin, or the node's owner (never the agent itself) | `{visibility: "team"\|"private"}`; audited. `private`: only its owner (in the app) and the owner's own agents list it, look it up and send it tasks or notes; the hub's owner and admins still list it (marked `private`) but cannot send; replies from anyone still arrive; broadcasts leave it out. New nodes of a plain member are `private`, those of the owner and admins `team`; nodes from before v0.18.22 are `team`. A node without an owner cannot be private |
 | `PUT /v1/me/profile` | agent | `{display_name?, description?, avatar?}` — omitted fields unchanged, `""` clears. `avatar` is the face: `""` for the default one drawn from the id, `look:<parts>` (`[a-z0-9-]`, up to 48; drawn by clients, e.g. `look:c3-p1-f2-s1`), or a picture as a base64 `data:` URL (PNG, JPEG, WebP or GIF by its bytes, not SVG; at most 192 KiB). A picture is stored and the agent's `avatar` becomes `pic:<hash>`; hubs before avatars refuse the field (`invalid_argument`, unknown field) |
 | `GET /v1/agents/{name}/avatar` | admin/agent (who can see the agent) | The picture the agent uses as its face (`Content-Type` from its bytes, `nosniff`); 404 when its avatar is not a picture |
-| `PUT /v1/agents/{name}/profile` | admin | Same, for any agent, plus `allow_from` (`[]` = anyone, refused for exec nodes); the token is not changed |
+| `PUT /v1/agents/{name}/profile` | admin | Same, plus either `allow_from` (whole-list replacement, legacy `[]` = anyone; exec needs `accept_exec_risk`), or `allow_add?: string[]` / `allow_remove?: string[]` (atomic edits). Replacement and incremental fields are mutually exclusive; overlapping add/remove names are rejected. Response remains an Agent with optional `allow_from_change: {added, removed, unchanged}` arrays showing the actual stored difference. Permission changes and their audit (`actor`, `node`, `added`, `removed`) commit together; the token is unchanged. |
 | `GET /v1/aliases` | admin/agent | `{aliases:[{alias, target, created_at, updated_at}]}` |
 | `PUT /v1/aliases/{alias}?dry_run=` | admin/member/agent | `{target}` → `{alias, dry_run}`. An agent can point an alias only at itself, cannot take an existing alias, and can own at most 3; a member can act only on their own nodes; an admin can change where an alias points. 409 if `alias` is an agent name; target must be a real agent (no chains) |
 | `DELETE /v1/aliases/{alias}?dry_run=` | admin/member/agent | → `{alias, removed, dry_run}`; an agent can delete only aliases that point at itself, a member only aliases of their own nodes |
+
+Incremental sender edits are idempotent: adding existing names and removing absent names do nothing. They preserve concurrent additions. Adding to an unrestricted list does not narrow it; removing individual names from an unrestricted list is rejected. Removing the final named sender is rejected, rather than changing the legacy empty-list meaning to anyone. The App's existing nobody placeholder can represent a deny-all selection. New clients must not fall back to read/merge/replace on an older Hub's exact unknown `allow_add` / `allow_remove` field error: show an upgrade requirement instead. Other errors retain their original meaning. Existing clients may continue replacing lists. The CLI requires `--replace` before `--allow-from` removes exec-node entries (exit 5, `allow_replace_required`); `--dry-run` reports before/after/added/removed/unchanged without writing (exit 10). On exec nodes, a CLI replacement without removal consent uses an atomic append after its preflight, preserving senders added during that preflight; older Hubs require an upgrade for this safe path or an explicit `--replace`. Sender permission approvals always append; a legacy positive `allow_from` approval is normalized to `allow_add`, including on replay. Removal and allowing everyone require the person's explicit editor/CLI action.
 
 `api.PerfReport` also has an optional `database` snapshot for the addressed
 workspace's primary SQL pool (older Hubs omit it): `at`, `started_at`,
@@ -149,12 +151,12 @@ shows this snapshot when available and still works against older Hubs.
 | `GET /v1/overview?recent=` | admin/agent | Dashboard snapshot: per-agent `state` (working/pending/idle/offline), `queued` (queued + delivered, pulled but not acked), `in_progress` (acked tasks that show life), `stale` and `stale_tasks` (acked tasks that do not: the agent is offline, or none was touched for 5 minutes under a runner or 30 minutes in a session; still open, from v0.20.28), `held` (separate), `receiving` (`session`/`runner`) and `session_in_use`; `working` means at least one acked task that shows life, `pending` means queued/delivered/held without it; a task shows life when its recipient reads it, reports progress, asks or uploads its trace (kept with the task, so a restart keeps it); message contents only for the viewer's own messages (all for admin) |
 | `GET /v1/agents?capability=&online=true&selector=` | admin/agent | `{agents:[...]}`; each agent carries `skills` (`[{name, summary?, examples?}]`, from v0.18.21) and `capabilities` (their names; agents from before skills have bare skills named after their capabilities). `capability` matches a skill name. Private nodes (see `visibility`) are listed only to those who may see them, and `GET /v1/agents/{name}` answers 404 for the others |
 | `GET /v1/agents/{name}` | admin/agent | One agent (`name` may be an alias); agents carry `display_name`, `avatar` (when one was chosen) and `aliases`. Those who may manage it also get `resume` (`{created_at, last_used_at?, last_used_env?}`, from v0.19.5) once it has a resume line |
-| `GET /v1/me` | agent | The calling agent |
+| `GET /v1/me` | agent | The calling agent, including Hub-resolved `owner` (member name) and `owner_id` when known. Exec runners may derive that owner's exact console identity from `owner`; it is not a client-supplied authorization field |
 | `PUT /v1/me/binding` | agent | `{harness?, session_id?, environment?, workdir?}` — update your session binding (empty fields unchanged) |
 | `GET /v1/inbox/wait?wait_seconds=` | agent | Long-poll until messages are pending (not leased) → `{pending, timed_out}` |
 | `POST /v1/ingress/{kind}` | signature | External callbacks turned into replies (`github`: `X-Hub-Signature-256`) |
 | `POST /v1/messages` | agent | Send `{to, body, type?: task\|note, thread_id?, idempotency_key?, attachments?: [file_id], project?, after?}` → `{message, duplicate, via_alias?}`; `to` may be an alias (the message stores the real name); attaching grants the recipient access. `project` puts a new thread in a project (you must be a member; it must not be archived); a message in an existing thread always belongs to the thread's project, and so do replies, progress, steers and events. Messages carry `project` (from v0.18.26). From v0.19.2, `after` must name a task by this sender to the same recipient. While that task is open, this message stays queued but cannot be claimed, does not wake the recipient and is excluded from overview `queued`; closing the task releases it. A closed `after` delivers immediately. The sender may stop the queued message |
-| `POST /v1/messages/{id}/trace` | agent (the task's recipient) | `{events: [{seq, kind, data}]}`: steps of the run handling task `id`, uploaded by the recipient's runner while it runs (from v0.18.32). `kind`: `text`, `thinking`, `tool`, `tool_result`, `usage`, `error`, `output` (a shell node's command output as it runs, `stream` is `stdout` or `stderr`), or `delta` (text or thinking while it is being written, from v0.19.8: `stream` is `text` or `thinking`, `id` names the block, and pieces with the same `id` join in order; the finished block follows as a `text` or `thinking` step and replaces them), or `turn_end` (from `myco trace follow`, v0.19.8: the followed session ended its turn and waits, e.g. for agents it handed work to; steps after it mean it is at work again); `data` is the step (`text`, `stream`, `tool`, `id`, `input`, `output`, `failed`, `input_tokens`, `output_tokens`, `cost_usd`, `duration_ms`). A `seq` already stored is skipped; up to 500 steps per upload, 16 KB per step, 2 MB per task. Not for end-to-end encrypted tasks. Kept 7 days |
+| `POST /v1/messages/{id}/trace` | agent (the task's recipient) | `{events: [{seq, kind, data}]}`: steps of the run handling task `id`, uploaded by the recipient's runner while it runs (from v0.18.32). `kind`: `text`, `thinking`, `tool`, `tool_result`, `usage`, `error`, `output` (a shell node's command output as it runs, `stream` is `stdout` or `stderr`), or `delta` (text or thinking while it is being written, from v0.19.8: `stream` is `text` or `thinking`, `id` names the block, and pieces with the same `id` join in order; the finished block follows as a `text` or `thinking` step and replaces them), or `turn_end` (from `myco trace follow`, v0.19.8: the followed session ended its turn and waits, e.g. for agents it handed work to; steps after it mean it is at work again); `data` is the step (`text`, `stream`, `tool`, `id`, `input`, `output`, `failed`, `input_tokens`, `output_tokens`, `cost_usd`, `duration_ms`). `data.observed_at_ms` optionally gives the runner source observation time (Unix ms); outer `at` remains Hub ingestion time. Older runners omit it. Cross-host subtraction requires measured clock-skew bounds. A `seq` already stored is skipped; up to 500 steps per upload, 16 KB per step, 2 MB per task. Not for end-to-end encrypted tasks. Kept 7 days |
 | `GET /v1/messages/{id}/trace?after=` | agent (the task's sender or recipient) | `{message, status, events}`: the steps after `after` |
 | `GET /v1/messages/{id}` | agent | A message you sent or received. For `acked`/`held` tasks, `active_at` is the recipient's latest observed activity (recipient GET, progress, trace, steer receipt); Hub restart without in-memory activity falls back to `updated_at`. Sender reads do not advance it |
 | `POST /v1/inbox/pull` | agent | `{limit?, wait_seconds?, types?, via?}` → `{messages}`; leases messages (long-poll ≤ 60s); each message from a node carries `from_display`, that node's display name, when it has one (from v0.18.36). With `via: "runner"` it returns nothing while a session of the agent keeps `inbox wait` running (and for 30 minutes after, so a session that is still open between two waits is not resumed behind it) |
@@ -857,6 +859,17 @@ a JSON body:
 `exit_code` 124 = killed at the node's timeout, 126 = refused (sender not in `allow_from`,
 command not in the node's allowlist) with the reason in `error`. Notes, replies and events are
 never executed. `myco exec --to <node> --cmd "..."` wraps this and exits with `exit_code`.
+
+Exec runners also accept the node owner's exact `@console:<owner>` identity,
+derived from the authenticated `GET /v1/me` response, while retaining a nonempty
+`allow_from` list. This includes a workflow computer step sent as that person.
+Other members' consoles, including administrators, receive no exception. The
+runner caches this owner and sender list together for up to 30 seconds; ownership
+changes take effect on refresh. If refresh fails, only the original startup
+`allow_from` is used, without an owner-console exception. Missing `owner` on older
+Hubs and empty sender lists do not grant owner-console access. This identity is
+never persisted in `allow_from`; command restrictions and the audit `from` remain
+unchanged. Upgrade the node's runner to enable this behavior.
 
 An exec node's answers (the result reply, or the failure event) are stored already `done`: they
 matter only to whoever waits for them (`GET /v1/messages/{id}/reply` still returns them), so a
@@ -1810,3 +1823,209 @@ when one of them leaves (only changing the key at the vendor does that), whose
 usage and quota it is would be unclear, and one person adding agents on their
 computers needs only their own. Sharing (for a project, say) would be a change
 of its own.
+
+## Local App preferences
+
+These routes belong to the local desktop App backend, not the workspace Hub.
+They operate on the App's existing local profile and require no new Hub protocol.
+Browser-only consoles / older backends may return 404 or 405; clients retain their
+browser storage path in that case. See [Local App preferences](local-preferences.md)
+for the migration and storage audit.
+
+| Route | Request and response |
+| --- | --- |
+| `GET /app/preferences` | `{version: 1, values: {key: string \| null}}`; `Cache-Control: no-store` |
+| `PATCH /app/preferences` | `{values: {key: string \| null}}`; updates only the supplied allowlisted keys and returns the complete document |
+| `POST /app/preferences/import` | Same shape; imports only absent keys. Existing values and null deletion tombstones win |
+| `PATCH /app/preferences/hubs/{id}` | `{name: string, look: {color?: 0..7, pic?: string}}`; atomically merges one workspace's alias/appearance without replacing other workspaces |
+| `POST /app/preferences/images` | Raw PNG/JPEG/GIF/WebP bytes, at most 8 MiB; returns `{url: "/app/preferences/images/<sha256>.<ext>"}` |
+| `GET /app/preferences/images/{name}` | Private immutable image bytes; only content-addressed names are accepted |
+
+Metadata requests/files are bounded to 24 MiB. Workspace pictures supplied as
+legacy `data:image/...;base64,...` are extracted into local image files before
+metadata is committed; external or invalid picture references are rejected.
+Preference errors are `{error: "local_preferences", message, retryable}`. Invalid
+requests return 400, oversized metadata/images 413, a competing writer 503 and
+profile I/O failures 500. Failed saves preserve previously committed metadata.
+No local filesystem paths, image payloads or preference values are logged.
+
+### Runtime account identity
+
+`Runtime.account` is an optional email identity hint reported by newer runners
+and `myco join` / session reporting. Claude cloud sessions use
+`CLAUDE_CODE_USER_EMAIL`, falling back to `~/.claude.json`'s
+`oauthAccount.emailAddress`; local Claude sessions use that file. Codex uses the
+`email` claim in `tokens.id_token` in `auth.json` under `CODEX_HOME` (default
+`~/.codex`). Only the JWT payload is decoded; it is not verified and never grants
+authority. Tokens are neither transmitted nor logged. Missing/unreadable files,
+malformed data and API-key-only configurations report no account.
+
+The transport returns `account` only to the agent's owner and workspace
+administrators, including the owner's authorized superagent. Ordinary members
+and ordinary agent credentials cannot read it, including in runtime-report
+responses. This rule applies to details, lists and overview. Older runners omit
+the field; older Hubs ignore it. Existing databases store it in runtime JSON and
+need no schema migration. The App shows it alongside the cloud/machine location
+when present; provider names continue to describe the model provider separately.
+
+
+### Local App model-provider connection test
+
+`POST /app/hubs/{id}/providers/test` tests the unsaved form; the `{pid}/test`
+variant uses a saved provider's sealed address and key. The response remains
+`{models: [...]}` with an optional `models_source` of `provider` or `catalog`.
+The latter means an explicit, bounded MiniMax completion verified the chosen
+endpoint when model discovery was unavailable; it is not a discovered list.
+Background discovery never generates completions. MiniMax HTTP 401 failures use
+`provider_region_or_key` and a suggestion to check the selected region and key.
+Neither errors nor responses contain the request key. No Hub API or vendor id
+changes are required; region choice is stored in the existing address fields.
+### Machine health and verified process termination
+
+New runners sample once per minute per runner process and may include optional
+`machine_health` in `PUT /v1/me/runtime`. It contains `at`, `runner_instance`, `owner_id` (bound to the reporting agent owner),
+`complete`, `alert`, `load_ratio`, `load_metric` (`load1_per_core` on Unix,
+`cpu_busy` on Windows), `cores`, `memory_total`, `memory_available`, and at most
+20 `processes`. Process fields are `name` (basename only), `pid`, `created`
+(an OS creation identity), `cpu` (percent of one core), `memory`, optional
+`agent`, `suspicious`, and an optional short-lived `ref`. No argv, environment,
+working directory or executable path is included. Samples older than two minutes
+or incomplete samples are unknown and cannot authorize process termination.
+
+Load above 70% of cores or available memory below 10% for ten continuous minutes
+raises an alert. A verified agent descendant whose parent has exited or has been
+replaced by an init/subreaper, consuming at least 80% of one core for thirty
+continuous minutes, is a suspected orphan. Sampling gaps break continuity.
+Unknown-source processes contribute to aggregate pressure but never receive a
+termination reference. Alerts never automatically terminate a process.
+
+`GET /v1/machines` and overview machine entries include optional `machine_health`
+and `can_stop_process`. Reports from a former owner are refused after an ownership transfer. Only the machine owner and workspace administrators
+receive process details or process controls. Per-agent runtime projections expose
+aggregate health only. Coordinators of affected projects receive a deduplicated
+note on an alert and another on recovery.
+
+The machine owner or administrator can POST to `/v1/machines/{id}/spawn` with
+`{"cli":"process-stop","process_ref":"<current ref>"}`. This is a typed control
+operation, never a shell command. The machine runner checks the current machine
+and agent ownership, reference freshness, and OS process creation identity again.
+Unknown, expired, reused or unowned processes are refused. A successful response
+has `stopped_process: {name, pid, created, ...}`. Audit action
+`machine.process.stop` records only name, PID, creation identity and the owning agent in its detail,
+plus the standard audit actor and machine target. It records no command line.
+Older runners refuse this special CLI instead of executing an unrelated command;
+older hubs reject the unknown report field, which new clients specifically omit
+on retry without suppressing authentication failures.
+
+Harness children live in Unix process groups or Windows Jobs. A normal turn keeps
+background children and their ownership records. Explicit stop, session/profile
+replacement, and runner shutdown terminate owned groups, with a bounded grace
+period before forced termination. Windows launches suspended, assigns its Job,
+then resumes; Job assignment failure aborts the launch. Windows Jobs disallow
+breakaway and terminate members on final handle close. Unix children that escape
+with setsid before their ancestry is observed cannot be reliably attributed by a
+process group alone. Local ownership registries contain metadata only, with
+owner-only permissions; unknown historical processes are never retroactively
+claimed or offered a terminate button.
+
+For a fresh execution-time ownership check, `GET /v1/me` includes optional
+`machine_owner_id` read from the bound machine's current record. A present empty
+string means unowned; absence (an older Hub or unreadable record) means unknown.
+The process-stop runner refuses unknown ownership or a machine owner different
+from the verified agent owner, including a machine transferred without its nodes.
+
+### Coordination statistics (read-only)
+
+Authenticated admin/member/agent credentials:
+
+| Method | Route | Query | Response |
+|---|---|---|---|
+| GET | `/v1/stats/agents` | `name`, `project`, `since=7d` | `api.AgentStatsList` |
+| GET | `/v1/stats/agent-pick` | `skill`, `cli`, `project`, `machine`, `count=3`, `strict=false` | `api.AgentPickList` |
+| GET | `/v1/stats/coordinator` | `name` (default caller agent), `since=7d` | `api.CoordinatorStats` |
+
+These routes return `version: 1`. Durations accept Go duration syntax plus `d`,
+positive and at most 366 days; count is 1..100. Timings are seconds with explicit
+sample counts and null for unavailable values. New clients report `unsupported`
+against old Hubs; existing runners need no new fields or calls. No mutation,
+reservation, token refresh or `dry_run` is involved.
+
+Visible profiles are filtered separately from caller-readable task history.
+Non-manager history is limited to participant messages, identified by `scope`;
+project selection never expands it. Private account quota visibility is applied
+before selection. No message bodies, raw error text or credential data are returned.
+Cohorts, outcome definitions, queue coverage, resend/reassignment inference,
+follow-up counts, percentile convention and deterministic ranking weights are
+specified in [Coordination statistics](coordination-statistics.md). API structs
+live in `internal/api/coordination_stats.go`; web contracts in
+`web/src/lib/coordination-stats.ts`.
+
+### Sent-task board and coordinator alerts
+
+`GET /v1/tasks/board?project=<name>&stale=15m&all=true` accepts agent or
+console/admin credentials. By default it returns every unfinished **task sent by
+that caller**, across projects. `project` restricts the result to a visible project.
+`all=true` requires `project` and either a coordinator agent in that project, its
+human owner, or a workspace administrator; it returns all unfinished tasks in that
+project. Ordinary members cannot enumerate other senders' tasks with this route.
+
+The response is `{"observed_at":"<RFC3339>","tasks":[...]}`. Items contain only
+`id`, `from`, `to`, `thread_id`, optional `project`, `status`, `created_at`, optional
+`active_at`, `last_activity_at`, `age_ms`, `queued_for_ms`, `idle_ms`,
+`stale_after_ms`, and `stale`. No body, result, attachment, credential, error text or
+runtime/account data is read or returned. States are `queued`, `delivered`,
+`acked` and `held` (delivered/acked are in progress). `queued_for_ms` is the age of
+currently queued tasks since creation, zero otherwise; it does **not** reconstruct
+historical queue latency or reset to the start of a requeue episode. Activity follows the existing `Message.LastActive` rule: the later of
+`active_at` and the last state/metadata update (`updated_at`), falling back to
+creation for a legacy task with neither timestamp. A new ack/hold is activity
+even if its previous recipient heartbeat was older. Items sort stale first, then greatest idle time,
+then ID. An empty result is `tasks: []`.
+
+`stale` overrides only the board's display threshold, in whole seconds from `1s`
+to `168h`. Without it, each task uses its project's configured alert threshold,
+or 15 minutes for projects without an override and non-project tasks.
+
+`GET /v1/projects/{name}/task-alerts` returns
+`{"project":"acme","stale_seconds":900}`. `PUT` to the same route with
+`{"stale_seconds":1200}` changes only this project's threshold (1–604800 seconds).
+Both require the same project coordinator/owner/administrator permissions as
+`all=true`. `PUT ?dry_run=true` validates permissions and returns the proposed
+policy without persisting it. Concurrent ordinary project edits do not overwrite
+this independent setting. No fields are added to old project requests/responses.
+
+New console tasks are additionally bound to their authenticated member's ID in
+internal storage; the existing display-name `from_owner` contract is unchanged.
+Human boards, alert destinations and the cooldown follow that member across
+renames. Missing/removed accounts never redirect notes to a reused old handle.
+Historical console tasks without this attribution are not guessed from names;
+use a project-authorized `all=true` view for those records. Agent-sent tasks,
+including old runners' tasks, remain addressed by their existing agent identity.
+
+Every 30 seconds the Hub evaluates metadata for three conditions:
+
+- An open task has no recipient activity for its project's stale threshold.
+- A delivered/acked task's recipient has a nonzero heartbeat whose online window
+  has expired, after overlapping the task's lifetime. Held tasks and agents never
+  seen online during that lifetime do not trigger this condition.
+- Within a rolling 10 minutes, tasks have failed on at least three **distinct**
+  agents on the same verified machine and owner. Failure time, agent and machine
+  identity are captured in the failure transaction, starting after this migration;
+  later agent moves, ownership changes and message metadata edits do not rewrite
+  them. A quiet gap greater than 10 minutes starts a new machine incident. The
+  incident is an observation, not an assertion of infrastructure failure or OOM.
+
+The Hub sends the task sender a `note` with affected task metadata and suggested
+`myco task board` / `myco message steer` commands. Machine incidents disclose only
+that sender's task reference and an aggregate distinct-agent count, never other
+senders' tasks, machine paths or task contents. One note batches up to 50 conditions
+across the sender's projects. At most one alert note per sender is committed in
+five minutes; remaining conditions wait for later batches. Stale/offline conditions
+that resolve before delivery are discarded and may be detected again later.
+Delivered stale/offline conditions are deduplicated once per task and condition;
+machine alerts once per incident and affected sender. Deduplication, cooldown and
+note insertion commit atomically and survive Hub restarts. Existing task replies
+and failures retain their ordinary delivery; the alert budget does not suppress them.
+
+New clients must treat missing task routes on an old Hub as `unsupported` with an
+upgrade suggestion, not simulate a board from a truncated inbox/history listing.

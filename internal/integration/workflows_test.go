@@ -7,11 +7,80 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/myco-ai/myco/internal/api"
 	"github.com/myco-ai/myco/internal/app"
 	clipkg "github.com/myco-ai/myco/internal/cli"
+	"github.com/myco-ai/myco/internal/config"
 )
+
+// A computer step is sent by its owner's console, not by a listed agent.
+// Exercise the real Hub /me and runner wiring rather than injecting senders
+// directly into the exec harness.
+func TestWorkflowComputerRunsOnOwnersRestrictedExecNode(t *testing.T) {
+	home := isolatedHome(t)
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	if _, err := h.admin().UpdateMember(c, "owner", api.MemberUpdateRequest{Name: "alice"}); err != nil {
+		t.Fatal(err)
+	}
+	node := newCLI(t, h, filepath.Join(home, "node.yaml"))
+	// The console-owner exception does not replace explicit exec-risk setup.
+	if code, _, _ := node.run(c, "agent", "register", "--name", "unconfigured-shell", "--harness", "exec"); code == 0 {
+		t.Fatal("exec registration without allowed agents or risk confirmation succeeded")
+	}
+	node.must(c, "agent", "register", "--name", "test-shell", "--harness", "exec", "--allow-from", "lead", "--workdir", t.TempDir())
+	file := filepath.Join(t.TempDir(), "workflow.json")
+	def := `{"name":"owner-computer","steps":[{"id":"command","computer":"test-shell","run":"echo owner-ok"}],"edges":[{"from":"command","to":"$end"}]}`
+	if err := os.WriteFile(file, []byte(def), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	owner := newCLI(t, h, filepath.Join(home, "owner.yaml"))
+	owner.must(c, "workflow", "apply", "--file", file)
+	run, _, err := h.admin().StartWorkflow(c, "owner-computer", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(filepath.Join(home, "node.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	me, err := h.client(cfg.Token).Me(c)
+	if err != nil || me.Owner != "alice" || len(me.AllowFrom) != 1 || me.AllowFrom[0] != "lead" {
+		t.Fatalf("Hub owner and restricted list: %+v %v", me, err)
+	}
+	node.must(c, "runner", "start", "--once")
+	for {
+		h.h.Workflows.Tick(c)
+		done, err := h.admin().WorkflowRun(c, run.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if done.Status == "succeeded" {
+			break
+		}
+		if done.Status != "running" || c.Err() != nil {
+			t.Fatalf("computer step did not succeed: %+v", done)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	log, err := os.ReadFile(filepath.Join(home, ".myco", "logs", "test-shell.exec.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var entry struct {
+		From   string `json:"from"`
+		Denied bool   `json:"denied"`
+	}
+	if err := json.Unmarshal(log, &entry); err != nil || entry.From != "@console:alice" || entry.Denied {
+		t.Fatalf("owner console audit: %s, %v", log, err)
+	}
+	me, err = h.client(cfg.Token).Me(c)
+	if err != nil || len(me.AllowFrom) != 1 || me.AllowFrom[0] != "lead" {
+		t.Fatalf("derived console was persisted in allow_from: %+v %v", me, err)
+	}
+}
 
 // A workflow saved with the CLI, started by an agent with its own token:
 // each step is a task the hub sends; replies with a structured result move

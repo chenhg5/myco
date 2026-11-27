@@ -10,6 +10,9 @@ import (
 type AgentRepository interface {
 	Create(ctx context.Context, a *Agent) error
 	Save(ctx context.Context, a *Agent) error
+	// MutateProfile reads and updates profile fields under a write transaction.
+	// An optional audit entry is saved in that same transaction.
+	MutateProfile(ctx context.Context, name AgentName, change func(*Agent) error, audit *AuditEntry) (*Agent, error)
 	Get(ctx context.Context, name AgentName) (*Agent, error)
 	GetByTokenHash(ctx context.Context, hash string) (*Agent, error)
 	List(ctx context.Context) ([]*Agent, error)

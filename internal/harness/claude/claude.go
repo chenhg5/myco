@@ -228,6 +228,7 @@ func (c *claude) Run(ctx context.Context, req harness.Request) (harness.Result, 
 			}
 		}
 	}
+	harness.ObserveProcess(&proc, req, Name)
 	out, runErr := harness.Exec(ctx, proc)
 	traceEvents("claude", out.Stdout)
 	res, final, ok := parseStream(out.Stdout)

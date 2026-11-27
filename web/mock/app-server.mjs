@@ -9,6 +9,9 @@ import { usageFixture } from "./usage.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { showcase } from "./showcase.mjs";
 
+// Mock-only one-time receipts and the bindings restored between UI cases.
+const handoverLinks = new Map();
+const handoverAgents = new Map();
 const PORT = Number(process.env.APP_MOCK_PORT || 7781);
 // MOCK_OS_URL: a real App backend for myco.os (see /app/os below).
 const OS_URL = (process.env.MOCK_OS_URL || "").replace(/\/$/, "");
@@ -810,7 +813,7 @@ const state = {
           kind: "agent", machine_id: "m_studio",
           // Its 5-hour window is nearly used (amber), the weekly one is not.
           runtime: {
-            cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
+            account: "alice@example.com", cli: "codex", cli_version: "0.52.0", model: "gpt-6-sol", model_source: "app",
             effort: "high", effort_source: "app", access: "workspace", max_access: "workspace", models: CODEX_MODELS,
             // a custom address (Settings: 自定义地址)
             provider: "api.example-llm.com", provider_host: "api.example-llm.com", provider_source: "env_file",
@@ -929,7 +932,7 @@ const state = {
           name: "release-cloud", owner: "alice", owner_id: "mem_alice", display_name: "Release (Claude 云端)", description: "在 claude.ai 上整理发布说明。",
           // It has not said which model it runs on (an older myco in that session).
           // No supported usage source on its connection: lists say nothing.
-          kind: "agent", runtime: { cli: "claude-cloud", access: "readonly",
+          kind: "agent", runtime: { cli: "claude-cloud", account: "alice@example.com", access: "readonly",
             quota: { source: "claude", provider: "unknown", status: "unsupported", at: "0001-01-01T00:00:00Z", checked_at: iso(300), windows: [] } },
           status_text: "正在整理发布说明", status_at: iso(60),
           labels: ["group=release"], binding: { harness: "claude-cloud", environment: "claude.ai" },
@@ -1275,7 +1278,7 @@ const heldForOther = makeMessage({
 // Tasks the UI smoke ends itself (POST /app/mock/finish {id}), when it has
 // done what it does while they run ("单聊 · 排队依次发"): a slow runner
 // cannot let the mock's own clock end them first.
-const handFinished = new Set(["先列一下要改的页面", "第一条排队：改首页标题"]);
+const handFinished = new Set(["先列一下要改的页面", "第一条排队：改首页标题", "这条先跑着"]);
 const finishers = new Map();
 
 function scheduleReply(hub, threadId, agent, taskId, restart = false) {
@@ -1967,6 +1970,14 @@ function overviewFor(h) {
     // Real machines only; cloud sessions are not machines.
     machines: (h.machines || []).map((m) => ({
       ...m,
+      ...(m.id === "m_studio" ? { can_stop_process: true, machine_health: {
+        at: new Date().toISOString(), runner_instance: "demo-runner", incident: "demo-incident", complete: true, alert: true,
+        cores: 8, load_metric: "load1_per_core", load_ratio: 0.86, memory_total: 16 * 1024 ** 3, memory_available: 2 * 1024 ** 3,
+        processes: [
+          { pid: 4101, name: "demo-worker", created: "demo-birth-1", cpu: 99, memory: 8388608, agent: "demo-coder", suspicious: true, ref: "demo-suspect" },
+          { pid: 4102, name: "legacy-worker", created: "demo-birth-2", cpu: 95, memory: 8388608, suspicious: false },
+        ],
+      } } : {}),
       agents: h.agents.filter((a) => a.kind !== "machine" && a.machine_id === m.id).map((a) => a.name),
     })),
     recent: h.recent,
@@ -2081,7 +2092,7 @@ const localAgents = [
     install: "curl -fsSL https://opencode.ai/install | bash", install_mirror: "npm install -g opencode-ai" + npmMirror, login: "opencode auth login" },
 ];
 
-let imBridges = [{ name: "feishu-pm-codex", platform: "feishu", agent: "pm-codex", has_owner: true, node: "studio-im-feishu-pm-codex", online: true }];
+let imBridges = [{ name: "feishu-pm-codex", platform: "feishu", agent: "pm-codex", has_owner: true, node: "studio-im-feishu-pm-codex", online: true, desk: true }];
 let imScan = null;
 // A QR-code-looking placeholder (the real App gets a PNG from Feishu's link).
 const MOCK_QR = "data:image/svg+xml;base64," + Buffer.from(
@@ -2120,16 +2131,44 @@ function rawBody(req) {
 }
 
 const cacheStore = new Map(); // key -> {key, hub, data}, oldest first
+// /app/mock/message-delay: the next message takes this long to reach the
+// hub (a slow workspace, for the UI smoke).
+let nextMessageDelay = 0;
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
   const method = req.method || "GET";
   console.error(`${method} ${url.pathname}`);
 
+  // The public one-time exchange used by `myco join` in another session.
+  // These tokens and credentials are mock-only; never call a real hub here.
+  if (parts.length === 2 && parts[0] === "v1" && parts[1] === "takeover" && method === "POST") {
+    const body = (await readBody(req)) || {};
+    const ticket = handoverLinks.get(body.token);
+    if (!ticket) return fail(res, 404, "not_found", "takeover command is invalid or already used");
+    const binding = body.binding;
+    if (!binding?.harness || !binding?.session_id) return fail(res, 400, "invalid_argument", "binding harness and session_id are required");
+    const { handover, agent } = ticket;
+    if (!handoverAgents.has(agent)) handoverAgents.set(agent, JSON.parse(JSON.stringify({ binding: agent.binding, runtime: agent.runtime, machine_id: agent.machine_id })));
+    handoverLinks.delete(body.token);
+    agent.binding = { ...binding };
+    agent.runtime = { cli: binding.harness };
+    delete agent.machine_id;
+    handover.to = { binding: { ...binding }, runtime: { ...agent.runtime } };
+    handover.state = "done";
+    handover.done_at = iso();
+    return send(res, 200, { agent, token: "mock-only-agent-credential", handover, brief: "Mock handover note" });
+  }
+
   if (method === "OPTIONS") { res.writeHead(204); res.end(); return; }
   // MOCK_DELAY=ms: answers about a hub take this long (a hub far away).
   if (process.env.MOCK_DELAY && parts[1] === "hubs" && parts.length > 3) {
     await new Promise((r) => setTimeout(r, Number(process.env.MOCK_DELAY)));
+  }
+  if (nextMessageDelay && method === "POST" && parts[1] === "hubs" && parts[3] === "messages") {
+    const ms = nextMessageDelay;
+    nextMessageDelay = 0;
+    await new Promise((r) => setTimeout(r, ms));
   }
 
   // /app/pending-link — a link the App was opened with, read once.
@@ -2153,6 +2192,13 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { path: `/Users/alice/Downloads/${b.name}` });
   }
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "last-export" && method === "GET") return send(res, 200, state.lastExport || {});
+  // /app/mock/message-delay — the next message takes this long to reach the
+  // hub: the UI smoke clicks its queued row while it is on its way.
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "message-delay" && parts.length === 3 && method === "POST") {
+    const body = await readBody(req);
+    nextMessageDelay = Math.max(0, Number(body?.ms) || 0);
+    return send(res, 200, { ms: nextMessageDelay });
+  }
   // /app/mock/finish — answers a task the UI smoke ends itself (handFinished).
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "finish" && method === "POST") {
     const body = await readBody(req);
@@ -2276,6 +2322,14 @@ const server = http.createServer(async (req, res) => {
   // and theme from the seeded ones.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "handovers" && parts.length === 3 && method === "POST") {
     state.handovers = {};
+    handoverLinks.clear();
+    for (const [agent, before] of handoverAgents) {
+      agent.binding = before.binding;
+      agent.runtime = before.runtime;
+      if (before.machine_id) agent.machine_id = before.machine_id;
+      else delete agent.machine_id;
+    }
+    handoverAgents.clear();
     return send(res, 200, { ok: true });
   }
 
@@ -3179,8 +3233,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (parts.length === 3 && parts[2] === "feishu" && method === "POST") {
       const body = await readBody(req);
-      imScan = { id: "scan1", agent: body.agent, polls: 0 };
-      return send(res, 200, { id: "scan1", url: "https://open.feishu.cn/page/launcher?user_code=DEMO-CODE", qr: MOCK_QR });
+      imScan = { id: "scan1", agent: body.agent, platform: body.platform || "feishu", polls: 0 };
+      const host = imScan.platform === "lark" ? "open.larksuite.com" : "open.feishu.cn";
+      return send(res, 200, { id: "scan1", url: `https://${host}/page/launcher?user_code=DEMO-CODE`, qr: MOCK_QR });
     }
     if (parts.length === 4 && parts[2] === "feishu" && method === "GET") {
       if (!imScan) return send(res, 404, { error: "not_found", message: "no such QR code (it expired)" });
@@ -3195,6 +3250,13 @@ const server = http.createServer(async (req, res) => {
       const b = { name: `slack-${body.agent}`, platform: "slack", agent: body.agent, has_owner: false, claim: "3f9a1c2e", node: "studio-im-slack", online: true };
       imBridges.push(b);
       return send(res, 200, { bridge: b });
+    }
+    if (parts.length === 4 && parts[3] === "prompt" && method === "PUT") {
+      const body = await readBody(req);
+      const b = imBridges.find((x) => x.name === parts[2]);
+      if (!b) return send(res, 404, { error: "not_found", message: "no such bot on this computer" });
+      b.prompt = String(body.prompt || "").trim();
+      return send(res, 200, { name: b.name, prompt: b.prompt });
     }
     if (parts.length === 4 && parts[3] === "claim" && method === "POST") {
       const b = imBridges.find((x) => x.name === parts[2]);
@@ -3599,11 +3661,24 @@ const server = http.createServer(async (req, res) => {
           : `th_c_${state.counter += 1}`;
       const atts = (Array.isArray(body.attachments) ? body.attachments : []).map((id) => uploads.get(id)).filter(Boolean);
       if (Array.isArray(body.attachments) && atts.length !== body.attachments.length) return fail(res, 404, "not_found", "附件不存在");
+      // (the hub's own line from that agent, as when it fails a task:
+      // "task failed: why"; in the thread of the message it names)
+      if (body.type === "event") {
+        const of = typeof body.of === "string" ? Object.values(hub.threads || {}).flat().find((m) => m.id === body.of) : null;
+        const ev = makeMessage({ thread_id: of ? of.thread_id : threadId, from: to, to: CONSOLE, type: "event", status: "failed", body: text, created_at: iso(0), updated_at: iso(0),
+          // (the task it is about, as the hub's own line names it)
+          ...(typeof body.reply_to === "string" && body.reply_to ? { reply_to: body.reply_to } : {}) });
+        (hub.threads ||= {})[ev.thread_id] ||= [];
+        hub.threads[ev.thread_id].push(ev);
+        return send(res, 201, ev);
+      }
       // (a note in your name, as a workflow sends one: nothing to answer)
       if (body.type === "note") {
         // (in the thread of the message it names, when it names one)
         const of = typeof body.of === "string" ? Object.values(hub.threads || {}).flat().find((m) => m.id === body.of) : null;
-        const note = makeMessage({ thread_id: of ? of.thread_id : threadId, from: CONSOLE, to, type: "note", status: "done", body: text, created_at: iso(0), updated_at: iso(0) });
+        const note = makeMessage({ thread_id: of ? of.thread_id : threadId, from: CONSOLE, to, type: "note", status: "done", body: text, created_at: iso(0), updated_at: iso(0),
+          // (a run's end, as a workflow tells whoever started it)
+          ...(typeof body.workflow === "string" && body.workflow ? { workflow: body.workflow } : {}) });
         if (!hub.threads) hub.threads = {};
         (hub.threads[note.thread_id] ||= []).push(note);
         return send(res, 201, note);
@@ -3614,7 +3689,17 @@ const server = http.createServer(async (req, res) => {
         ...(body.project && !body.thread_id ? { project: body.project } : {}),
         ...(atts.length ? { attachments: atts } : {}),
         ...(afterTask ? { after: afterTask.id } : {}),
+        // (a workflow's step, as a run gives one to an agent)
+        ...(typeof body.workflow === "string" && body.workflow ? { workflow: body.workflow } : {}),
       });
+      // (tests only: a task the agent already gave up on, with its reason)
+      if (typeof body.mock_failed === "string" && body.mock_failed) {
+        msg.status = "failed";
+        msg.error = body.mock_failed;
+        (hub.threads ||= {})[msg.thread_id] ||= [];
+        hub.threads[msg.thread_id].push(msg);
+        return send(res, 201, msg);
+      }
       if (!hub.threads) hub.threads = {};
       if (!hub.threads[threadId]) hub.threads[threadId] = [];
       hub.threads[threadId].push(msg);
@@ -4054,7 +4139,8 @@ const server = http.createServer(async (req, res) => {
       if (parts.length === 5 && parts[4] === "test" && method === "POST") {
         const body = await readBody(req);
         if (!body?.api_key) return fail(res, 400, "invalid_argument", "an address and a key are needed to test");
-        if (body.api_key.includes("wrong")) return fail(res, 502, "provider_unreachable", `models from ${new URL(body.anthropic_base || "https://api.minimax.io").host}: HTTP 401`);
+        if (body.api_key.includes("wrong")) return fail(res, 502, body.vendor === "minimax" ? "provider_region_or_key" : "provider_unreachable", `models from ${new URL(body.anthropic_base || "https://api.minimax.io").host}: HTTP 401`);
+        if (body.vendor === "minimax" && body.api_key.includes("no-model-list")) return send(res, 200, { models: models(body.vendor), models_source: "catalog" });
         return send(res, 200, { models: models(body.vendor) });
       }
       const p = hub.providers.find((x) => x.id === parts[4]);
@@ -4190,8 +4276,8 @@ const server = http.createServer(async (req, res) => {
     // 「换一个来接着做」 (hubs after v0.19.22; the others answer 404). pm-codex
     // was taken over from a claude.ai session two days ago: the line in its
     // chat, and 「换回这个」 in its profile. A command waits for whoever runs it
-    // (nobody does here); a computer path answers after a moment, with the
-    // new session's first words. The agent itself is left as it is.
+    // and can be redeemed through the public mock route; a computer path returns
+    // the new session's first words.
     if (parts.length === 6 && parts[3] === "agents" && ["handovers", "handover-link", "handover"].includes(parts[5])) {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       if (hub.id !== "hub_studio") return fail(res, 404, "not_found", "no such route");
@@ -4209,7 +4295,9 @@ const server = http.createServer(async (req, res) => {
       if (parts[5] === "handover-link") {
         const h = { id, agent: name, at: iso(), by: "alice", note: body.note || "", from, to: { binding: {} }, state: "waiting", open_tasks: [], back: body.back || "", expires_at: iso(-86_400) };
         list.unshift(h);
-        const url = `${hub.url.replace(/^http:/, "https:")}/h/myco_takeover_9f3k2demo${id.slice(4)}`;
+        const token = `myco_takeover_mock_${id.slice(4)}`;
+        handoverLinks.set(token, { hub, handover: h, agent });
+        const url = `${hub.url.replace(/^http:/, "https:")}/h/${token}`;
         return send(res, 201, { handover: h, url, command: `curl -fsSL '${url}' | sh`, command_ps1: `irm '${url}?format=ps1' | iex` });
       }
       const m = (hub.machines || []).find((x) => x.id === body.machine || x.name === body.machine);
@@ -4840,6 +4928,10 @@ const server = http.createServer(async (req, res) => {
           "它的 myco 版本太旧，或者 runner 没在运行。");
       }
       const body = await readBody(req);
+      if (body?.cli === "process-stop") {
+        if (machine.id !== "m_studio" || body.process_ref !== "demo-suspect") return fail(res, 403, "permission_denied", "Process identity changed");
+        return send(res, 200, { cli: "process-stop", stopped_process: { name: "demo-worker", pid: 4101, created: "demo-birth-1" } });
+      }
       if (body && body.cli === "exec") {
         const dir = typeof body.dir === "string" ? body.dir.trim() : "";
         if (!Array.isArray(body.allow_from) || body.allow_from.length === 0) return fail(res, 400, "invalid_argument", "a shell node needs at least one agent allowed to send it commands");
@@ -5200,9 +5292,22 @@ const server = http.createServer(async (req, res) => {
       }
       if (parts.length === 6 && parts[5] === "allow_from" && method === "PUT") {
         const body = await readBody(req);
-        if (!Array.isArray(body?.allow_from)) return fail(res, 400, "invalid_request", "allow_from 必须是字符串数组");
-        agent.allow_from = body.allow_from.map(String);
-        return send(res, 200, agent);
+        if (process.env.MOCK_OLD_HUB && (body.allow_add || body.allow_remove)) return fail(res, 400, "upgrade_required", "Upgrade the Hub to edit sender permissions incrementally");
+        const before = [...agent.allow_from];
+        const add = body.allow_add || [], remove = body.allow_remove || [];
+        if (body.allow_from && (body.allow_add || body.allow_remove) || add.some((n) => remove.includes(n))) return fail(res, 400, "invalid_argument", "conflicting permission edits");
+        if (body.allow_from) agent.allow_from = [...new Set(body.allow_from)];
+        else if (body.allow_add || body.allow_remove) {
+          if (!before.length || before.includes("*")) {
+            if (remove.length) return fail(res, 400, "invalid_argument", "replace unrestricted permissions explicitly");
+          } else {
+            const next = [...new Set([...before.filter((n) => !remove.includes(n)), ...add])];
+            if (!next.length) return fail(res, 400, "invalid_argument", "cannot remove the final sender");
+            agent.allow_from = next;
+          }
+        } else return fail(res, 400, "invalid_argument", "permission edit required");
+        const allow_from_change = { added: agent.allow_from.filter((n) => !before.includes(n)), removed: before.filter((n) => !agent.allow_from.includes(n)), unchanged: before.filter((n) => agent.allow_from.includes(n)) };
+        return send(res, 200, { ...agent, allow_from_change });
       }
       if (parts.length === 6 && parts[5] === "kick" && method === "POST") {
         agent.online = false;
