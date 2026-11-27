@@ -3690,6 +3690,14 @@ const server = http.createServer(async (req, res) => {
         // (a workflow's step, as a run gives one to an agent)
         ...(typeof body.workflow === "string" && body.workflow ? { workflow: body.workflow } : {}),
       });
+      // (tests only: a task the agent already gave up on, with its reason)
+      if (typeof body.mock_failed === "string" && body.mock_failed) {
+        msg.status = "failed";
+        msg.error = body.mock_failed;
+        (hub.threads ||= {})[msg.thread_id] ||= [];
+        hub.threads[msg.thread_id].push(msg);
+        return send(res, 201, msg);
+      }
       if (!hub.threads) hub.threads = {};
       if (!hub.threads[threadId]) hub.threads[threadId] = [];
       hub.threads[threadId].push(msg);

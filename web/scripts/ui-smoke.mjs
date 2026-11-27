@@ -6155,6 +6155,21 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, stepCard.locator("[data-testid=workflow-step-more]"));
       await settle(page, 150);
       await shot(page, size, scheme, "chat-workflow-step");
+      // A step that was not done: said in the card, in grey; under it no
+      // "工作流" tag, no red 失败了 and no 重新发送 (the workflow retries it).
+      const failedStep = await sendFromElsewhere("hub_studio", "review-cloud", stepBody, { workflow: run.id, mock_failed: "Fixed release-first node failed; inspect workflow diagnostics" });
+      const fmsg = page.locator(`.conv-detail [data-msg="${failedStep.id}"]`);
+      await fmsg.locator("[data-testid=workflow-step-failed]", { hasText: "这一步没完成：Fixed release-first node failed" }).waitFor({ timeout: 15_000 });
+      const under = await fmsg.evaluate((el) => {
+        const m = el.querySelector(":scope > .conv-msg-meta");
+        return { tag: !!m?.querySelector("[data-testid=via-workflow]"), text: m?.textContent || "", shown: m ? Number(getComputedStyle(m).opacity) : 1 };
+      });
+      if (under.tag) throw new Error("工作流卡片下面不该再有「工作流」标签");
+      if (under.text.includes("失败了")) throw new Error(`工作流卡片下面不该写失败，实际「${under.text}」`);
+      if (await page.locator(`.conv-detail [data-failed="${failedStep.id}"]`).count()) throw new Error("工作流的一步不该给「重新发送」");
+      await fmsg.locator(".conv-bubble").hover();
+      await settle(page, 250);
+      await shot(page, size, scheme, "chat-workflow-step-failed");
       await clickVisible(page, card.locator("[data-testid=workflow-note-open]"));
       await page.locator("[data-testid=workflow-run]").waitFor({ timeout: 15_000 });
     });

@@ -2373,7 +2373,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {m.type === "note" && !wfNote && <span className="conv-tag neutral">{L("备注", "Note")}</span>}
             {mine && voiced && <VoiceMark heard={voiced.heard} />}
             {wfNote ? <WorkflowNoteCard hubId={target.hubId} note={wfNote} />
-              : wfStep && m.workflow ? <WorkflowStepCard hubId={target.hubId} runId={m.workflow} step={wfStep} />
+              : wfStep && m.workflow ? <WorkflowStepCard hubId={target.hubId} runId={m.workflow} step={wfStep}
+                failed={m.status === "failed" && m.error && m.error !== STOPPED ? m.error : ""} />
               : m.unreadable
               ? <span className="conv-unreadable"><Lock />{L("已加密，只有双方的主人能看", "Encrypted: only the owners of both sides can read it")}</span>
               : mine && voiced ? <MessageContent body={voiced.text} />
@@ -2412,14 +2413,15 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
           {/* The time and copy stay out of the way until the pointer is on the
               message; a failure or an encryption mark is always shown. */}
-          <div className={cn("conv-msg-meta", (failedNote || (!bySystem && (receipt || m.automation || m.workflow))) && "is-shown", m.status === "failed" && m.error !== STOPPED && "is-failed", !bySystem && (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
+          <div className={cn("conv-msg-meta", !bySystem && (failedNote || receipt || m.automation || m.workflow) && "is-shown", !bySystem && m.status === "failed" && m.error !== STOPPED && "is-failed", !bySystem && (m.e2e || (row?.hub.e2e && !m.from.startsWith("@"))) && "is-shown")}>
             {m.e2e && <Lock className="conv-lock" aria-label={L("端到端加密", "End-to-end encrypted")} />}
             {!m.e2e && row?.hub.e2e && !m.from.startsWith("@") && <span className="conv-plain">{L("未加密", "Unencrypted")}</span>}
             {usage && <span className="conv-usage">{usage}</span>}
             {m.automation && <span className="conv-auto" data-testid="via-automation" title={L("由自动化替你发出", "Sent for you by an automation")}>{L("自动", "Auto")}</span>}
-            {m.workflow && <span className="conv-auto" data-testid="via-workflow" title={L("工作流里的一步，由工作区替你发出", "A step of a workflow, sent for you by the workspace")}>{L("工作流", "Workflow")}</span>}
+            {m.workflow && !bySystem && <span className="conv-auto" data-testid="via-workflow" title={L("工作流里的一步，由工作区替你发出", "A step of a workflow, sent for you by the workspace")}>{L("工作流", "Workflow")}</span>}
             {receipt && <span className="conv-receipt" title={receipt.title}>{receipt.text}</span>}
-            {failedNote || clockTime(m.created_at)}
+            {/* (a workflow's card says a failure itself, in its own words) */}
+            {(!bySystem && failedNote) || clockTime(m.created_at)}
             {!m.unreadable && !mine && m.type !== "event" && <TranslateToggle id={m.id} body={m.body} />}
             {!m.unreadable && <CopyMessage text={m.body} />}
             {pins && !m.unreadable && (() => {
@@ -2436,7 +2438,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               title={L("删除（只从你这边去掉）", "Delete (from your view only)")} aria-label={L("删除", "Delete")}><Trash2 /></button>
           </div>
         </div>
-        {retry && (
+        {/* (a workflow's step is retried by the workflow, not sent again by hand) */}
+        {retry && !bySystem && (
           <div className="conv-stuck is-failed" data-failed={m.id}>
             <span className="dot failed" aria-hidden />
             <span className="conv-stuck-text">{failureWords(m.error!).long}</span>

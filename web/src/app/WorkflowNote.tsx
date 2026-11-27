@@ -164,7 +164,9 @@ export function WorkflowNoteCard({ hubId, note }: { hubId: string; note: Workflo
 
 /** A step given to an agent: what it is to do; the workflow's own
  *  instructions, its input and the result's shape folded. */
-export function WorkflowStepCard({ hubId, runId, step }: { hubId: string; runId: string; step: WorkflowStep }) {
+export function WorkflowStepCard({ hubId, runId, step, failed }: { hubId: string; runId: string; step: WorkflowStep;
+  /** why this try was not done, when it was not (said in the card, in grey) */
+  failed?: string }) {
   const [open, setOpen] = useState(false);
   const words = [L(`工作流 · ${step.name}`, `Workflow · ${step.name}`), L(`第 ${step.n} 步 ${step.label}`, `step ${step.n}, ${step.label}`),
     step.attempt > 1 ? L(`第 ${step.attempt} 次`, `try ${step.attempt}`) : ""].filter(Boolean).join(" · ");
@@ -172,6 +174,7 @@ export function WorkflowStepCard({ hubId, runId, step }: { hubId: string; runId:
     <div className="wfn wfn-step" data-testid="workflow-step">
       <Head hubId={hubId} runId={runId} words={words} />
       {step.prompt && <div className="wfn-prompt"><MessageContent body={step.prompt} /></div>}
+      {failed && <div className="wfn-failed" data-testid="workflow-step-failed">{L(`这一步没完成：${failed}`, `This step was not done: ${failed}`)}</div>}
       {step.rest && (
         <>
           <Fold open={open} onToggle={() => setOpen((o) => !o)} testId="workflow-step-more">

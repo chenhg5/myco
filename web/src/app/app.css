@@ -10428,6 +10428,7 @@ html.os-other ::-webkit-scrollbar-thumb:hover, html.os-other ::-webkit-scrollbar
 /* (a step that did not go well: its name says so in plain weight, not colour) */
 .wfn-steps li.is-bad .wfn-step-line { color: var(--fg); }
 .wfn-prompt, .wfn-rest { min-width: 0; }
+.wfn-failed { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
 .wfn-rest { padding: 6px 0 0; border-top: 1px solid var(--line-2); font-size: 12.5px; color: var(--fg-2); }
 
 /* ---------- 专注模式 (focus mode) ----------
