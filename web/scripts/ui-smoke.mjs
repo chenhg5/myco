@@ -384,6 +384,12 @@ async function sidebar(page, open) {
   await page.waitForTimeout(250);
 }
 
+/** Waits until no CSS transition is running on the page (a hover fading
+ * in, a margin sliding), so what is read next is a resting value. */
+async function transitionsDone(page, timeout = 5_000) {
+  await page.waitForFunction(() => !document.getAnimations().some((a) => a instanceof CSSTransition && a.playState === "running"), null, { timeout });
+}
+
 async function clickVisible(page, locator) {
   await locator.first().waitFor({ state: "visible" });
   await locator.first().click();
@@ -7172,14 +7178,25 @@ async function runMatrix(browser, size, scheme) {
       await page.evaluate(() => window.dispatchEvent(new CustomEvent("myco-pins-changed", { detail: { hubId: "hub_studio" } })));
       await page.locator(".conv-detail:visible .pin-bar").first().waitFor({ timeout: 10_000 });
       // The header's line, the pinned row's and the box you write in end at
-      // the same place.
-      const cbox = await page.locator(".conv-detail:visible .conv-compose-box").first().boundingBox();
-      for (const sel of [".conv-head", ".pin-bar", ".conv-tops"]) {
-        // (the top block: when the chat has a plan, a goal or a watch)
-        if (sel === ".conv-tops" && !(await page.locator(`.conv-detail:visible > ${sel}`).count())) continue;
-        const b = await page.locator(`.conv-detail:visible > ${sel}`).first().boundingBox();
-        if (!b || !cbox || Math.abs(b.x - cbox.x) > 2 || Math.abs(b.x + b.width - cbox.x - cbox.width) > 2) {
-          throw new Error(`专注模式的 ${sel} 应和输入框对齐（${b?.x}–${b && b.x + b.width}，输入框 ${cbox?.x}–${cbox && cbox.x + cbox.width}）`);
+      // the same place. Read at rest: the pointer moved off the chat (it
+      // was left on the ⋯ menu, over the header, whose buttons fade in on
+      // hover), and no transition running (entering focus slides the main
+      // area's margin away over 0.18s, which widens the column at 760);
+      // all of them in one frame, so none is measured mid-change.
+      await page.mouse.move(2, page.viewportSize().height - 2);
+      await transitionsDone(page);
+      const edges = await page.locator(".conv-detail:visible").first().evaluate((d) => {
+        const r = (el) => { if (!el) return null; const b = el.getBoundingClientRect(); return { x: b.x, right: b.right }; };
+        return {
+          box: r(d.querySelector(".conv-compose-box")),
+          // (the top block only when the chat has a plan, a goal or a watch)
+          bars: [".conv-head", ".pin-bar", ".conv-tops"].map((sel) => ({ sel, b: r(d.querySelector(`:scope > ${sel}`)) })).filter((x) => x.sel !== ".conv-tops" || x.b),
+        };
+      });
+      for (const { sel, b } of edges.bars) {
+        const cbox = edges.box;
+        if (!b || !cbox || Math.abs(b.x - cbox.x) > 2 || Math.abs(b.right - cbox.right) > 2) {
+          throw new Error(`专注模式的 ${sel} 应和输入框对齐（${b?.x}–${b?.right}，输入框 ${cbox?.x}–${cbox?.right}）`);
         }
       }
       // Quiet chrome: the head is the name alone; its buttons are faint
