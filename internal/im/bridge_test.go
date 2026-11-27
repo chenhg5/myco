@@ -211,7 +211,7 @@ func TestTaskProgressAndReply(t *testing.T) {
 		t.Fatalf("sent %+v", req)
 	}
 	eventually(t, "status card", func() bool { return ad.last("status").text != "" })
-	if s := ad.last("status"); !strings.Contains(s.text, "coder") || s.ref.ReplyTo != "om_1" || s.ref.Thread {
+	if s := ad.last("status"); !strings.Contains(s.text, "收到") || strings.Contains(s.text, "coder") || s.ref.ReplyTo != "om_1" || s.ref.Thread {
 		t.Fatalf("status %+v", s)
 	}
 	hub.prog["msg_1"] <- api.Message{Body: "running tests"}
@@ -282,7 +282,7 @@ func TestCommands(t *testing.T) {
 		return Inbound{ChatID: "oc_1", MessageID: id, ThreadKey: key, UserID: "ou_owner", Text: text}
 	}
 	b.Handle(in("1", "/help"))
-	eventually(t, "help", func() bool { return strings.Contains(ad.last("post").text, "coder") })
+	eventually(t, "help", func() bool { return strings.Contains(ad.last("post").text, "/stop") })
 	b.Handle(in("2", "draft a post"))
 	eventually(t, "sent", func() bool { return hub.nsent() == 1 })
 	if hub.sent[0].To != "coder" {
@@ -360,7 +360,7 @@ func TestStateSurvivesRestart(t *testing.T) {
 	if c := b2.conv("chat:D1"); c == nil || c.Task != "msg_1" || c.ThreadID != "msg_1" {
 		t.Fatalf("restored %+v", c)
 	}
-	if !strings.Contains(hub.sent[0].Body, "relayed from Slack") {
+	if !strings.Contains(hub.sent[0].Body, "U1 on Slack") {
 		t.Fatalf("body %q", hub.sent[0].Body)
 	}
 }

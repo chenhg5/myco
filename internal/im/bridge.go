@@ -81,6 +81,42 @@ type Bridge struct {
 	// claimed it).
 	OnConfig func(Config) error
 	cfgMu    sync.Mutex
+
+	// model is the front desk (nil: messages go straight to the agent).
+	model Model
+	about atomic.Value // *api.Agent, the agent's profile (read once)
+}
+
+// SetModel sets the front desk's model (nil turns it off).
+func (b *Bridge) SetModel(m Model) { b.model = m }
+
+// agentInfo is a Hub that can tell who the agent is.
+type agentInfo interface {
+	Agent(ctx context.Context, name string) (*api.Agent, error)
+}
+
+// Agent is the agent's profile.
+func (h ClientHub) Agent(ctx context.Context, name string) (*api.Agent, error) {
+	return h.C.GetAgent(ctx, name)
+}
+
+// profile is the agent's profile, if the hub can tell it.
+func (b *Bridge) profile() *api.Agent {
+	if a, ok := b.about.Load().(*api.Agent); ok {
+		return a
+	}
+	h, ok := b.hub.(agentInfo)
+	if !ok {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(b.context(), 10*time.Second)
+	defer cancel()
+	a, err := h.Agent(ctx, b.cfg.Agent)
+	if err != nil || a == nil {
+		return nil
+	}
+	b.about.Store(a)
+	return a
 }
 
 // New makes a bridge; dir is where its state is kept ("" keeps it in memory).
@@ -99,8 +135,12 @@ func New(cfg Config, ad Adapter, hub Hub, dir string, log *slog.Logger) (*Bridge
 	if lang == "" {
 		lang = DefaultLang(cfg.Platform)
 	}
-	return &Bridge{cfg: cfg, ad: ad, hub: hub, st: st, log: log, lang: lang,
-		statusEvery: 2 * time.Second, waitEach: 5 * time.Minute}, nil
+	b := &Bridge{cfg: cfg, ad: ad, hub: hub, st: st, log: log, lang: lang,
+		statusEvery: 2 * time.Second, waitEach: 5 * time.Minute}
+	if cfg.HasDesk() {
+		b.model = LLM{BaseURL: cfg.LLMBaseURL, Model: cfg.LLMModel, Key: cfg.LLMKey, Session: "myco-im-" + cfg.Name}
+	}
+	return b, nil
 }
 
 // Run serves until ctx ends: the chat app's messages, the node's inbox, and
@@ -194,7 +234,7 @@ func (b *Bridge) process(ctx context.Context, in Inbound) {
 	cmd := parseCommand(in.Text)
 	switch cmd.name {
 	case "help":
-		b.say(ctx, ref, b.t("help", agent))
+		b.say(ctx, ref, b.t("help"))
 		return
 	case "whoami":
 		b.say(ctx, ref, b.t("whoami", in.UserID))
@@ -215,37 +255,56 @@ func (b *Bridge) process(ctx context.Context, in Inbound) {
 			return
 		}
 		if err := b.hub.Stop(ctx, known.Task); err != nil {
-			b.say(ctx, ref, b.t("send_failed", agent, err.Error()))
+			b.say(ctx, ref, b.t("send_failed", err.Error()))
 			return
 		}
-		b.say(ctx, ref, b.t("stopped", agent))
+		b.say(ctx, ref, b.t("stopped"))
 		return
 	}
 	text := strings.TrimSpace(cmd.rest)
 	if text == "" {
-		b.say(ctx, ref, b.t("help", agent))
+		b.say(ctx, ref, b.t("help"))
 		return
 	}
 	if agent == "" {
 		b.say(ctx, ref, b.t("no_agent"))
 		return
 	}
-	who := in.UserName
-	if who == "" && in.UserID == b.owner() {
+	who := orText(in.UserName, in.UserID)
+	if in.UserName == "" && in.UserID == b.owner() && b.cfg.OwnerName != "" {
 		who = b.cfg.OwnerName
 	}
-	body := text + "\n\n——\n" + b.t("via", platformName(b.cfg.Platform, b.lang), orText(who, in.UserID))
+	// As in voice chat: the front desk answers as the agent, and hands it
+	// the work. Without one (or when it fails), straight to the agent.
+	if b.desk(ctx, in, ref, known, who, text) {
+		return
+	}
+	body := text + "\n\n——\n" + b.t("via", platformName(b.cfg.Platform, b.lang), who)
+	steered, err := b.work(ctx, in, ref, body, true)
+	if err != nil {
+		b.say(ctx, ref, b.t("send_failed", err.Error()))
+		return
+	}
+	if steered {
+		b.say(ctx, ref, b.t("steered"))
+	}
+}
 
+// work gives the agent what to do: added to the open task (steered), or a
+// new task in the conversation. announce posts the status card at once
+// (else it comes with the first progress).
+func (b *Bridge) work(ctx context.Context, in Inbound, ref Ref, body string, announce bool) (steered bool, err error) {
+	agent := b.cfg.Agent
+	known := b.conv(in.ThreadKey)
 	// An open task: what they say is added to it (and answers its question).
 	if known != nil && known.Task != "" {
 		err := b.hub.Steer(ctx, known.Task, body)
 		if err == nil {
-			b.say(ctx, ref, b.t("steered", agent))
-			return
+			b.update(in.ThreadKey, func(c *conversation) { c.Asking = "" })
+			return true, nil
 		}
 		if !closedTask(err) {
-			b.say(ctx, ref, b.t("send_failed", agent, err.Error()))
-			return
+			return false, err
 		}
 		// It closed meanwhile: a new task in the same thread.
 	}
@@ -258,17 +317,20 @@ func (b *Bridge) process(ctx context.Context, in Inbound) {
 	}
 	msg, err := b.hub.Send(ctx, req)
 	if err != nil {
-		b.say(ctx, ref, b.t("send_failed", agent, err.Error()))
-		return
+		return false, err
 	}
-	status, err := b.ad.Status(ctx, ref, b.t("queued", agent))
-	if err != nil {
-		b.log.Warn("im: status message failed", "err", err)
+	status := ""
+	if announce {
+		if status, err = b.ad.Status(ctx, ref, b.t("queued")); err != nil {
+			b.log.Warn("im: status message failed", "err", err)
+		}
 	}
 	b.update(in.ThreadKey, func(c *conversation) {
 		c.Ref, c.ThreadID, c.Task, c.Agent, c.Status, c.User = ref, msg.ThreadID, msg.ID, agent, status, in.UserID
+		c.Asking, c.Progress = "", ""
 	})
 	go b.watch(in.ThreadKey, msg.ID)
+	return false, nil
 }
 
 func (b *Bridge) owner() string {
@@ -314,7 +376,7 @@ func (b *Bridge) claim(ctx context.Context, in Inbound, ref Ref) bool {
 	cfg.Owner, cfg.Claim, cfg.ClaimExpires, cfg.ClaimFails = in.UserID, "", time.Time{}, 0
 	if b.OnConfig != nil {
 		if err := b.OnConfig(cfg); err != nil {
-			b.say(ctx, ref, b.t("send_failed", "config", err.Error()))
+			b.say(ctx, ref, b.t("send_failed", err.Error()))
 			return true
 		}
 	}
@@ -346,9 +408,13 @@ func (b *Bridge) watch(key, task string) {
 	var last time.Time
 	progress := func(p api.Message) {
 		if p.Ask {
-			setStatus(b.t("asking", c.Agent, clip(p.Body, 1500)))
+			b.update(key, func(cc *conversation) {
+				cc.Asking = p.Body
+				cc.Desk = trimDesk(append(cc.Desk, deskMsg{Role: "assistant", Content: clip(p.Body, 3000)}))
+			})
+			setStatus(b.t("asking", clip(p.Body, 1500)))
 			// A new message too: an edit does not notify anyone.
-			b.say(ctx, c.Ref, b.t("asking", c.Agent, clip(p.Body, 3000)))
+			b.say(ctx, c.Ref, b.t("asking", clip(p.Body, 3000)))
 			return
 		}
 		if time.Since(last) < b.statusEvery {
@@ -356,13 +422,17 @@ func (b *Bridge) watch(key, task string) {
 		}
 		last = time.Now()
 		if s := clip(p.Body, 600); s != "" {
-			setStatus(b.t("working", c.Agent, s))
+			b.update(key, func(cc *conversation) { cc.Progress = p.Body })
+			setStatus(b.t("working", s))
 		} else {
-			setStatus(b.t("working0", c.Agent))
+			setStatus(b.t("working0"))
 		}
 	}
 	finish := func(text string) {
-		setStatus(text)
+		if cur := b.conv(key); cur != nil && cur.Status != "" {
+			c.Status = cur.Status
+			setStatus(text)
+		}
 		b.update(key, func(cc *conversation) {
 			if cc.Task == task {
 				cc.Task, cc.Status = "", ""
@@ -376,7 +446,11 @@ func (b *Bridge) watch(key, task string) {
 		}
 		reply, err := b.hub.WaitReply(ctx, task, b.waitEach, progress)
 		if err == nil && reply != nil {
-			finish(b.t("done", c.Agent))
+			finish(b.t("done"))
+			b.update(key, func(cc *conversation) {
+				cc.LastAnswer = clip(reply.Body, 4000)
+				cc.Desk = trimDesk(append(cc.Desk, deskMsg{Role: "assistant", Content: clip(reply.Body, 4000)}))
+			})
 			b.say(ctx, c.Ref, clip(reply.Body, 20000))
 			return
 		}
@@ -387,7 +461,7 @@ func (b *Bridge) watch(key, task string) {
 			if gerr == nil {
 				switch m.Status {
 				case "failed":
-					finish(b.t("failed", c.Agent, clip(orText(m.Error, "?"), 600)))
+					finish(b.t("failed", clip(orText(m.Error, "?"), 600)))
 					return
 				case "done":
 					finish(b.t("closed"))

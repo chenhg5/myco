@@ -129,6 +129,8 @@ export interface IMBridge {
   claim?: string;
   /** no owner, and its claim code no longer works (expired or too many wrong tries) */
   claim_expired?: boolean;
+  /** It answers as the agent with the voice chats' model (front desk). */
+  desk?: boolean;
   node?: string;
   hub?: string;
   online: boolean;
@@ -1051,7 +1053,8 @@ export const appApi = {
   /** An agent's chat-app bots (Feishu/Lark, Slack) this computer runs. */
   imBridges: (hubId: string, agent: string) => request<{ bridges: IMBridge[]; slack_create_url: string }>("GET", `app/im?hub_id=${enc(hubId)}&agent=${enc(agent)}`),
   /** A Feishu QR code to scan: makes the bot and connects it. */
-  startFeishuScan: (hubId: string, agent: string) => request<{ id: string; url: string; qr: string }>("POST", "app/im/feishu", { hub_id: hubId, agent }),
+  /** platform: feishu (China) or lark (international) — separate apps, separate codes. */
+  startFeishuScan: (hubId: string, agent: string, platform: "feishu" | "lark" = "feishu") => request<{ id: string; url: string; qr: string }>("POST", "app/im/feishu", { hub_id: hubId, agent, platform }),
   feishuScan: (id: string) => request<{ state: "waiting" | "connecting" | "done" | "failed"; error?: string; bridge?: IMBridge }>("GET", `app/im/feishu/${enc(id)}`),
   stopFeishuScan: (id: string) => request<{ stopped: boolean }>("DELETE", `app/im/feishu/${enc(id)}`),
   connectSlack: (hubId: string, agent: string, botToken: string, appToken: string) =>

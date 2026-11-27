@@ -987,13 +987,13 @@ myco page data watch --page pg_xxx            # 等着看人在网页里改了�
 
 ### 4.20 聊天软件：飞书/Lark 和 Slack 机器人（预览）
 
-在聊天软件里直接和 agent 说话。在已加入网络的机器上运行下面的命令，再用飞书或 Lark 手机 App 扫码：
+在聊天软件里直接和 agent 说话。在已加入网络的机器上运行下面的命令，再用飞书手机 App 扫码（Lark 是国际版，用 `myco im connect lark` 和 Lark App 扫，码是分开的）：
 
 ```bash
 myco im connect feishu --agent coder
 ```
 
-这样就给 `coder` 建好了它自己的机器人（一个 agent 一个）。之后发给机器人的话，就成了交给 `coder` 的任务。进度在原消息上更新；agent 的提问和回复都发回聊天里；任务没完时你再说的话，会补充到这个任务上。
+这样就给 `coder` 建好了它自己的机器人（一个 agent 一个）。机器人就是 `coder` 本人，用第一人称说话；在 App 里配了语音模型时，它像语音聊天一样，能答的马上答，要动手的变成任务去做。进度在原消息上更新；agent 的提问和回复都发回聊天里；任务没完时你再说的话，会补充到这个任务上。
 
 Slack 用 `myco im connect slack`：它给出一个链接，按 manifest 建好 Slack 应用，再把两个令牌传进来即可。
 

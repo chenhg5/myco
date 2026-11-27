@@ -11,7 +11,7 @@ package console
 // ~/.myco/im. This computer's runner service runs the bots configured there.
 //
 //	GET    /app/im?hub_id=&agent=     {bridges: [...], slack_create_url}  (that agent's bots)
-//	POST   /app/im/feishu             {hub_id, agent}  → {id, url, qr}  a QR code to scan
+//	POST   /app/im/feishu             {hub_id, agent, platform: feishu|lark} → {id, url, qr}  a QR code to scan
 //	GET    /app/im/feishu/{id}        {state: waiting|connecting|done|failed, error?, bridge?}
 //	DELETE /app/im/feishu/{id}        stop waiting for the scan
 //	POST   /app/im/slack              {hub_id, agent, bot_token, app_token} → {bridge}
@@ -65,6 +65,8 @@ type IMBridge struct {
 	Node         string `json:"node,omitempty"`
 	Hub          string `json:"hub,omitempty"`
 	Online       bool   `json:"online"`
+	// Desk: it answers as the agent with the voice chats' model.
+	Desk bool `json:"desk,omitempty"`
 }
 
 // imScan is a QR code being scanned.
@@ -117,10 +119,14 @@ func (b *Backend) imList(ctx context.Context) ([]IMBridge, error) {
 	var list []IMBridge
 	for _, r := range res.Bridges {
 		br := IMBridge{Name: r.Name, Platform: r.Platform, Agent: r.Agent, Owner: r.Owner != "", Node: r.Node, Hub: r.Hub, Online: r.Online, ClaimExpired: r.Expired}
-		if r.Claim && res.Dir != "" {
-			// The code is on this computer only, for its owner to send.
-			if c, err := im.Load(res.Dir, r.Name); err == nil {
-				br.Claim = c.Claim
+		if res.Dir != "" {
+			if c, err := im.Load(res.Dir, r.Name); err == nil && c != nil {
+				if r.Claim {
+					// The code is on this computer only, for its owner to send.
+					br.Claim = c.Claim
+				}
+				// Bots made before the front desk get it once voice is set.
+				br.Desk = b.imDesk(res.Dir, c)
 			}
 		}
 		list = append(list, br)
@@ -174,18 +180,41 @@ func (b *Backend) imConnect(ctx context.Context, hub string, args []string, secr
 	}
 	_ = json.Unmarshal(out, &res)
 	br := &IMBridge{Name: res.Bridge.Name, Platform: res.Bridge.Platform, Agent: res.Bridge.Agent, Owner: res.Bridge.Owner != "", Hub: hub}
-	if !br.Owner {
-		if c, err := im.Load(im.Dir(filepath.Join(b.Local.Home, ".myco")), br.Name); err == nil {
+	imDir := im.Dir(filepath.Join(b.Local.Home, ".myco"))
+	if c, err := im.Load(imDir, br.Name); err == nil && c != nil {
+		if !br.Owner {
 			br.Claim = c.Claim
 		}
+		br.Desk = b.imDesk(imDir, c)
 	}
 	return br, nil
 }
 
+// imDesk gives a new bot the voice chats' model as its front desk (it then
+// answers as the agent, as in voice chats). It writes the bot's config file
+// itself, so it works with CLIs from before the front desk too; the key
+// stays in that 0600 file.
+func (b *Backend) imDesk(dir string, c *im.Config) bool {
+	if c.HasDesk() || c.NoDesk {
+		return c.HasDesk()
+	}
+	vc := b.effectiveVoiceConfig()
+	key, _ := b.voiceKeys(vc)
+	if vc.LLMModel == "" || key == "" {
+		return false
+	}
+	c.LLMBaseURL, c.LLMModel, c.LLMKey = vc.LLMBaseURL, vc.LLMModel, key
+	if err := im.Save(dir, c); err != nil {
+		return false
+	}
+	return true
+}
+
 func (b *Backend) postIMFeishu(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		HubID string `json:"hub_id"`
-		Agent string `json:"agent"`
+		HubID    string `json:"hub_id"`
+		Agent    string `json:"agent"`
+		Platform string `json:"platform"` // feishu (default) or lark: separate apps, separate codes
 	}
 	if !decode(w, r, &in) {
 		return
@@ -194,12 +223,16 @@ func (b *Backend) postIMFeishu(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "which agent the bot is for (agent) is required"})
 		return
 	}
+	if in.Platform != "" && in.Platform != "feishu" && in.Platform != "lark" {
+		writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "platform is feishu or lark"})
+		return
+	}
 	hub, err := b.find(in.HubID)
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
-	p, err := (&feishu.Registrar{}).Begin(r.Context())
+	p, err := (&feishu.Registrar{Lark: in.Platform == "lark"}).Begin(r.Context())
 	if err != nil {
 		writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "unavailable", Message: "Feishu could not be reached: " + err.Error()})
 		return

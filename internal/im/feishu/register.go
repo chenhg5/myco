@@ -37,6 +37,9 @@ type Registrar struct {
 	HTTP    *http.Client
 	// LarkURL replaces accountsLark (tests).
 	LarkURL string
+	// Lark: register with Lark (the international app and its accounts),
+	// not Feishu. The two are separate: a Feishu code does not open in Lark.
+	Lark bool
 }
 
 // Pending is a registration waiting to be scanned: show URL as a QR code.
@@ -67,10 +70,20 @@ type regResponse struct {
 }
 
 func (r *Registrar) base() string {
+	if r.Lark {
+		return r.larkURL()
+	}
 	if r.BaseURL != "" {
 		return r.BaseURL
 	}
 	return accountsFeishu
+}
+
+func (r *Registrar) larkURL() string {
+	if r.LarkURL != "" {
+		return r.LarkURL
+	}
+	return accountsLark
 }
 
 func (r *Registrar) client() *http.Client {
@@ -143,10 +156,10 @@ func (r *Registrar) Begin(ctx context.Context) (*Pending, error) {
 // Wait polls until the person has scanned and approved, or ctx ends.
 func (p *Pending) Wait(ctx context.Context) (*Registration, error) {
 	platform := "feishu"
-	lark := p.r.LarkURL
-	if lark == "" {
-		lark = accountsLark
+	if p.r.Lark {
+		platform = "lark"
 	}
+	lark := p.r.larkURL()
 	for {
 		if !p.expires.IsZero() && time.Now().After(p.expires) {
 			return nil, errors.New("the QR code expired; run the command again")

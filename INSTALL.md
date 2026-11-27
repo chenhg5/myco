@@ -987,13 +987,13 @@ What agents get is given in layers, so no matter how many apps there are, they a
 
 ### 4.20 Chat apps: Feishu/Lark and Slack bots (preview)
 
-Talk to your agents from a chat app. Run this on a machine that has joined your network, then scan the QR code with the Feishu or Lark app:
+Talk to your agents from a chat app. Run this on a machine that has joined your network, then scan the QR code with the Feishu app (for Lark, the international app, use `myco im connect lark` and the Lark app: separate codes):
 
 ```bash
 myco im connect feishu --agent coder
 ```
 
-This makes `coder`'s own bot (one bot per agent): what you write to it becomes a task for `coder`. Progress updates in place, the agent's questions and answers come back in the chat, and your replies are added to the task at work.
+This makes `coder`'s own bot (one bot per agent). The bot is `coder` itself and speaks in the first person; with a voice model set in the App, it answers what it can at once, as in voice chats, and does the rest as tasks. Progress updates in place, the agent's questions and answers come back in the chat, and your replies are added to the task at work.
 
 For Slack, `myco im connect slack` prints a link that creates the Slack app from a manifest. Pass its two tokens to finish.
 

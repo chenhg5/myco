@@ -5731,6 +5731,10 @@ async function runMatrix(browser, size, scheme) {
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps-feishu");
       await page.locator('.app-modal [data-testid="feishu-scan"]').getByRole("button", { name: "取消" }).click();
+      // Lark (the international app) has its own button and its own code.
+      await row.getByRole("button", { name: "绑定 Lark" }).click();
+      await page.locator('.app-modal [data-testid="feishu-scan"] img.im-qr[alt="Lark 扫码"]').waitFor({ timeout: 5_000 });
+      await page.locator('.app-modal [data-testid="feishu-scan"]').getByRole("button", { name: "取消" }).click();
       await page.keyboard.press("Escape");
       await page.locator(".ms").waitFor({ state: "hidden" });
     });

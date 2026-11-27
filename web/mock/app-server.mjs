@@ -2081,7 +2081,7 @@ const localAgents = [
     install: "curl -fsSL https://opencode.ai/install | bash", install_mirror: "npm install -g opencode-ai" + npmMirror, login: "opencode auth login" },
 ];
 
-let imBridges = [{ name: "feishu-pm-codex", platform: "feishu", agent: "pm-codex", has_owner: true, node: "studio-im-feishu-pm-codex", online: true }];
+let imBridges = [{ name: "feishu-pm-codex", platform: "feishu", agent: "pm-codex", has_owner: true, node: "studio-im-feishu-pm-codex", online: true, desk: true }];
 let imScan = null;
 // A QR-code-looking placeholder (the real App gets a PNG from Feishu's link).
 const MOCK_QR = "data:image/svg+xml;base64," + Buffer.from(
@@ -3179,8 +3179,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (parts.length === 3 && parts[2] === "feishu" && method === "POST") {
       const body = await readBody(req);
-      imScan = { id: "scan1", agent: body.agent, polls: 0 };
-      return send(res, 200, { id: "scan1", url: "https://open.feishu.cn/page/launcher?user_code=DEMO-CODE", qr: MOCK_QR });
+      imScan = { id: "scan1", agent: body.agent, platform: body.platform || "feishu", polls: 0 };
+      const host = imScan.platform === "lark" ? "open.larksuite.com" : "open.feishu.cn";
+      return send(res, 200, { id: "scan1", url: `https://${host}/page/launcher?user_code=DEMO-CODE`, qr: MOCK_QR });
     }
     if (parts.length === 4 && parts[2] === "feishu" && method === "GET") {
       if (!imScan) return send(res, 404, { error: "not_found", message: "no such QR code (it expired)" });

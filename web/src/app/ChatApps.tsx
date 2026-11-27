@@ -28,7 +28,7 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
   const [slackURL, setSlackURL] = useState("");
   const [gone, setGone] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [adding, setAdding] = useState<"" | "feishu" | "slack">("");
+  const [adding, setAdding] = useState<"" | "feishu" | "lark" | "slack">("");
   const [removing, setRemoving] = useState<IMBridge | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -52,7 +52,8 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
   }, [bridges, load]);
   if (!show) return null;
 
-  const has = (p: string) => bridges?.some((b) => b.platform === p || (p === "feishu" && b.platform === "lark"));
+  // Feishu and Lark are separate apps (China / international): one of each.
+  const has = (p: string) => bridges?.some((b) => b.platform === p);
   const name = nodeName(ag, row.hub);
   const label = (b: IMBridge) => PLATFORM[b.platform]?.() || b.platform;
   // "Slack 机器人", "飞书机器人": a space only after a Latin name.
@@ -80,11 +81,14 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
             </span>
           )) : <span className="app-kv-note">{bridges ? L("还没有绑定", "None yet") : L("正在读取…", "Loading…")}</span>}
           {bridges && !has("feishu") && <button type="button" className="app-kv-link" onClick={() => setAdding("feishu")}>{L("绑定飞书", "Bind Feishu")}</button>}
+          {bridges && !has("lark") && <button type="button" className="app-kv-link" onClick={() => setAdding("lark")}>{L("绑定 Lark", "Bind Lark")}</button>}
           {bridges && !has("slack") && <button type="button" className="app-kv-link" onClick={() => setAdding("slack")}>{L("绑定 Slack", "Bind Slack")}</button>}
         </span>
         <span className="app-kv-help">
-          {L(`给它一个飞书或 Slack 机器人：在聊天软件里发消息，就是交给 ${name} 做事，进度和结果都回到聊天里。（预览）机器人跑在这台电脑上，电脑睡眠时它会离线。`,
-            `Give it a Feishu or Slack bot: what you send the bot goes to ${name}, and its progress and answer come back in the chat. (Preview) The bot runs on this computer, and is offline while it sleeps.`)}
+          {L(`给它一个飞书、Lark 或 Slack 机器人：机器人就是 ${name} 本人，在聊天软件里跟它说话就行，进度和结果都回到聊天里。（预览）机器人跑在这台电脑上，电脑睡眠时它会离线。`,
+            `Give it a Feishu, Lark or Slack bot: the bot is ${name} itself; talk to it in the chat app, and its progress and answers come back there. (Preview) The bot runs on this computer, and is offline while it sleeps.`)}
+          {bridges?.some((b) => !b.desk) && L("在 设置 › 语音 配好模型后，它会像语音聊天一样：能答的马上答，要动手的再去做。",
+            " Once a model is set in Settings › Voice, it works as in voice chats: it answers what it can at once and does the rest.")}
         </span>
         {bridges?.filter((b) => b.claim).map((b) => (
           <span key={b.name} className="im-claim">
@@ -102,11 +106,15 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
       </div>
 
       <Modal open={adding !== ""} onOpenChange={(o) => !o && setAdding("")}
-        title={adding === "slack" ? L(`给 ${name} 绑定 Slack 机器人`, `A Slack bot for ${name}`) : L(`给 ${name} 绑定飞书机器人`, `A Feishu bot for ${name}`)}
+        title={adding === "slack" ? L(`给 ${name} 绑定 Slack 机器人`, `A Slack bot for ${name}`)
+          : adding === "lark" ? L(`给 ${name} 绑定 Lark 机器人`, `A Lark bot for ${name}`)
+          : L(`给 ${name} 绑定飞书机器人`, `A Feishu bot for ${name}`)}
         description={adding === "slack"
           ? L("在 Slack 里建一个应用（设置都已填好），装到你的工作区，再把两个令牌粘到这里。", "Make an app in Slack (its settings are filled in), install it to your workspace, and paste its two tokens here.")
-          : L("用飞书或 Lark 手机 App 扫码，在手机上确认，飞书就建好这个机器人；你就是它的主人。", "Scan with the Feishu or Lark phone app and approve: Feishu makes the bot, with you as its owner.")}>
-        {adding === "feishu" && <FeishuScan hubId={row.hub.id} agent={ag.name} onDone={() => { setAdding(""); void load(); }} onCancel={() => setAdding("")} />}
+          : adding === "lark"
+            ? L("用 Lark（飞书国际版）手机 App 扫码，在手机上确认，Lark 就建好这个机器人；你就是它的主人。", "Scan with the Lark phone app and approve: Lark makes the bot, with you as its owner.")
+            : L("用飞书手机 App 扫码，在手机上确认，飞书就建好这个机器人；你就是它的主人。", "Scan with the Feishu phone app and approve: Feishu makes the bot, with you as its owner.")}>
+        {(adding === "feishu" || adding === "lark") && <FeishuScan key={adding} hubId={row.hub.id} agent={ag.name} lark={adding === "lark"} onDone={() => { setAdding(""); void load(); }} onCancel={() => setAdding("")} />}
         {adding === "slack" && <SlackForm hubId={row.hub.id} agent={ag.name} createURL={slackURL} onDone={() => { setAdding(""); void load(); }} onCancel={() => setAdding("")} />}
       </Modal>
 
@@ -123,18 +131,18 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
   );
 }
 
-function FeishuScan({ hubId, agent, onDone, onCancel }: { hubId: string; agent: string; onDone: () => void; onCancel: () => void }) {
+function FeishuScan({ hubId, agent, lark, onDone, onCancel }: { hubId: string; agent: string; lark: boolean; onDone: () => void; onCancel: () => void }) {
   const [scan, setScan] = useState<Scan | null>(null);
   const [error, setError] = useState<unknown>(null);
   const idRef = useRef("");
   const start = useCallback(async () => {
     setError(null); setScan(null);
     try {
-      const r = await appApi.startFeishuScan(hubId, agent);
+      const r = await appApi.startFeishuScan(hubId, agent, lark ? "lark" : "feishu");
       idRef.current = r.id;
       setScan({ ...r, state: "waiting" });
     } catch (e) { setError(e); }
-  }, [hubId, agent]);
+  }, [hubId, agent, lark]);
   useEffect(() => {
     void start();
     return () => { if (idRef.current) void appApi.stopFeishuScan(idRef.current).catch(() => {}); };
@@ -155,11 +163,11 @@ function FeishuScan({ hubId, agent, onDone, onCancel }: { hubId: string; agent: 
     <div className="im-scan" data-testid="feishu-scan">
       <div className="im-qr-box">
         {scan?.qr && scan.state === "waiting"
-          ? <img className="im-qr" src={scan.qr} alt={L("飞书扫码", "Feishu QR code")} width={184} height={184} />
+          ? <img className="im-qr" src={scan.qr} alt={lark ? L("Lark 扫码", "Lark QR code") : L("飞书扫码", "Feishu QR code")} width={184} height={184} />
           : <div className="im-qr im-qr-empty" />}
       </div>
       <p className="im-scan-note">
-        {!scan && !error && L("正在向飞书要二维码…", "Getting a QR code from Feishu…")}
+        {!scan && !error && (lark ? L("正在向 Lark 要二维码…", "Getting a QR code from Lark…") : L("正在向飞书要二维码…", "Getting a QR code from Feishu…"))}
         {scan?.state === "waiting" && L("二维码 10 分钟内有效。扫好后这里会自动完成。", "The code works for 10 minutes. This finishes by itself once scanned.")}
         {scan?.state === "connecting" && L("扫好了，正在连接…", "Scanned; connecting…")}
         {scan?.state === "failed" && <span className="app-error-text">{scan.error || L("没有连上。", "It did not connect.")}</span>}
