@@ -1332,14 +1332,18 @@
 .av-cell.is-on .pa {
   box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--fg-2);
 }
-.av-sprout {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-top: 10px;
-  color: var(--fg-2);
-  font-size: 12.5px;
-  cursor: pointer;
+.av-grid + .av-label {
+  margin-top: 12px;
+}
+.av-grid.is-acc {
+  grid-template-columns: repeat(8, 1fr);
+}
+.av-cell:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.av-cell:disabled:hover .pa {
+  transform: none;
 }
 
 .ms-name {
