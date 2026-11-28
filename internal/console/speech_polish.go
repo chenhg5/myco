@@ -42,7 +42,7 @@ func (b *Backend) speechPolisher(lang string, words []string) *speechPolish {
 
 func polishPrompt(lang string, words []string) string {
 	list := strings.Join(words, "、")
-	if strings.HasPrefix(lang, "en") {
+	if lang != "" && !strings.HasPrefix(strings.ToLower(lang), "zh") {
 		return "You correct speech recognition. The user's message is what a recognizer heard; it may have written some names wrong (\"Claude\" as \"cloud\" or \"clod\", \"GitHub\" as \"get hub\"). Change only names it got wrong into how they are written in this list, and nothing else: no rewording, no punctuation. If nothing is wrong, give it back unchanged. Answer with the sentence only.\nNames: " + list
 	}
 	return "你是语音识别的纠错器。用户发来的是语音识别的结果，里面可能把一些专有名词听错了（比如把 Claude 识别成「包扣」「CLOU」，把 GitHub 识别成「句号」，把 DeepSeek 识别成「DIP SIP」）。只把听错的专有名词改成下面词表里的写法，其他一个字都不要动：不润色、不改标点、不加字。没有要改的就原样返回。只输出这句话本身。\n词表：" + list

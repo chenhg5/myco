@@ -880,7 +880,9 @@ function PageView({ target, open, active, reload, onMeta }: {
   const title = local ? L(E`这台电脑 · ${local.port || (local.protocol === "https:" ? "443" : "80")} 端口`, E`This computer · port ${local.port || 80}`)
     : opened?.name || page?.name || L("网页", "Page");
   const about = local ? local.host + local.pathname.replace(/\/$/, "")
-    : opened?.live && target.kind === "page" ? L((page ? E`实时 · ${nameOf(target.hubId, page.publisher)} 电脑上的 ${opened.port || page?.port || ""} 端口` : E`实时 ·  电脑上的 ${opened.port || page?.port || ""} 端口`), (page ? E`Live · port ${opened.port || page?.port || ""} on ${nameOf(target.hubId, page.publisher)}'s computer` : E`Live · port ${opened.port || page?.port || ""} on 's computer`))
+    : opened?.live && target.kind === "page" ? page
+      ? L(E`实时 · ${nameOf(target.hubId, page.publisher)} 电脑上的 ${opened.port || page.port || ""} 端口`, E`Live · port ${opened.port || page.port || ""} on ${nameOf(target.hubId, page.publisher)}'s computer`)
+      : L(E`实时 · ${opened.port || ""} 端口`, E`Live · port ${opened.port || ""}`)
     : opened ? [opened.latest > 1 || opened.version > 1 ? L(E`第 ${opened.version} 版`, E`Version ${opened.version}`) : "", page && target.kind === "page" ? L(E`${nameOf(target.hubId, page.publisher)} 发布`, E`by ${nameOf(target.hubId, page.publisher)}`) : "", page ? timeAgo(page.versions.find((v) => v.n === opened.version)?.at || page.updated_at) : ""].filter(Boolean).join(" · ")
       : "";
   const newer = opened && page && page.version > opened.version ? page.version : 0;

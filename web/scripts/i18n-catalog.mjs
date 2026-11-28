@@ -91,6 +91,10 @@ if(process.argv.includes("--check")) {
     for(const {text} of language === "zh-Hant" ? manifest.chinese : manifest.english) {
       if(typeof catalog[text]!=="string" || !catalog[text].trim()) errors.push(`${language}: missing ${JSON.stringify(text)}`);
       else if(signature(text)!==signature(catalog[text])) errors.push(`${language}: placeholders differ in ${JSON.stringify(text)}`);
+      else for(const fragment of text.match(/`[^`]+`|https?:\/\/[^\s)]+|\b(?:Claude Code|myco upgrade|myco join|Codex|myco|OpenAI|Anthropic|GitHub|MCP)\b/g)||[]) {
+        const occurrences=(s,x)=>s.split(x).length-1;
+        if(occurrences(catalog[text],fragment)<occurrences(text,fragment))errors.push(`${language}: protected copy changed in ${JSON.stringify(text)}`);
+      }
     }
   }
   if(errors.length) { console.error(errors.slice(0,40).join("\n")); console.error(`${errors.length} catalog errors`); process.exitCode=1; }

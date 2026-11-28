@@ -263,7 +263,7 @@ type fixRule struct {
 const latinEdge = `A-Za-z0-9_\-.@/`
 
 func newSpeechFixer(lang string, words []string, extra map[string][]string) *speechFixer {
-	zh := !strings.HasPrefix(lang, "en")
+	zh := lang == "" || strings.HasPrefix(strings.ToLower(lang), "zh")
 	f := &speechFixer{}
 	have := map[string]bool{}
 	for _, w := range words {

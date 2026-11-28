@@ -646,6 +646,7 @@ async function runMatrix(browser, size, scheme) {
           const wanted=language==="zh-Hant"?catalog["在这台电脑上开始"]:start;
           if(await check.locator(".wl-start").innerText()!==wanted)throw new Error(`Welcome action is not localized: ${language}`);
           if(await check.getByTestId("language-select").locator("option").count()!==8)throw new Error("Missing language options on Welcome");
+          await settle(check);
           await shot(check,size,scheme,`welcome-language-${language}`);
           await clickVisible(check,check.locator(".wl-way").first());await check.locator(".app-modal").waitFor();
           const input=check.locator(".app-modal input").first();
@@ -673,6 +674,13 @@ async function runMatrix(browser, size, scheme) {
         if(route.request().method()==="PUT") nativeLanguages.push(route.request().postDataJSON().lang);
         await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({lang:nativeLanguages.at(-1)||""})});
       });
+      const saved = async language => {
+        const deadline=Date.now()+5000;
+        while(durable["myco-lang"]!==language) {
+          if(Date.now()>deadline)throw new Error(`Language preference not saved: ${language}`);
+          await check.waitForTimeout(20);
+        }
+      };
       const expected = {zh:"外观", "zh-Hant":"外觀", en:"Appearance", ja:"外観", ko:"모양", es:"Apariencia", "pt-BR":"Aparência"};
       try {
         await check.goto(r.base); await check.locator(".app-shell").waitFor();
@@ -691,6 +699,7 @@ async function runMatrix(browser, size, scheme) {
           await check.waitForFunction(l=>localStorage.getItem("myco-lang")===l,language);
           const overflow=await check.evaluate(w=>document.documentElement.scrollWidth>w+1,size.width);
           if(overflow) throw new Error(`Horizontal overflow in ${language}`);
+          await saved(language);
           await shot(check,size,scheme,`language-${language}`);
           await closeSettings(check);
           if(await check.locator(".conv-detail .md").first().innerText()!==original) throw new Error("Language selection changed the original message");
@@ -712,6 +721,7 @@ async function runMatrix(browser, size, scheme) {
         failPack=false;
         await clickVisible(check,check.getByTestId("language-retry"));
         await check.waitForFunction(()=>document.documentElement.lang==="ko");
+        await saved("ko");
         durable["myco-lang"]="zh";
         await check.reload();await check.locator(".app-shell").waitFor();
         await go(check,"设置",narrow);
