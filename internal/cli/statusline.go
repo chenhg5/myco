@@ -450,6 +450,10 @@ func statusLineApply(dir string, getenv func(string) string, uninstall, dry bool
 	if err := writeClaudeSettings(path, doc); err != nil {
 		return res, err
 	}
+	if uninstall {
+		// Restored (or not); either way there is nothing left to restore.
+		st.Previous = nil
+	}
 	return res, writeStatusLineState(dir, st)
 }
 
@@ -482,7 +486,6 @@ func statusLinePlanFiles(dir string, getenv func(string) string, uninstall bool)
 		if !res.Changed && len(current) > 0 {
 			res.Command = currentCmd
 		}
-		st.Previous = nil
 		return res, doc, st, path, nil
 	}
 	res.Changed = !isOurStatusLine(currentCmd) || strings.TrimSpace(currentCmd) != ourCmd
@@ -609,10 +612,11 @@ func reportStatusLineQuota(ctx context.Context, c *client.Client, dir, agent str
 	if me.Runtime != nil {
 		rt = *me.Runtime
 	}
-	// Something newer is already there (a runner's collection, or a later
-	// session report): keep it, but mark this observation seen so a later
-	// wait does not ask again.
-	if rt.Quota != nil && !rt.Quota.At.Before(at) {
+	// Something newer is already there (a later session report), or a runner
+	// collects this account's own: keep it, but mark this observation seen so
+	// a later wait does not ask again. A runner's `at` can be older than this
+	// observation while its collection is healthier.
+	if rt.Quota != nil && (!rt.Quota.At.Before(at) || (rt.Quota.ProfileRef != "" && rt.Quota.Status == "ok")) {
 		writeStatusLineReport(dir, agent, statusLineReport{ObservedAt: at, ReportedAt: now})
 		return
 	}

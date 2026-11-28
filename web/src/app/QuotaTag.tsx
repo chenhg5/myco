@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Gauge, TriangleAlert } from "lucide-react";
 import type { AgentRow } from "@/app/types";
 import { machinesOfHub } from "@/app/nodes";
-import { quotaHasNumbers, quotaLeft, quotaPillLevel, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaSummary, quotaUnreadable, quotaWindowLabel, quotaWindowShort, quotaWindowText, quotaWorst } from "@/app/quota";
+import { quotaEffectiveStatus, quotaHasNumbers, quotaLeft, quotaLiveWindows, quotaPillLevel, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaSummary, quotaUnreadable, quotaWindowLabel, quotaWindowShort, quotaWindowText, quotaWorst } from "@/app/quota";
 import { fitMenu } from "@/app/fitMenu";
 import { L } from "@/lib/i18n";
 import { timeAgo } from "@/lib/utils";
@@ -14,7 +14,9 @@ import { cn } from "@/lib/utils";
  *  account's owner gets a quota from the hub, so others see nothing. */
 export function QuotaTag({ row, now, className }: { row: AgentRow; now: number; className?: string }) {
   const quota = row.st.agent.runtime?.quota;
-  if (!quota || quotaUnreadable(quota)) return null;
+  // Too old to stand for the account's use now: say nothing in a list (the
+  // details page explains it).
+  if (!quota || quotaUnreadable(quota) || quotaEffectiveStatus(quota, now) === "unknown") return null;
   const s = quotaSummary(quota, machinesOfHub(row.hub), now);
   const bad = s.level === "action" || s.level === "failed";
   return (
@@ -34,14 +36,16 @@ export function QuotaTag({ row, now, className }: { row: AgentRow; now: number; 
 export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
   const [open, setOpen] = useState(false);
   const quota = row.st.agent.runtime?.quota;
-  if (!quota || !quotaHasNumbers(quota)) return null;
-  const worst = quotaWorst(quota);
+  // Numbers nobody refreshed for an hour are unknown: do not offer them as
+  // the account's current use.
+  if (!quota || !quotaHasNumbers(quota, now) || quotaEffectiveStatus(quota, now) === "unknown") return null;
+  const worst = quotaWorst(quota, now);
   if (!worst) return null;
   const level = quotaPillLevel(worst);
   const short = quotaWindowShort(worst);
   const text = quotaSpent(worst) ? L("已用完", "out") : L(`剩 ${quotaLeft(worst)}%`, `${quotaLeft(worst)}% left`);
   const label = [short, text].filter(Boolean).join(" ");
-  const status = quotaStatusText(quota);
+  const status = quotaStatusText(quota, now);
   const stale = quotaStaleNote(quota, now);
   const source = quotaSourceText(quota, machinesOfHub(row.hub));
   const read = quota.checked_at || quota.at;
@@ -58,7 +62,7 @@ export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
           <span className="quota-pill-scrim" onClick={() => setOpen(false)} />
           <div ref={fitMenu} className="quota-pill-menu" role="dialog" aria-label={L("额度", "Quota")} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
             <div className="run-pill-group">{L("额度", "Quota")}</div>
-            {quota.windows.map((w) => (
+            {quotaLiveWindows(quota, now).map((w) => (
               <div key={`${w.name}/${w.model_scope || ""}`} className={cn("quota-pill-row", `is-${quotaPillLevel(w)}`)}>
                 <span>{quotaWindowLabel(w)}</span>
                 <span>{quotaWindowText(w, now)}</span>
