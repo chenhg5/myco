@@ -259,6 +259,7 @@ function reportProblems() {
 
 const intentionalPublicNotReady = new WeakSet();
 const intentionalPageOriginBusy = new WeakSet();
+const intentionalUpgradeAckLoss = new WeakSet();
 // Pages whose app library is made to fail on purpose (出错 · 显示请求编号).
 const intentionalTemplatesFail = new WeakSet();
 
@@ -290,6 +291,8 @@ function watchPage(page, size, scheme) {
     // This fixture deliberately keeps the saved page origin occupied.
     if (intentionalTemplatesFail.has(page) && msg.text().includes("500") && /\/app\/hubs\/[^/]+\/templates:/.test(where)) return;
     if (intentionalPageOriginBusy.has(page) && msg.text().includes("503") && /\/app\/hubs\/[^/]+\/pages\/pg_release\/open:/.test(where)) return;
+    // The receipt test records success before deliberately losing the POST acknowledgement.
+    if (intentionalUpgradeAckLoss.has(page) && msg.text().includes("503") && /\/app\/local\/upgrade:\d/.test(where)) return;
     addProblem(r, "console", msg.text(), where);
   });
   page.on("pageerror", (err) => {
@@ -4459,6 +4462,7 @@ async function runMatrix(browser, size, scheme) {
       };
       const restart = async (r) => { restarts++; state = { ...state, expired: false, runner: { ...state.runner, state: "pending" } }; await r.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify(state) }); };
       try {
+        intentionalUpgradeAckLoss.add(page);
         await page.route(path, route);
         await page.route("**/app/local/upgrade/restart", restart);
         await go(page, "设置", narrow);
@@ -4507,6 +4511,7 @@ async function runMatrix(browser, size, scheme) {
         }
 
       } finally {
+        intentionalUpgradeAckLoss.delete(page);
         await page.unroute(path, route);
         await page.unroute("**/app/local/upgrade/restart", restart);
         await closeSettings(page);
