@@ -45,9 +45,24 @@ schema migrates on start. Nothing is upgraded automatically: run this when 'myco
 		Flags: []Flag{
 			{Name: "check", Kind: Bool, Help: "Only report whether a newer release exists"},
 			{Name: "version", Kind: String, Help: "Release to install, e.g. v0.16.5 (default: latest)"},
+			{Name: "restart-when-idle", Kind: Bool, Help: "Ask the local runner to restart only when no work is claimed or running (up to 6 hours); leave other services alone"},
+			{Name: "result-file", Kind: String, Help: "Keep a private JSON upgrade receipt at this path (for the App)"},
 			{Name: "no-restart", Kind: Bool, Help: "Replace the binary but do not restart services"},
 		},
-		Run: handler(func(e *env) error {
+		Run: handler(func(e *env) (runErr error) {
+			if e.in.Bool("restart-when-idle") || e.in.String("result-file") != "" {
+				ctx, stopUpgrade := context.WithTimeout(e.in.Ctx, 30*time.Minute)
+				defer stopUpgrade()
+				invocation := *e.in
+				invocation.Ctx = ctx
+				copyEnv := *e
+				copyEnv.in = &invocation
+				e = &copyEnv
+			}
+
+			if e.in.Bool("no-restart") && e.in.Bool("restart-when-idle") {
+				return errorf("invalid_argument", ExitUsage, "choose one restart policy", "--no-restart and --restart-when-idle cannot be combined")
+			}
 			hc := &http.Client{Timeout: 30 * time.Minute} // slow links: 15 MB at 40 KB/s is ~7 minutes
 			target := e.in.String("version")
 			if target != "" {
@@ -86,6 +101,13 @@ schema migrates on start. Nothing is upgraded automatically: run this when 'myco
 					return errorf("invalid_argument", ExitUsage, "pass --version "+target+" to install that release",
 						"this is a development build (%s); not replacing it automatically", Version)
 				}
+				if e.in.Bool("restart-when-idle") && !e.in.Bool("dry-run") {
+					req, err := e.requestIdleRestart(target)
+					if err != nil {
+						return err
+					}
+					out["runner_restart"] = req
+				}
 				return e.p.Print(out, func(w io.Writer) { fmt.Fprintf(w, "myco %s is up to date\n", Version) })
 			}
 			path, err := upgradeTarget(e.in.Getenv)
@@ -121,6 +143,13 @@ schema migrates on start. Nothing is upgraded automatically: run this when 'myco
 				}
 			}
 			switch {
+			case e.in.Bool("restart-when-idle"):
+				req, err := e.requestIdleRestart(target)
+				if err != nil {
+					return err
+				}
+				out["runner_restart"] = req
+				notes = append(notes, "runner restart pending until idle (up to 6 hours); other services were not restarted")
 			case e.in.Bool("no-restart"):
 				notes = append(notes, "services not restarted (--no-restart): restart them to use the new version")
 			case e.in.Getenv("MYCO_MESSAGE_ID") != "":

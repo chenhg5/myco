@@ -3261,6 +3261,10 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { seq: Math.max(seq + 1, n + (done ? 1 : 0)), text: n ? h.words[n - 1] : "", final: done, done });
   }
 
+  if (parts.slice(0,3).join("/") === "app/local/upgrade") {
+    return send(res, method === "GET" ? 200 : 202, { installed: "v0.24.0", runner: { pid: 1, instance: "demo", version: "v0.24.0", at: new Date().toISOString(), state: "complete" }, pending: false, expired: false, unsupported: false });
+  }
+
   // /app/update: the app's own update (MOCK_UPDATE=none for "up to date")
   if (parts[0] === "app" && parts[1] === "update" && parts.length === 2) {
     const current = SHOWCASE ? "v0.18.39" : "v0.16.8-demo";

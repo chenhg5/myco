@@ -275,9 +275,8 @@ func TestNamedLocalHub(t *testing.T) {
 	}
 }
 
-// Upgrading this computer's myco from the App: `myco upgrade` (which
-// restarts the services); when it is already the latest, the runner still
-// restarts onto it (an App update can replace the binary under it).
+// The App requests idle-only restart even when the CLI is already current.
+// It must never fall back to an immediate service restart.
 func TestLocalUpgradeMyco(t *testing.T) {
 	r := newRig(t)
 	home := t.TempDir()
@@ -286,11 +285,11 @@ func TestLocalUpgradeMyco(t *testing.T) {
 	run := func(_ context.Context, _ []string, _ string, args ...string) ([]byte, error) {
 		calls = append(calls, strings.Join(args[:len(args)-2], " "))
 		switch strings.Join(args[:len(args)-2], " ") {
-		case "upgrade":
+		case "upgrade --restart-when-idle":
 			if upToDate {
 				return []byte(`{"current":"v0.20.23","target":"v0.20.23","update_available":false}`), nil
 			}
-			return []byte(`{"current":"v0.20.19","target":"v0.20.23","update_available":true,"restarted":["runner","hub"]}`), nil
+			return []byte(`{"current":"v0.20.19","target":"v0.20.23","update_available":true,"restarted":[]}`), nil
 		case "runner service status":
 			return []byte(`{"running":true}`), nil
 		case "runner service restart":
@@ -307,11 +306,11 @@ func TestLocalUpgradeMyco(t *testing.T) {
 	b := &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Local: l, Shell: "mac", Version: "v1"}
 	r.app.Config.Handler = b.Handler()
 
-	if code, m, _ := r.do("POST", "/app/local/myco/upgrade", nil); code != 200 || m["from"] != "v0.20.19" || m["version"] != "v0.20.23" || len(m["restarted"].([]any)) != 2 {
+	if code, m, _ := r.do("POST", "/app/local/myco/upgrade", nil); code != 200 || m["from"] != "v0.20.19" || m["version"] != "v0.20.23" || len(m["restarted"].([]any)) != 0 {
 		t.Fatalf("upgrade: %d %v", code, m)
 	}
 	upToDate, calls = true, nil
-	if code, m, _ := r.do("POST", "/app/local/myco/upgrade", nil); code != 200 || len(m["restarted"].([]any)) != 1 || !slices.Contains(calls, "runner service restart") {
+	if code, m, _ := r.do("POST", "/app/local/myco/upgrade", nil); code != 200 || len(m["restarted"].([]any)) != 0 || slices.Contains(calls, "runner service restart") {
 		t.Fatalf("up to date: %d %v %v", code, m, calls)
 	}
 }

@@ -471,10 +471,10 @@ async function go(page, label, narrow) {
     if (narrow) await sidebar(page, false);
     return;
   }
-  if (label === "设置") {
+  if (label === "设置" || label === "Settings") {
     // Settings sit in the workspace menu at the bottom of the sidebar.
     await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
-    await clickVisible(page, page.locator(".app-hub-menu-item", { hasText: "设置" }));
+    await clickVisible(page, page.locator(".app-hub-menu-item", { hasText: label }));
     await page.locator("[data-testid=settings-dialog]").waitFor({ timeout: 10_000 });
     return;
   }
@@ -4444,6 +4444,73 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".app-settings-head h2").waitFor({ timeout: 5_000 });
       if (await list.count()) throw new Error("⌘, 不应还停在快捷键");
       await closeSettings(page);
+    });
+
+    await step("设置 · 更新后空闲重启", async () => {
+      let state = { cli: { id: "first", state: "failed", at: new Date().toISOString(), error: "Download unavailable. Please retry." }, installed: "v0.24.0", runner: { pid: 1, instance: "demo", version: "v0.23.9", at: new Date().toISOString(), state: "expired" }, pending: true, expired: true, unsupported: false };
+      let upgrades = 0, restarts = 0;
+      const path = "**/app/local/upgrade";
+      const route = async (r) => {
+        if (r.request().method() === "POST") {
+          upgrades++; state = { ...state, cli: { id: "second", state: "succeeded", at: new Date().toISOString() } };
+          return r.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "unavailable", message: "upgrade acknowledgement was lost" }) });
+        }
+        await r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(state) });
+      };
+      const restart = async (r) => { restarts++; state = { ...state, expired: false, runner: { ...state.runner, state: "pending" } }; await r.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify(state) }); };
+      try {
+        await page.route(path, route);
+        await page.route("**/app/local/upgrade/restart", restart);
+        await go(page, "设置", narrow);
+        const search = page.locator(".app-settings-search input");
+        await search.fill("关于"); await search.press("Enter");
+        const notice = page.locator("[data-testid=runner-update-notice]");
+        await notice.getByText("命令行工具升级失败", { exact: true }).waitFor();
+        const retry = notice.getByRole("button", { name: "重试命令行升级", exact: true });
+        await retry.scrollIntoViewIfNeeded();
+        let box = await retry.boundingBox(); if (!box) throw Error("retry missing");
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await notice.getByText(/runner 正在运行 v0.23.9/).waitFor();
+        if ((await notice.innerText()).includes("upgrade acknowledgement was lost")) throw Error("confirmed receipt must settle an uncertain acknowledgement");
+        if (upgrades !== 1 || !(await notice.innerText()).includes("六小时")) throw Error("retry/ceiling notice missing");
+        const button = notice.getByRole("button", { name: "空闲时重启", exact: true });
+        await button.scrollIntoViewIfNeeded(); box = await button.boundingBox();
+        if (!box) throw Error("idle restart button missing");
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await button.focus();
+        await shot(page, size, scheme, "settings-idle-restart");
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await page.waitForFunction(() => !document.querySelector("[data-testid=runner-update-notice]")?.textContent.includes("六小时"));
+        if (restarts !== 1) throw Error("restart must enqueue once");
+        if (size.width === 1200) {
+          for (const language of ["zh", "en"]) {
+            const preview = await browser.newContext({ viewport: size, colorScheme: scheme, deviceScaleFactor: 2, storageState: await context.storageState() });
+            try {
+              await preview.addInitScript(({ language, scheme }) => { localStorage.setItem("myco-lang", language); localStorage.setItem("myco-theme", scheme); }, { language, scheme });
+              const capture = await preview.newPage();
+              await capture.route("**/app/info", async r => { const response = await r.fetch(); const data = await response.json(); await r.fulfill({ response, json: { ...data, version: state.installed } }); });
+              await capture.route("**/app/local", async r => { const response = await r.fetch(); const data = await response.json(); await r.fulfill({ response, json: { ...data, myco: { ...data.myco, version: state.installed } } }); });
+              await capture.route("**/app/update", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ current: state.installed, latest: state.installed, available: false, can_install: true }) }));
+
+              await capture.route(path, r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(state) }));
+              const url = new URL(page.url()); url.searchParams.set("lang", language);
+              await capture.goto(url.href);
+              await capture.locator(".app-shell").waitFor();
+              await go(capture, language === "zh" ? "设置" : "Settings", false);
+              const find = capture.locator(".app-settings-search input");
+              await find.fill(language === "zh" ? "关于" : "About"); await find.press("Enter");
+              await capture.locator("[data-testid=runner-update-notice]").getByText(language === "zh" ? /runner 正在运行 v0.23.9/ : /Runner on v0.23.9/).waitFor();
+              await settle(capture, 200);
+              await shot(capture, size, scheme, `runner-idle-update-${language}`);
+            } finally { await preview.close(); }
+          }
+        }
+
+      } finally {
+        await page.unroute(path, route);
+        await page.unroute("**/app/local/upgrade/restart", restart);
+        await closeSettings(page);
+      }
     });
 
     // 使用文档: from the last row of Settings' nav (and Settings › About;

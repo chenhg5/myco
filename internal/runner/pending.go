@@ -73,6 +73,7 @@ func loadPending(path string) map[string]pendingRun {
 
 // saveState is called with r.mu held. The old runs-only JSON remains readable.
 func (r *Runner) saveState() {
+	r.opts.Activity.Pending(SlotOwner(r.opts.HubURL, r.opts.Self), len(r.pending))
 	if r.opts.StatePath == "" {
 		return
 	}
@@ -266,3 +267,6 @@ func MarkOwnRun(path, sessionID string, at time.Time) error {
 	}
 	return os.Rename(tmp, path)
 }
+
+// PendingCount accounts for unfinished claims before a profile can reach its Hub.
+func PendingCount(path string) int { return len(loadPending(path)) }

@@ -2,6 +2,7 @@ import { RichText } from "@/app/RichText";
 import { LanguageSelect } from "@/app/LanguageSelect";
 import { localPreferences, saveWorkspaceAppearance } from "@/lib/localPreferences";
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
+import { RunnerUpdateNotice } from "@/app/RunnerUpdateNotice";
 import { openHelp } from "@/app/Help";
 import { CopyButton } from "@/app/copy";
 import { TailscaleSetup } from "@/app/TailscaleSetup";
@@ -123,6 +124,7 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
           <span className="app-kv-label">{L("更新", "Updates")}</span>
           <span className="app-kv-value">{status}{action}</span>
         </div>
+        <RunnerUpdateNotice />
         <CacheRow />
         <div className="app-kv app-about-update" data-setting="prepare">
           <span className="app-kv-label">{L("上手引导", "Getting started")}</span>

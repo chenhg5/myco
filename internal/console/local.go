@@ -21,6 +21,7 @@ import (
 	"github.com/myco-ai/myco/internal/config"
 	"github.com/myco-ai/myco/internal/osutil"
 	"github.com/myco-ai/myco/internal/release"
+	"github.com/myco-ai/myco/internal/runnerupdate"
 	"github.com/myco-ai/myco/internal/service"
 )
 
@@ -545,7 +546,18 @@ func (b *Backend) upgradeMyco(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 	defer cancel()
-	out, err := l.run(ctx, "upgrade")
+	out, err := l.run(ctx, "upgrade", "--restart-when-idle")
+	receipt := runnerupdate.Receipt{At: time.Now().UTC(), State: "succeeded"}
+	if err != nil {
+		receipt.State = "failed"
+		receipt.Error = runnerupdate.SafeMessage(err.Error())
+	} else if json.Valid(out) {
+		receipt.Result = append(json.RawMessage(nil), out...)
+	}
+	if saveErr := runnerupdate.Write(l.upgradeBase(), "cli", receipt); saveErr != nil && err == nil {
+		writeErr(w, saveErr)
+		return
+	}
 	if err != nil {
 		writeErr(w, err)
 		return
@@ -556,20 +568,18 @@ func (b *Backend) upgradeMyco(w http.ResponseWriter, r *http.Request) {
 		Restarted []string `json:"restarted"`
 	}
 	if err := json.Unmarshal(out, &up); err != nil {
-		writeErr(w, fmt.Errorf("unexpected output from myco upgrade: %s", lastLine(out)))
+		receipt.State = "failed"
+		receipt.Error = "unexpected output from CLI upgrade"
+		_ = runnerupdate.Write(l.upgradeBase(), "cli", receipt)
+		writeErr(w, fmt.Errorf("unexpected output from myco upgrade"))
 		return
 	}
 	res := UpgradeResult{From: up.Current, Version: up.Target, Restarted: up.Restarted}
-	if len(res.Restarted) == 0 {
-		// Already the latest (an App update can replace the binary without
-		// restarting what runs it): the runner still has to restart onto it.
+	if res.Restarted == nil {
 		res.Restarted = []string{}
-		if st := l.restartRunner(ctx); st != "running" {
-			writeErr(w, &client.Error{Status: http.StatusBadGateway, Code: "runner_failed", Message: st})
-			return
-		}
-		res.Restarted = append(res.Restarted, "runner")
 	}
+	// The runner owns idle detection; never fall back to an immediate restart.
+
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -846,22 +856,6 @@ func (l *Local) ensureRunner(ctx context.Context) string {
 		return "the runner service could not start: " + errText(err) + " (run `myco runner service install` in a terminal)"
 	}
 	return "running"
-}
-
-// upgradeCLIDetached starts `myco upgrade --no-restart` for the CLI on this
-// computer, if there is one, without waiting: it outlives the app, which is
-// about to quit after updating itself.
-func (l *Local) upgradeCLIDetached() {
-	p := l.mycoPath()
-	if p == "" {
-		return
-	}
-	cmd := exec.Command(p, "upgrade", "--no-restart", "--format", "json")
-	cmd.Env = l.env()
-	detach(cmd)
-	if err := cmd.Start(); err == nil {
-		go func() { _ = cmd.Wait() }()
-	}
 }
 
 // publicURLNow is the running local hub's public URL ("" when it has none).

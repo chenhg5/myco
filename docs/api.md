@@ -2095,3 +2095,31 @@ IDs), `workdir?`, `repository?`, `branch?`, `now?`, `created_at`, and `error?`.
 Creator identity IDs are private storage metadata, never an editable permission field.
 Copies retain source visibility and sender restrictions. Only the initial context-copy turn
 requires the source's original identity, session and permissions still to match.
+
+
+### App-local CLI upgrade receipts and idle restarts
+
+These routes are local App endpoints under its existing origin/session protection;
+they do not change the Hub schema. Contract: `internal/api/local_upgrade.go`.
+
+| Route | Result |
+| --- | --- |
+| `GET /app/local/upgrade` | `LocalUpgradeStatus`: persisted `cli` receipt (`running`, `succeeded`, `failed`, JSON `result` or `error`), `installed` CLI version, fresh `runner` runtime, optional `restart`, `pending`, `expired`, `unsupported`, and optional error |
+| `POST /app/local/upgrade` | 202 with status; retries detached CLI upgrade with `--restart-when-idle` and a separate result file per attempt |
+| `POST /app/local/upgrade/restart` | 202 with status; requests another six-hour idle window; does not perform an immediate service restart |
+
+The runner owns admission across all local profiles, including undelivered results
+and command watches. Poll responses reserve messages before dropping their poll
+lease. Existing work is never canceled for idle requests. Service handoff checks
+request, instance and managed service PID; stale helpers cannot restart a replacement
+runner. A failed handoff or unchanged version requires explicit retry. Missing/stale
+runtime remains unknown; the installed file does not prove a new runner is running.
+Older slot reports and configured local machines’ workspace reports supply version
+display with `unsupported: true`, never restart
+permission. Receipts are private and omit credential-bearing download URLs.
+
+If a service restart may have been submitted but its result is unknown, runner
+state is `restart_unknown`: new claims remain paused and automatic retries stop.
+The App keeps the error and a manual-check action; it never reopens claims while
+a delayed service stop could still interrupt them. CLI receipts capture setup
+errors before the upgrade handler too. Each result file is bounded to 64 KiB.

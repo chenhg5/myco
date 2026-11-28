@@ -685,3 +685,15 @@ List each requested domain as a checked option the owner can remove. Disable
 approval if all requested domains are removed. When the request has no domain
 scope, show “No domain restriction.” The UI smoke scene checks both profile
 types and verifies that only the selected domain is sent when approving.
+
+
+### About: CLI upgrade and idle service restart
+
+Settings › About has a Background service row, polling local persisted upgrade
+status independently of release discovery. A failed CLI update keeps its reason
+and Retry command-line update. Version mismatch names both installed and running
+versions and says restart pending until idle. Running tasks finish first. After
+six hours, explain automatic restart paused and retain Restart when idle. Older
+runners explain the need for one manual restart after tasks finish. Reuse
+`.app-kv`, `.app-about-status`, `.app-about-note`, `ErrorText` and ordinary buttons
+in Chinese/English and both themes. Smoke: “设置 · 更新后空闲重启”.

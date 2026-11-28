@@ -743,6 +743,14 @@ export interface AppUpdate {
   error?: string;
 }
 
+export interface LocalUpgrade {
+ cli?: { id?: string; state: "running" | "succeeded" | "failed"; target?: string; at: string; result?: unknown; error?: string };
+ installed?: string;
+ runner?: { pid: number; version: string; instance: string; at: string; request_id?: string; state?: string; error?: string };
+ restart?: { id: string; target: string; requested_at: string; deadline: string };
+ pending: boolean; expired: boolean; unsupported: boolean; error?: string;
+}
+
 /** GET /app/cache/stats: the saved page data. */
 export interface CacheStats { enabled: boolean; entries: number; bytes: number }
 
@@ -777,7 +785,10 @@ export const appApi = {
   translateConfig: () => request<TranslateConfig>("GET", "app/translate/config"),
   putTranslateConfig: (c: { provider: string; base_url?: string; model?: string; key?: string; clear_key?: boolean }) =>
     request<TranslateConfig>("PUT", "app/translate/config", c),
-  update: () => request<AppUpdate>("GET", "app/update"),
+  localUpgrade: (signal?: AbortSignal) => request<LocalUpgrade>("GET", "app/local/upgrade", undefined, signal),
+ retryLocalUpgrade: () => request<LocalUpgrade>("POST", "app/local/upgrade"),
+ restartLocalWhenIdle: () => request<LocalUpgrade>("POST", "app/local/upgrade/restart"),
+ update: () => request<AppUpdate>("GET", "app/update"),
   /** Downloads and installs the latest app, then the app reopens itself. */
   installUpdate: () => request<{ installed: string; relaunching: boolean }>("POST", "app/update"),
   hubs: () => request<Hub[]>("GET", "app/hubs"),
