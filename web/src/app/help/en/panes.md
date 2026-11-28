@@ -1,34 +1,34 @@
 # Split panes
 
-Split panes divide the chat area so you can watch several agents at once, up to four. They help when you talk to the coordinator while keeping an eye on two members, or want to compare two agents' replies side by side.
+Split panes divide the chat area so you can watch several agents at once, up to four. They help when you talk to the coordinator while keeping an eye on two conversations, or want to compare two agents' replies side by side.
 
 ## Where you can split
 
 **Projects** and the **Conversations** page in the sidebar both split, the same way.
 
 - The first pane belongs to the place itself: in a project, your chat with the coordinator; on the Conversations page, its list or the chat you opened from it.
-- The other panes are members you opened separately. Each is a whole chat: read, send, stop.
+- The other panes are conversations you opened separately. Each is a whole chat: read, send, stop.
 
 Pane titles are all the same height and line up, like a row of windows.
 
-![Two panes: the coordinator on the left, a member on the right](shot:project-member-handoffs)
+![Two panes: the coordinator on the left, a conversation on the right](shot:project-member-handoffs)
 
 ## A click replaces a pane
 
-Click a member in the members column:
+Click a conversation in the conversations column:
 
 - if it is already open, you jump to its pane;
 - if not, it replaces the pane you clicked last (the first time, a pane opens on the right).
 
-So for "coordinator on the left, members in turn on the right", just keep clicking; panes do not pile up.
+So for "coordinator on the left, conversations in turn on the right", just keep clicking; panes do not pile up.
 
 ## Opening another pane
 
 Two ways.
 
-**Right-click** a member in the members column, its folded row of faces, or the sidebar's Conversations list › **Open in a new pane**. The largest pane is split in half along its long side: a wide one left and right, a tall one top and bottom.
+**Right-click** a conversation in the conversations column, its folded row of faces, or the sidebar's Conversations list › **Open in a new pane**. The largest pane is split in half along its long side: a wide one left and right, a tall one top and bottom.
 
-**Drag it in**: press on a member and drag it over the chat area. Before you let go, where it would land lights up and says what will happen:
+**Drag it in**: press on a conversation and drag it over the chat area. Before you let go, where it would land lights up and says what will happen:
 
 - onto a pane's **left, right, top or bottom edge**: only that pane splits in two. With two panes side by side, dropping on the bottom edge of the left one makes it two stacked panes and leaves the right one alone.
 - onto the **outermost edge** of the whole chat area: a pane along that whole side, such as "A new pane across the bottom".
@@ -36,7 +36,7 @@ Two ways.
 
 A new pane shares space equally with the panes in the same direction: with two already stacked, the new one takes a third.
 
-Where it cannot go, the area is grey and says why, such as "Four panes at most: drop on one to show it there instead". Drag in a member that is already open and its pane lights up amber with "… is open already"; letting go does not open it twice.
+Where it cannot go, the area is grey and says why, such as "Four panes at most: drop on one to show it there instead". Drag in a conversation that is already open and its pane lights up amber with "… is open already"; letting go does not open it twice.
 
 ## Resizing and closing
 
@@ -50,21 +50,21 @@ Each pane needs at least 320×240. When the window is too small for the panes si
 
 ![In a small window the panes become tabs](shot:project-panes)
 
-The members column folds into a row of faces under the title only when there is no room for "panes side by side plus the members column"; otherwise it stays put, so the page does not jump when you open a member.
+The conversations column folds into a row of faces under the title only when there is no room for "panes side by side plus the conversations column"; otherwise it stays put, so the page does not jump when you open a conversation.
 
 ## A few common layouts
 
-**Talk to the coordinator, look at members in turn** (the most common):
+**Talk to the coordinator, look at conversations in turn** (the most common):
 
 1. Open the project; the coordinator is on the left.
-2. Click a member in the members column; it opens in a pane on the right.
-3. To see the next one, click the next member, and the right pane switches to it.
+2. Click a conversation in the conversations column; it opens in a pane on the right.
+3. To see the next one, click the next conversation, and the right pane switches to it.
 
-**Keep an eye on two members at work**:
+**Keep an eye on two conversations at work**:
 
-1. Click the first member; a pane opens on the right.
+1. Click the first conversation; a pane opens on the right.
 2. Drag the second onto the **bottom edge** of the right pane, and it splits top and bottom. (Right-click › **Open in a new pane** works too, but it splits whichever pane is largest at the time.)
-3. Talk to the coordinator on the left while the two panes on the right show one member each.
+3. Talk to the coordinator on the left while the two panes on the right show one conversation each.
 
 **Several agents outside any project, side by side**:
 
@@ -84,4 +84,4 @@ To focus on one for a while, click **Show only this pane** on its title; click a
 
 - **⌘F** (Ctrl+F on Windows) finds in the pane you clicked last.
 - Each pane can have its own chat background; split, each fills and crops its own, with nothing stretched. See [Chatting with agents](#help/chat).
-- To see what two members said to each other, click a handoff card on the project's home: their exchange opens in a pane too. See [Projects](#help/projects).
+- To see what two conversations said to each other, click a handoff card on the project's home: their exchange opens in a pane too. See [Projects](#help/projects).

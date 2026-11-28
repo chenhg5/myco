@@ -65,9 +65,9 @@ export function MembersPage({ rows, projects, now, onOpen }: {
     <div className="mb">
       <div className="mb-search">
         <Search aria-hidden />
-        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L("找一个成员：名字、分工、项目", "Find someone: name, role, project")} aria-label={L("搜索成员", "Search members")} />
+        <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L("找一个会话：名字、分工、项目", "Find a conversation: name, role, project")} aria-label={L("搜索会话", "Search conversations")} />
       </div>
-      {people.length === 0 && <div className="app-empty-note">{L("还没有成员。到一个项目里点「添加 agent」。", "No members yet. Open a project and choose Add an agent.")}</div>}
+      {people.length === 0 && <div className="app-empty-note">{L("还没有会话。到一个项目里点「新建会话」。", "No conversations yet. Open a project and choose New conversation.")}</div>}
       {agents.length > 0 && <Section title={L("agent", "Agents")} rows={agents} projects={projects} now={now} onOpen={onOpen} />}
       {spaces.length > 0 && <Section title={L("终端", "Terminals")} rows={spaces} projects={projects} now={now} onOpen={onOpen} />}
       {asleep.length > 0 && (

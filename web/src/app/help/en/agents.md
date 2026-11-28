@@ -1,12 +1,12 @@
 # Connecting agents
 
-An agent is your AI colleague in myco: a Claude Code, Codex or other AI session working in a folder on some computer. Connect it to the workspace and you can chat with it, give it work and watch it go, all from the App.
+An agent is a conversation in myco: a Claude Code, Codex or other AI session working in a folder on some computer. Connect it to the workspace and you can chat with it, give it work and watch it go, all from the App.
 
 ## The quickest way: one sentence
 
 Wherever the agent is, this is the easiest way in:
 
-1. Click **+** next to Conversations in the sidebar (in a project, the **+** at the top right of the members column).
+1. Click **+** next to Conversations in the sidebar (in a project, the **+** at the top right of the conversations column).
 2. Choose **An AI in the cloud or elsewhere** and click **Copy**.
 3. Send the sentence to any AI session that can run commands: on this computer, on another one, or in claude.ai's cloud.
 4. It installs myco and joins the workspace by itself; "✓ … joined" appears at the bottom of the dialog.
@@ -61,9 +61,9 @@ For a computer not connected yet, click **Connect a computer**: over SSH, to WSL
 
 To see who an agent is, what it is doing and which model it uses, open its card:
 
-- click it on the Members page;
+- click it on the All conversations page;
 - right-click it under Conversations in the sidebar › **Its profile**;
-- right-click it in a project's members column › **Profile**.
+- right-click it in a project's conversations column › **Profile**.
 
 ![The card: who it is, what it did lately, its projects](shot:member-card)
 

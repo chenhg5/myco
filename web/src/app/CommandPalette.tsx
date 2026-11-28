@@ -112,7 +112,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
     const agents = rows.filter((r) => !isWorkspace(r.st.agent) && r.st.agent.kind !== "machine" && !inRecent.has(`${r.hub.id}:${r.st.agent.name}`));
     for (const r of agents.filter((x) => hit(nodeName(x.st.agent, x.hub), x.st.agent.name, x.st.agent.description)).slice(0, text ? 6 : 4)) {
       out.push({
-        key: `m:${r.hub.id}:${r.st.agent.name}`, group: L("成员", "Members"), title: nodeName(r.st.agent, r.hub),
+        key: `m:${r.hub.id}:${r.st.agent.name}`, group: L("会话", "Conversations"), title: nodeName(r.st.agent, r.hub),
         sub: [r.st.agent.description, where(r.hub.id)].filter(Boolean).join(" · "),
         icon: <Avatar agent={r.st.agent} size={22} badge={false} />, target: { kind: "member", row: r },
       });
@@ -145,7 +145,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
     }
     const pages: { page: "settings" | "members" | "computers"; title: string; icon: React.ReactNode; words: string }[] = [
       { page: "settings", title: L("设置", "Settings"), icon: <Settings />, words: "设置 settings 偏好 外观 翻译 preferences" },
-      { page: "members", title: L("所有成员", "All members"), icon: <Users />, words: "成员 members agents" },
+      { page: "members", title: L("所有会话", "All conversations"), icon: <Users />, words: "成员 members agents" },
       { page: "computers", title: L("所有电脑", "All computers"), icon: <Monitor />, words: "电脑 computers workspaces machines" },
     ];
     for (const p of pages.filter((x) => hit(x.title, x.words))) {
@@ -181,7 +181,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
           <div className="cp-box">
             <Search />
             <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
-              placeholder={L("找成员、项目、电脑或消息…", "Find a member, project, computer or message…")} aria-label={L("搜索", "Search")} />
+              placeholder={L("找会话、项目、电脑或消息…", "Find a conversation, project, computer or message…")} aria-label={L("搜索", "Search")} />
             {found.busy && <span className="cp-busy">{L("正在找消息…", "Searching messages…")}</span>}
           </div>
           <div className="cp-list" ref={list} role="listbox">
@@ -212,7 +212,7 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
 const SEEK_LINES: ((q: string) => string)[] = [
   (q) => L(E`翻遍聊天记录，找「${q}」`, E`Leafing through chats for “${q}”`),
   () => L("顺着菌丝一路摸过去", "Following the mycelium along"),
-  () => L("挨个问问成员和项目", "Asking every member and project"),
+  () => L("挨个问问会话和项目", "Asking every conversation and project"),
   (q) => L(E`「${q}」…好像在哪见过`, E`“${q}”… seen that somewhere`),
   () => L("翻翻最近的消息", "Turning over recent messages"),
   () => L("快找到了", "Nearly there"),

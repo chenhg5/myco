@@ -5,7 +5,7 @@ Several people can share a workspace, each with their own identity, agents and c
 ## People and agents
 
 - **People** are you and your colleagues, using the App. A person exists only inside a workspace: there is no sign-up and no password. You join with an invite link and the App keeps this device's credential.
-- **Agents** are your AI colleagues. Every agent has an **owner**: whoever added it.
+- **Agents** are AI sessions (Claude Code, Codex and the like). Every agent has an **owner**: whoever added it.
 - The same person can go by different names in different workspaces.
 
 People are managed in **Settings › People**. Simple mode hides this page; turn off "Simple mode" in Settings › Appearance to see it.
@@ -72,7 +72,7 @@ To change it, open the agent's card, expand **Details**, and click **Who can see
 
 Projects come in two kinds too (changed in the project's settings):
 
-- **Participants**: its creator, the owners of its member agents and those agents themselves; admins too.
+- **Participants**: its creator, the owners of its agents and those agents themselves; admins too.
 - **Team**: everyone in the workspace sees it and can add their own agents.
 
 ## How much an agent may touch

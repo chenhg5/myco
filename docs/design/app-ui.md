@@ -11,8 +11,8 @@ Treat the user as someone who is not technical. Only these words appear in the i
 | Called in the UI | What it is | What it is underneath (appears only in the CLI and in a member card's "Details") |
 | --- | --- | --- |
 | **Workspace** | A team's space, holding projects and members; one used by a single person is "My workspace". Workspaces are fully separated: only one is shown at a time, and after switching, every page, dialog and filter covers only that workspace; there is no "All workspaces", and the user is never asked to pick a workspace again | Hub |
-| **Project** | One thing to get done, and the members doing it together | project |
-| **agent** (member) | An AI colleague with a name, an avatar and a role | node (AI session) |
+| **Project** | One thing to get done, and the conversations (agents) doing it together | project |
+| **会话** / conversation (agent) | An AI session (Claude Code, Codex…) with a name, an avatar and a role, that you talk to and give work. Not a "member" or an "AI colleague": people did not take to those words (Glenn, 2026-11). 「所有会话」 lists them all, a project's right column lists its own, and adding one is 「新建会话」. Prose that says what agents do may still say agent | node (AI session) |
 | **Computer** | A real computer that is connected: a laptop, a cloud server (VPS) and a WSL install each count as one. Agents run on computers; the computer itself decides which folders agents may start work in and the highest access they get | machine (and its machine node) |
 | **Terminal** | A folder on a computer where an agent runs commands; open it and you can watch | shell / exec node |
 
@@ -555,7 +555,7 @@ Automations and workflows were built from this section; a new kind of thing (say
 - Buttons say a verb and an object ("Add an agent", "Start a chat"), not "OK" or "Submit".
 - Explanatory text speaks plainly and says it in one sentence; no API names or field names.
 - Settings pages use no large areas of red or green: write a status as text, like "● Connected"; buttons such as remove and stop are outlined neutral buttons normally and turn red only on hover; solid red is kept for the final step in a confirmation dialog.
-- Fixed terms (the Chinese copy): 工作区 (workspace), 项目 (project), agent (成员, member), 电脑 (computer), 单聊 (one-to-one chat), 任务 (task), 补充 (addition), 排队中 (queued). Do not call one thing by different names. Do not use 节点 (node), 机器 (machine), Hub or runner (see section 0).
+- Fixed terms (the Chinese copy): 工作区 (workspace), 项目 (project), 会话 (conversation: an agent; never 成员 or AI 同事 for an agent; 成员 is a person in a workspace), 电脑 (computer), 单聊 (one-to-one chat), 任务 (task), 补充 (addition), 排队中 (queued). Do not call one thing by different names. Do not use 节点 (node), 机器 (machine), Hub or runner (see section 0).
 - Times are relative ("5 min ago"); when the exact time is needed, put it in the hover tooltip.
 
 ## 10. Dark mode

@@ -19,27 +19,27 @@ How to start, join, switch and manage workspaces is all on the [Workspaces](#hel
 
 ## What you will see
 
-- **Agent (member)**: a running Claude Code, Codex or similar session, with its own name, pixel-mushroom face and role. It works in a folder on some computer.
+- **Agent (conversation)**: a running Claude Code, Codex or similar session, with its own name, pixel-mushroom face and role. It works in a folder on some computer.
 - **Chat**: your conversation with one agent. Conversations in the sidebar lists the agents you can talk to; click one to give it work.
-- **Project**: a few agents getting one thing done. A project has a **coordinator** who breaks the work down, hands it out and checks it. You mostly talk to the coordinator and see each member's work on the right.
+- **Project**: a few agents getting one thing done. A project has a **coordinator** who breaks the work down, hands it out and checks it. You mostly talk to the coordinator and see each conversation's work on the right.
 - **Computer**: where agents run. A laptop, a cloud server or a WSL install each counts as one. Each computer decides which folders agents may work in and the most access they get.
 - **Terminal**: a folder on a computer where agents run commands; open it to watch.
 - **People**: several people can share a workspace, each with their own identity and agents. See [People and access](#help/members).
 
-![A project: talk with the coordinator in the middle, its members on the right](shot:project-home)
+![A project: talk with the coordinator in the middle, its conversations on the right](shot:project-home)
 
 ## What is in the window
 
 On the left is the sidebar, from top to bottom:
 
-- **Search** (⌘K, Ctrl+K on Windows): find members, projects, computers and messages in your chats.
+- **Search** (⌘K, Ctrl+K on Windows): find conversations, projects, computers and messages in your chats.
 - **Automations**, **Workflows**, **Apps**, **Computers**: feature pages for work that runs on a schedule, fixed sequences of steps handed to several agents, small tools such as sheets and docs that you and your agents share, and the computers connected.
 - **Projects**: your projects; + starts one.
 - **Conversations**: the agents you can talk to; + adds an agent.
 - **Terminals**: folders on computers where agents run commands.
 - At the very bottom, **the current workspace**: click it to switch workspaces, see usage, and open Settings.
 
-The middle shows the chat or page you are on. In a chat or a project, the right side lists the members and terminals involved, so you can see at a glance who is working on what.
+The middle shows the chat or page you are on. In a chat or a project, the right side lists the conversations and terminals involved, so you can see at a glance who is working on what.
 
 ## How agents work together
 

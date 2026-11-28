@@ -112,7 +112,7 @@ export function GroupNameDialog({ open, onClose, initial, taken, onDone, title }
   };
   return (
     <Modal open={open} onOpenChange={(o) => !o && onClose()} title={title}
-      description={initial ? L("组里的成员会跟着到新名字下。", "Its members move with it.") : L("把做类似事情的成员放在一起，只在这个项目里。", "Members who do similar work, together; only in this project.")}>
+      description={initial ? L("组里的会话会跟着到新名字下。", "Its conversations move with it.") : L("把做类似事情的会话放在一起，只在这个项目里。", "Conversations that do similar work, together; only in this project.")}>
       <form onSubmit={(e) => { e.preventDefault(); void go(); }}>
         <label className="app-field">
           <span className="app-field-label">{L("名字", "Name")}</span>
@@ -208,7 +208,7 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
       ...(i > 0 ? [{ label: L("上移", "Move up"), onSelect: () => move(-1) }] : []),
       ...(i < ctl.list.length - 1 ? [{ label: L("下移", "Move down"), onSelect: () => move(1) }] : []),
       "sep",
-      { label: L("删除分组（成员回到「其他」）", "Delete the group (its members go to Other)"), danger: true, onSelect: () => onDelete(g) },
+      { label: L("删除分组（会话回到「其他」）", "Delete the group (its conversations go to Other)"), danger: true, onSelect: () => onDelete(g) },
     ]);
   };
   // A member dropped on a group: moved there.
@@ -327,7 +327,7 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
                 {more(g)}
               </span>
             </button>
-            {open && (g.rows.length ? g.rows.map(row) : <p className="mg-empty">{ctl.canEdit ? L("把成员拖到这里", "Drag members here") : L("还没有人", "Nobody yet")}</p>)}
+            {open && (g.rows.length ? g.rows.map(row) : <p className="mg-empty">{ctl.canEdit ? L("把会话拖到这里", "Drag conversations here") : L("还没有人", "Nobody yet")}</p>)}
           </div>
         );
       })}
