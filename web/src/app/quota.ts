@@ -27,6 +27,7 @@ function durationLabel(sec: number): string {
 /** A usage window's name for people: by its length when the source says
  *  it, else by the CLI's own window names; a model's bucket adds the model. */
 export function quotaWindowLabel(w: QuotaWindow): string {
+  if (w.balance) return L("余额", "Balance");
   let base: string;
   if (w.duration_sec && w.duration_sec > 0) base = durationLabel(w.duration_sec);
   else if (w.name === "five_hour") base = L("5 小时", "5 hours");
@@ -55,6 +56,7 @@ export function quotaLeft(w: QuotaWindow): number {
 
 /** A window with no room left: its status says so, or it is 100% used. */
 export function quotaSpent(w: QuotaWindow): boolean {
+  if (w.balance?.unlimited) return false;
   return (!!w.status && w.status !== "allowed") || w.used >= 1;
 }
 
@@ -92,6 +94,10 @@ export function resetIn(iso: string | undefined, now = Date.now()): string {
 
 /** A row's value: "剩 38% · 3 小时后重置", or what a spent window says. */
 export function quotaWindowText(w: QuotaWindow, now = Date.now()): string {
+  if (w.balance) {
+    if (w.balance.unlimited) return L("不限额", "Unlimited");
+    return `${usd(w.balance.remaining)} / ${usd(w.balance.limit)}`;
+  }
   const reset = resetIn(w.resets_at, now);
   if (quotaSpent(w)) return [L("额度用完", "Out of quota"), reset].filter(Boolean).join(" · ");
   return [L(E`剩 ${quotaLeft(w)}%`, E`${quotaLeft(w)}% left`), reset].filter(Boolean).join(" · ");
@@ -178,7 +184,7 @@ export function quotaOldNote(q: Quota, now = Date.now()): string | undefined {
   return L(E`上次更新：${timeAgo(quotaObservedAt(q), now)}，可能已过时`, E`last updated ${timeAgo(quotaObservedAt(q), now)}; may be out of date`);
 }
 
-const providerNames: Record<string, string> = { codex: "Codex", claude: "Claude", opencode_go: "OpenCode Go", minimax: "MiniMax" };
+const providerNames: Record<string, string> = { glm: "GLM", kimi: "Kimi", openrouter: "OpenRouter", codex: "Codex", claude: "Claude", opencode_go: "OpenCode Go", minimax: "MiniMax" };
 
 function planName(plan: string): string {
   switch (plan) {
@@ -186,6 +192,7 @@ function planName(plan: string): string {
     case "claude_subscription": return L("Claude 订阅", "Claude plan");
     case "go": return L("Go 套餐", "Go plan");
     case "coding_plan": return "Coding Plan";
+    case "api_balance": return L("API 额度", "API allowance");
     default: return plan;
   }
 }
@@ -233,7 +240,7 @@ export function quotaSummary(q: Quota, machines: Machine[] = [], now = Date.now(
     return { level: quotaNeedsAction(q) ? "action" : "failed", short: quotaNeedsAction(q) ? actionShort(q) : L("额度未知", "Usage unknown"), line: L(E`额度：${why}（${src}）`, E`Usage: ${why} (${src})`), stale: false };
   }
   const reset = resetIn(worst.resets_at, now);
-  const what = quotaSpent(worst) ? L("用完了", "out") : L(E`剩 ${quotaLeft(worst)}%`, E`${quotaLeft(worst)}% left`);
+  const what = worst.balance ? quotaRemainingText(worst) : quotaSpent(worst) ? L("用完了", "out") : quotaRemainingText(worst);
   const label = quotaWindowLabel(worst);
   let line = L((reset ? E`额度：${label}${what}（${src}）${"，" + reset}` : E`额度：${label}${what}（${src}）`), (reset ? E`Usage: ${label} ${what} (${src})${"; " + reset}` : E`Usage: ${label} ${what} (${src})`));
   if (old) line += L(E`。${quotaOldNote(q, now)}`, E`. ${quotaOldNote(q, now)}`);
@@ -243,7 +250,7 @@ export function quotaSummary(q: Quota, machines: Machine[] = [], now = Date.now(
   const age = old ? timeAgo(quotaObservedAt(q), now) : "";
   return {
     level,
-    short: quotaNeedsAction(q) ? actionShort(q) : quotaSpent(worst) ? L(E`额度用完${age ? " · " + age : ""}`, E`Out of quota${age ? " · " + age : ""}`) : L(E`剩 ${quotaLeft(worst)}%${age ? " · " + age : ""}`, E`${quotaLeft(worst)}% left${age ? " · " + age : ""}`),
+    short: quotaNeedsAction(q) ? actionShort(q) : quotaSpent(worst) ? L(E`额度用完${age ? " · " + age : ""}`, E`Out of quota${age ? " · " + age : ""}`) : quotaRemainingText(worst) + (age ? " · " + age : ""),
     line,
     stale: stale || old || quotaFailed(q, now),
   };
@@ -269,6 +276,7 @@ export function agentQuotaHint(a: Agent, now = Date.now()): { level: "tight" | "
 
 /** A window's name in a few characters for the composer: "5h", "7d", "月". */
 export function quotaWindowShort(w: QuotaWindow): string {
+  if (w.balance) return "";
   const sec = w.duration_sec || (w.name === "five_hour" ? 5 * HOUR : w.name.startsWith("seven_day") || w.name === "weekly" ? 7 * DAY : w.name === "daily" ? DAY : 0);
   if (w.name === "monthly" || (sec >= 28 * DAY && sec <= 31 * DAY)) return L("月", "mo");
   if (!sec) return w.label || "";
@@ -289,9 +297,20 @@ export function quotaOutNote(q: Quota, now = Date.now()): string | undefined {
   if (!quotaHasNumbers(q, now)) return undefined;
   const w = quotaWorst(q, now);
   if (!w || !quotaSpent(w)) return undefined;
+  if (w.balance) return L("API 额度已用完；请检查 key 的限额或充值。", "API allowance is used up; check the key limit or add credit.");
   const at = w.resets_at ? resetLabel(w.resets_at, now) : "";
   return at && at !== "—"
     ? L(E`${quotaWindowLabel(w)}额度已用完，${at} 重置；现在发的消息可能要等到那时才会处理。`, E`${quotaWindowLabel(w)} quota is used up; resets ${at}. What you send now may wait until then.`)
     : L(E`${quotaWindowLabel(w)}额度已用完；现在发的消息可能要等重置后才会处理。`, E`${quotaWindowLabel(w)} quota is used up. What you send now may wait until it resets.`);
 }
 
+
+function usd(value: number | undefined): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(value ?? 0);
+}
+/** A compact value shared by member tags and the composer. */
+export function quotaRemainingText(w: QuotaWindow): string {
+  if (w.balance?.unlimited) return L("不限额", "Unlimited");
+  if (w.balance) return L(E`剩 ${usd(w.balance.remaining)}`, E`${usd(w.balance.remaining)} left`);
+  return L(E`剩 ${quotaLeft(w)}%`, E`${quotaLeft(w)}% left`);
+}

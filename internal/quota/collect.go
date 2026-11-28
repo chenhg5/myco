@@ -292,14 +292,24 @@ func claudeCache(s Source, q *api.Quota) error {
 }
 
 func apiQuota(ctx context.Context, s Source, q *api.Quota) error {
+	return apiQuotaClient(ctx, s, q, &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }})
+}
+
+func apiQuotaClient(ctx context.Context, s Source, q *api.Quota, client *http.Client) error {
+	if (s.Provider == "glm" || s.Provider == "kimi" || s.Provider == "openrouter") && !planQuotaEndpoint(s.Provider, s.endpoint) {
+		q.Status = "unsupported"
+		return fmt.Errorf("invalid quota origin")
+	}
 	req, e := http.NewRequestWithContext(ctx, http.MethodGet, s.endpoint, nil)
 	if e != nil {
 		return e
 	}
 	req.Header.Set("Authorization", "Bearer "+s.key)
+	if s.Provider == "glm" {
+		req.Header.Set("Authorization", s.key)
+	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, e := client.Do(req)
 	if e != nil {
 		q.Status = "transient_error"
@@ -313,6 +323,9 @@ func apiQuota(ctx context.Context, s Source, q *api.Quota) error {
 		return fmt.Errorf("unauthorized")
 	case 403:
 		q.Status = "unsupported"
+		if s.Provider == "glm" || s.Provider == "kimi" || s.Provider == "openrouter" {
+			q.Status = "auth_required"
+		}
 		return fmt.Errorf("no plan")
 	case 429:
 		q.Status = "throttled"
@@ -321,14 +334,26 @@ func apiQuota(ctx context.Context, s Source, q *api.Quota) error {
 		q.Status = "transient_error"
 		return fmt.Errorf("quota HTTP failure")
 	}
-	b, e := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	b, e := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
 	if e != nil {
-		return e
+		q.Status = "transient_error"
+		return fmt.Errorf("quota response read failed")
 	}
-	if s.Provider == "opencode_go" {
+	if len(b) > 1<<20 {
+		return fmt.Errorf("quota response too large")
+	}
+	switch s.Provider {
+	case "opencode_go":
 		return parseGo(b, q)
+	case "glm":
+		return parseGLM(b, q)
+	case "kimi":
+		return parseKimi(b, q)
+	case "openrouter":
+		return parseOpenRouter(b, q)
+	default:
+		return parseMiniMax(b, q)
 	}
-	return parseMiniMax(b, q)
 }
 func parseGo(b []byte, q *api.Quota) error {
 	var body struct {

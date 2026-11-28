@@ -282,3 +282,37 @@ func TestRuntimeAccountOlderHubAndOtherErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeNewQuotaOlderHub(t *testing.T) {
+	for _, message := range []string{`invalid quota provider`, `invalid JSON body: json: unknown field "balance"`, `unrelated validation failure`} {
+		t.Run(message, func(t *testing.T) {
+			calls := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				var rt api.Runtime
+				if e := json.NewDecoder(r.Body).Decode(&rt); e != nil {
+					t.Fatal(e)
+				}
+				if calls == 1 {
+					w.WriteHeader(400)
+					json.NewEncoder(w).Encode(api.Error{Code: "invalid_argument", Message: message})
+					return
+				}
+				if rt.Quota != nil || rt.CLI != "codex" || rt.Model != "test-model" {
+					t.Error("fallback lost runtime or exposed private quota")
+				}
+				w.Write([]byte(`{}`))
+			}))
+			defer srv.Close()
+			c, _ := New(srv.URL, "token")
+			e := c.ReportRuntime(context.Background(), api.Runtime{CLI: "codex", Model: "test-model", Quota: &api.Quota{Provider: "openrouter", ProfileRef: "qp_opaque", Windows: []api.QuotaWindow{{Name: "balance", Balance: &api.QuotaBalance{Currency: "USD", Unlimited: true}}}}})
+			if message == "unrelated validation failure" {
+				if e == nil || calls != 1 {
+					t.Fatal("unrelated validation was retried")
+				}
+			} else if e != nil || calls != 2 {
+				t.Fatalf("compatibility fallback failed: %v calls=%d", e, calls)
+			}
+		})
+	}
+}

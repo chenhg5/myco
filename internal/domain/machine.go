@@ -213,10 +213,19 @@ func QuotaStatusAt(q *Quota, now time.Time) string {
 	return q.Status
 }
 
-// QuotaWindow is one limit: how much of it is used (0..1) and when it resets.
+// QuotaBalance is a key spending allowance, separate from timed windows.
+type QuotaBalance struct {
+	Currency  string   `json:"currency"`
+	Limit     *float64 `json:"limit,omitempty"`
+	Remaining *float64 `json:"remaining,omitempty"`
+	Unlimited bool     `json:"unlimited,omitempty"`
+}
+
+// QuotaWindow is one limit: Used is the share spent (0..1).
 type QuotaWindow struct {
-	DurationSec int    `json:"duration_sec,omitempty"`
-	ModelScope  string `json:"model_scope,omitempty"`
+	Balance     *QuotaBalance `json:"balance,omitempty"`
+	DurationSec int           `json:"duration_sec,omitempty"`
+	ModelScope  string        `json:"model_scope,omitempty"`
 	// Name: five_hour, seven_day (Claude Code), primary, secondary (Codex).
 	Name string `json:"name"`
 	// Label describes the window when its name does not, e.g. "5h" or "7d".

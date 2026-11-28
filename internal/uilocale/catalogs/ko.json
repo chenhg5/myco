@@ -3467,5 +3467,10 @@
   "Connect to {0}: {1}": "{0}에 연결: {1}",
   "Read repositories, pull requests and issues. Credentials stay on this computer and are never given to the app page.": "저장소, 풀 리퀘스트 및 이슈를 읽습니다. 자격 증명은 이 컴퓨터에 저장되며 앱 페이지에 전달되지 않습니다.",
   "This server resolves to this computer or a private network. Allow it only if you trust this server.": "이 서버는 이 컴퓨터 또는 사설 네트워크를 가리킵니다. 신뢰하는 서버인 경우에만 허용하세요.",
-  "Use the CLI login for this server on this computer, saving a separate credential copy for this page.": "이 컴퓨터에서 이 서버의 CLI 로그인을 사용하고 이 페이지 전용 자격 증명 사본을 저장합니다."
+  "Use the CLI login for this server on this computer, saving a separate credential copy for this page.": "이 컴퓨터에서 이 서버의 CLI 로그인을 사용하고 이 페이지 전용 자격 증명 사본을 저장합니다.",
+  "API allowance": "API 사용 한도",
+  "API allowance is used up; check the key limit or add credit.": "API 사용 한도를 소진했습니다. 키 한도를 확인하거나 잔액을 충전하세요.",
+  "Unlimited": "무제한",
+  "Balance": "잔액",
+  "{0} left": "{0} 남음"
 }

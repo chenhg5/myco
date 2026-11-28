@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Gauge, TriangleAlert } from "lucide-react";
 import type { AgentRow } from "@/app/types";
 import { machinesOfHub } from "@/app/nodes";
-import { quotaEffectiveStatus, quotaHasNumbers, quotaLeft, quotaLiveWindows, quotaObservedAt, quotaPillLevel, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaSummary, quotaUnreadable, quotaWindowLabel, quotaWindowShort, quotaWindowText, quotaWorst } from "@/app/quota";
+import { quotaRemainingText, quotaEffectiveStatus, quotaHasNumbers, quotaLiveWindows, quotaObservedAt, quotaPillLevel, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaSummary, quotaUnreadable, quotaWindowLabel, quotaWindowShort, quotaWindowText, quotaWorst } from "@/app/quota";
 import { fitMenu } from "@/app/fitMenu";
 import { L, E } from "@/lib/i18n";
 import { timeAgo } from "@/lib/utils";
@@ -59,7 +59,7 @@ export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
   let label: string;
   let title: string;
   if (worst) {
-    const text = quotaSpent(worst) ? L("已用完", "out") : L(E`剩 ${quotaLeft(worst)}%`, E`${quotaLeft(worst)}% left`);
+    const text = worst.balance ? quotaRemainingText(worst) : quotaSpent(worst) ? L("已用完", "out") : quotaRemainingText(worst);
     label = [quotaWindowShort(worst), text].filter(Boolean).join(" ");
     if (old) label += ` · ${timeAgo(quotaObservedAt(quota), now)}`;
     title = old

@@ -10,7 +10,10 @@ export type ModelSource = "app" | "self" | "configured" | "cli-config" | "observ
 /** pinned: chosen for this node; machine: the machine's current setting; env_file: entered by hand; missing: the pinned one is gone. */
 export type ProviderSource = "pinned" | "machine" | "env_file" | "missing";
 /** One usage window of a plan (5 hours, 7 days, ...). */
+export interface QuotaBalance { currency: "USD"; limit?: number; remaining?: number; unlimited?: boolean }
 export interface QuotaWindow {
+  /** Key spending allowance, not a time window or total account credit. */
+  balance?: QuotaBalance;
   name: string;
   label?: string;
   /** share used, 0..1 (remaining is 1 - used) */

@@ -3467,5 +3467,10 @@
   "Connect to {0}: {1}": "Conectar a {0}: {1}",
   "Read repositories, pull requests and issues. Credentials stay on this computer and are never given to the app page.": "Leer repositorios, solicitudes de extracción e incidencias. Las credenciales se guardan en este equipo y nunca se entregan a la página de la aplicación.",
   "This server resolves to this computer or a private network. Allow it only if you trust this server.": "Este servidor apunta a este equipo o a una red privada. Permítelo solo si confías en él.",
-  "Use the CLI login for this server on this computer, saving a separate credential copy for this page.": "Usar el inicio de sesión de la CLI de este servidor en este equipo y guardar una copia independiente de las credenciales para esta página."
+  "Use the CLI login for this server on this computer, saving a separate credential copy for this page.": "Usar el inicio de sesión de la CLI de este servidor en este equipo y guardar una copia independiente de las credenciales para esta página.",
+  "API allowance": "Límite de API",
+  "API allowance is used up; check the key limit or add credit.": "Se agotó el límite de API; revisa el límite de la clave o añade saldo.",
+  "Unlimited": "Sin límite",
+  "Balance": "Saldo",
+  "{0} left": "Quedan {0}"
 }

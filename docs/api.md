@@ -1652,6 +1652,15 @@ respectively.
 
 ### Private account quota snapshots
 
+A window may carry `balance: {currency:"USD", limit?:number,
+remaining?:number, unlimited?:boolean}`. A finite balance requires both amounts,
+`0 <= remaining <= limit`, with `used` the share spent (a zero limit is spent).
+Unlimited requires `unlimited:true`, no amounts and `used:0`. Balance rows have
+no `duration_sec` or `resets_at`. They describe a key's spending allowance, not
+the account's total credit. See [quota sources](quota-sources.md) for provider
+paths, interpretation, failure statuses and old-Hub compatibility.
+
+
 `PUT /v1/me/runtime` accepts an optional extended `quota`. Agent list, agent
 get and overview responses resolve the agent's current account binding under
 `runtime.quota`; clients do not need an additional request. Existing `source`,
@@ -1659,7 +1668,7 @@ get and overview responses resolve the agent's current account binding under
 
 | Field | Meaning |
 | --- | --- |
-| `provider` | `codex`, `claude`, `opencode_go`, `minimax`, or `unknown` |
+| `provider` | `codex`, `claude`, `opencode_go`, `minimax`, `glm`, `kimi`, `openrouter`, or `unknown` |
 | `profile_ref` | Opaque machine-local login reference, not a path or account identifier |
 | `machine_id` | Assigned by the Hub from the authenticated agent, never trusted from input |
 | `plan` | `chatgpt_subscription`, `claude_subscription`, `go`, or `coding_plan` |

@@ -6678,6 +6678,48 @@ async function runMatrix(browser, size, scheme) {
       }
     });
 
+    await step("成员 · OpenRouter 余额额度", async () => {
+      const at = new Date().toISOString();
+      const quota = { source: "openrouter", provider: "openrouter", plan: "api_balance", source_kind: "official_api", status: "ok", at, checked_at: at,
+        windows: [{ name: "balance", used: .65, balance: { currency: "USD", limit: 50, remaining: 17.5 } }] };
+      const put = (v) => {
+        if (Array.isArray(v)) { v.forEach(put); return; }
+        if (!v || typeof v !== "object") return;
+        if (v.name === "grok-agent-7c2e" && v.runtime) v.runtime = { ...v.runtime, quota };
+        for (const x of Object.values(v)) put(x);
+      };
+      const routeURL = /\/app\/overview(\?|$)/;
+      const handler = async (route) => {
+        const response = await route.fetch(); const json = await response.json(); put(json); await route.fulfill({ response, json });
+      };
+      try {
+        await page.route(routeURL, handler);
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.locator(".app-shell").waitFor();
+        await go(page, "成员", narrow);
+        const card = page.locator(".mb-card", { hasText: "Myco (Grok)" });
+        await card.locator(".app-quota-tag", { hasText: "剩 $17.50" }).waitFor({ timeout: 15_000 });
+        await card.click(); await page.locator(".ms").waitFor();
+        await clickVisible(page, page.locator(".ms .ms-fold"));
+        const body = page.locator(".ms .ms-fold-body");
+        await body.locator(".app-quota", { hasText: "$17.50 / $50.00" }).waitFor();
+        if ((await body.innerText()).includes("重置")) throw Error("余额不该显示重置倒计时");
+        await shot(page, size, scheme, "member-account-quota-balance");
+        await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
+        await openMember(page, narrow, "聊天", "Myco (Grok)");
+        const pill = page.locator(".conv-detail [data-testid=quota-pill]");
+        await pill.filter({ hasText: "剩 $17.50" }).waitFor();
+        quota.windows = [{ name: "balance", used: 0, balance: { currency: "USD", unlimited: true } }];
+        await page.reload({ waitUntil: "domcontentloaded" }); await page.locator(".app-shell").waitFor();
+        await go(page, "成员", narrow);
+        await page.locator(".mb-card", { hasText: "Myco (Grok)" }).locator(".app-quota-tag", { hasText: "不限额" }).waitFor();
+        await shot(page, size, scheme, "member-account-quota-unlimited");
+      } finally {
+        await page.unroute(routeURL, handler);
+        await page.reload({ waitUntil: "domcontentloaded" }); await page.locator(".app-shell").waitFor();
+      }
+    });
+
     await step("成员 · 会话上报的额度", async () => {
       const at = new Date(Date.now() - 5 * 60e3).toISOString();
       const quota = {

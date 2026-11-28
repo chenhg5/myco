@@ -242,6 +242,15 @@ func Discover(in Input, salt []byte) Source {
 			return unsupported(in, salt)
 		}
 		src.Provider, src.Plan, src.endpoint = "opencode_go", "go", "https://opencode.ai/inference/go/v1/usage"
+	case "open.bigmodel.cn", "api.z.ai", "api.kimi.com", "openrouter.ai":
+		provider, endpoint := planEndpoint(base)
+		if provider == "" {
+			return unsupported(in, salt)
+		}
+		src.Provider, src.Plan, src.endpoint = provider, "coding_plan", endpoint
+		if provider == "openrouter" {
+			src.Plan = "api_balance"
+		}
 	case "api.minimax.io", "www.minimax.io":
 		src.Provider, src.Plan, src.endpoint = "minimax", "coding_plan", "https://www.minimax.io/v1/token_plan/remains"
 	case "api.minimaxi.com", "api.minimax.cn":
@@ -301,4 +310,41 @@ func canonical(path string) string {
 		return p
 	}
 	return filepath.Clean(path)
+}
+
+// Only recognized HTTPS plan paths opt in. A gateway or a general API key
+// never gets probed against another provider or another region.
+func planEndpoint(base string) (string, string) {
+	u, e := url.Parse(base)
+	if e != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || u.RawQuery != "" || u.Fragment != "" || u.RawPath != "" {
+		return "", ""
+	}
+	path := strings.TrimSuffix(u.Path, "/")
+	switch strings.ToLower(u.Host) {
+	case "open.bigmodel.cn", "api.z.ai":
+		if path == "/api/anthropic" || path == "/api/anthropic/v1" || path == "/api/coding/paas/v4" {
+			return "glm", "https://" + strings.ToLower(u.Host) + "/api/monitor/usage/quota/limit"
+		}
+	case "api.kimi.com":
+		if strings.HasPrefix(path, "/coding/") {
+			return "kimi", "https://api.kimi.com/coding/v1/usages"
+		}
+	case "openrouter.ai":
+		if path == "/api/v1" {
+			return "openrouter", "https://openrouter.ai/api/v1/key"
+		}
+	}
+	return "", ""
+}
+
+func planQuotaEndpoint(provider, endpoint string) bool {
+	switch provider {
+	case "glm":
+		return endpoint == "https://open.bigmodel.cn/api/monitor/usage/quota/limit" || endpoint == "https://api.z.ai/api/monitor/usage/quota/limit"
+	case "kimi":
+		return endpoint == "https://api.kimi.com/coding/v1/usages"
+	case "openrouter":
+		return endpoint == "https://openrouter.ai/api/v1/key"
+	}
+	return false
 }

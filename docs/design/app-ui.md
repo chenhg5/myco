@@ -699,3 +699,12 @@ six hours, explain automatic restart paused and retain Restart when idle. Older
 runners explain the need for one manual restart after tasks finish. Reuse
 `.app-kv`, `.app-about-status`, `.app-about-note`, `ErrorText` and ordinary buttons
 in Chinese/English and both themes. Smoke: “设置 · 更新后空闲重启”.
+
+
+### Provider balance quota
+
+OpenRouter uses the existing quota rows and member/composer tags. Details show
+“Balance: $17.50 / $50.00”; tags show “$17.50 left”, or “Unlimited”. Chinese:
+“余额”, “剩 $17.50”, “不限额”. A balance has no window/reset countdown. Preserve
+existing stale/failure notes. UI smoke: “成员 · OpenRouter 余额额度”, both widths
+and themes, checks finite balance details, composer and unlimited member tag.

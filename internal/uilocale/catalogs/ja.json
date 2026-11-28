@@ -3467,5 +3467,10 @@
   "Connect to {0}: {1}": "{0} に接続: {1}",
   "Read repositories, pull requests and issues. Credentials stay on this computer and are never given to the app page.": "リポジトリ、プルリクエスト、Issue を読み取ります。認証情報はこのコンピューターに保存され、アプリのページには渡されません。",
   "This server resolves to this computer or a private network. Allow it only if you trust this server.": "このサーバーは、このコンピューターまたはプライベートネットワークを指しています。信頼できるサーバーの場合のみ許可してください。",
-  "Use the CLI login for this server on this computer, saving a separate credential copy for this page.": "このコンピューターでこのサーバーの CLI ログインを使用し、このページ専用の認証情報のコピーを保存します。"
+  "Use the CLI login for this server on this computer, saving a separate credential copy for this page.": "このコンピューターでこのサーバーの CLI ログインを使用し、このページ専用の認証情報のコピーを保存します。",
+  "API allowance": "API 利用枠",
+  "API allowance is used up; check the key limit or add credit.": "API 利用枠を使い切りました。キーの上限を確認するか、残高を追加してください。",
+  "Unlimited": "無制限",
+  "Balance": "残高",
+  "{0} left": "残り {0}"
 }

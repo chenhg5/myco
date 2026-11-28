@@ -1433,3 +1433,6 @@ Page-owned files are separate from project documents. Each static page defaults 
 reserves also protect page uploads. Page files follow page permissions and are
 removed with the page; they never enter project pull or agent project context.
 See [the page file API](docs/api.md#page-owned-files) for migration and CLI commands.
+
+
+Account quota collection also supports effective GLM Coding Plan, Kimi Coding Plan and OpenRouter connections. OpenRouter shows the key spending allowance in USD or Unlimited, without a reset countdown. See [supported quota sources](docs/quota-sources.md) for recognized URLs and limitations.

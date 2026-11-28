@@ -258,7 +258,7 @@ func quotaDTO(q *domain.Quota) *api.Quota {
 		if w.ResetsAt != nil && !w.ResetsAt.After(now) {
 			continue
 		}
-		out.Windows = append(out.Windows, api.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, DurationSec: w.DurationSec, ModelScope: w.ModelScope, ResetsAt: w.ResetsAt, Status: w.Status})
+		out.Windows = append(out.Windows, api.QuotaWindow{Balance: (*api.QuotaBalance)(w.Balance), Name: w.Name, Label: w.Label, Used: w.Used, DurationSec: w.DurationSec, ModelScope: w.ModelScope, ResetsAt: w.ResetsAt, Status: w.Status})
 	}
 	if out.Status == "ok" && len(out.Windows) == 0 {
 		out.Status = "unknown"
@@ -272,7 +272,7 @@ func quotaFromAPI(q *api.Quota) *domain.Quota {
 	}
 	out := &domain.Quota{Source: q.Source, At: q.At, Provider: q.Provider, ProfileRef: q.ProfileRef, MachineID: q.MachineID, SourceKind: q.SourceKind, Status: q.Status, CheckedAt: q.CheckedAt, ErrorCode: q.ErrorCode, Plan: q.Plan}
 	for _, w := range q.Windows {
-		out.Windows = append(out.Windows, domain.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, DurationSec: w.DurationSec, ModelScope: w.ModelScope, ResetsAt: w.ResetsAt, Status: w.Status})
+		out.Windows = append(out.Windows, domain.QuotaWindow{Balance: (*domain.QuotaBalance)(w.Balance), Name: w.Name, Label: w.Label, Used: w.Used, DurationSec: w.DurationSec, ModelScope: w.ModelScope, ResetsAt: w.ResetsAt, Status: w.Status})
 	}
 	return out
 }

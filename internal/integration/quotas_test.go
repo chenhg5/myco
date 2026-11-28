@@ -270,3 +270,81 @@ func TestSessionReportedQuotaReachesTheOwnersApp(t *testing.T) {
 		t.Fatalf("another member read the session's quota: %v %+v", e, ag)
 	}
 }
+
+func TestPlanQuotaProvidersAndBalance(t *testing.T) {
+	c := ctx(t)
+	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
+	agent := h.client(h.register(api.RegisterRequest{Name: "plan-agent"}))
+	inv, e := h.admin().InviteMember(c, api.InviteRequest{Name: "plan-viewer"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	paired, e := h.client("").Pair(c, inv.Link[strings.Index(inv.Link, "/c/")+3:], "plan-viewer-device")
+	if e != nil {
+		t.Fatal(e)
+	}
+	outsider := h.client(paired.Token)
+	if e := agent.ReportMachine(c, api.MachineReport{Fingerprint: strings.Repeat("b", 64), Name: "demo-mac", OS: "darwin"}); e != nil {
+		t.Fatal(e)
+	}
+	limit, left := 50.0, 17.5
+	now := time.Now().UTC()
+	for _, provider := range []string{"glm", "kimi", "openrouter"} {
+		window := api.QuotaWindow{Name: "weekly", Used: .65, DurationSec: 604800}
+		if provider == "openrouter" {
+			window = api.QuotaWindow{Name: "balance", Used: .65, Balance: &api.QuotaBalance{Currency: "USD", Limit: &limit, Remaining: &left}}
+		}
+		q := api.Quota{Source: provider, Provider: provider, ProfileRef: "qp_" + strings.Repeat("b", 64), Plan: "coding_plan", SourceKind: "official_api", Status: "ok", At: now, CheckedAt: now, Windows: []api.QuotaWindow{window}}
+		if e := agent.ReportRuntime(c, api.Runtime{CLI: "claude", Quota: &q}); e != nil {
+			t.Fatal(e)
+		}
+		got, e := agent.GetAgent(c, "plan-agent")
+		if e != nil {
+			t.Fatal(e)
+		}
+		if got.Runtime == nil || got.Runtime.Quota == nil || got.Runtime.Quota.Provider != provider {
+			t.Fatalf("new provider not returned: %+v", got.Runtime)
+		}
+		if provider == "openrouter" {
+			balance := got.Runtime.Quota.Windows[0].Balance
+			if balance == nil || *balance.Remaining != 17.5 || *balance.Limit != 50 {
+				t.Fatal("balance did not survive persistence/DTO")
+			}
+			q.CheckedAt = now.Add(time.Second)
+			q.Status = "transient_error"
+			q.At = time.Time{}
+			q.Windows = nil
+			if e = agent.ReportRuntime(c, api.Runtime{CLI: "claude", Quota: &q}); e != nil {
+				t.Fatal(e)
+			}
+			got, e = agent.GetAgent(c, "plan-agent")
+			if e != nil {
+				t.Fatal(e)
+			}
+			if got.Runtime.Quota.Status != "transient_error" || *got.Runtime.Quota.Windows[0].Balance.Remaining != 17.5 {
+				t.Fatal("failed report discarded old balance")
+			}
+			q.CheckedAt = now.Add(2 * time.Second)
+			q.At = now.Add(2 * time.Second)
+			q.Status = "ok"
+			q.Windows = []api.QuotaWindow{{Name: "balance", Used: 0, Balance: &api.QuotaBalance{Currency: "USD", Unlimited: true}}}
+			if e = agent.ReportRuntime(c, api.Runtime{CLI: "claude", Quota: &q}); e != nil {
+				t.Fatal(e)
+			}
+			got, e = agent.GetAgent(c, "plan-agent")
+			if e != nil {
+				t.Fatal(e)
+			}
+			if !got.Runtime.Quota.Windows[0].Balance.Unlimited {
+				t.Fatal("unlimited allowance lost")
+			}
+		}
+		hidden, e := outsider.GetAgent(c, "plan-agent")
+		if e != nil {
+			t.Fatal(e)
+		}
+		if hidden.Runtime != nil && hidden.Runtime.Quota != nil {
+			t.Fatal("private quota leaked to another owner")
+		}
+	}
+}

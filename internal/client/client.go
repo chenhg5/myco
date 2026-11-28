@@ -975,8 +975,12 @@ func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 			r.Account = ""
 			continue
 		}
+		if r.Quota != nil && r.Quota.ProfileRef != "" && (r.Quota.Provider == "glm" || r.Quota.Provider == "kimi" || r.Quota.Provider == "openrouter") && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && apiErr.Code == "invalid_argument" && apiErr.Message == "invalid quota provider" {
+			r.Quota = nil
+			continue
+		}
 		if r.Quota != nil && r.Quota.ProfileRef != "" && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest {
-			for _, field := range []string{"profile_ref", "machine_id", "source_kind", "status", "checked_at", "error_code", "plan", "duration_sec", "model_scope", "provider"} {
+			for _, field := range []string{"profile_ref", "machine_id", "source_kind", "status", "checked_at", "error_code", "plan", "duration_sec", "model_scope", "provider", "balance"} {
 				if strings.Contains(apiErr.Message, `unknown field "`+field+`"`) {
 					// Do not downgrade private account data to a public legacy runtime.
 					r.Quota = nil

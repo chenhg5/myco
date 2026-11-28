@@ -3,13 +3,14 @@ import { build } from "esbuild";
 
 // quota.ts reads two UI helpers; the rules tested here do not depend on
 // them. Chinese strings are returned so the assertions match the source.
+let testLanguage = "zh";
 const stub = {
   name: "stub",
   setup(b) {
     b.onResolve({ filter: /^@\/(lib\/(i18n|utils)|api)$/ }, (a) => ({ path: a.path, namespace: "stub" }));
     b.onLoad({ filter: /.*/, namespace: "stub" }, (a) => ({
       contents: a.path.endsWith("i18n")
-        ? "export const L = (zh) => zh; export const E = (parts, ...values) => parts.map((p, i) => (i ? String(values[i-1]) : '') + p).join(''); export const locale = () => 'zh-CN';"
+        ? `export const L = (zh, en) => ${testLanguage === "zh" ? "zh" : "en"}; export const E = (parts, ...values) => parts.map((p, i) => (i ? String(values[i-1]) : '') + p).join(''); export const locale = () => 'zh-CN';`
         : a.path.endsWith("utils")
           ? 'export const timeAgo = (iso, now = Date.now()) => { const s = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000)); if (s < 60) return "刚刚"; if (s < 3600) return `${Math.round(s / 60)} 分钟前`; return `${Math.round(s / 3600)} 小时前`; }; export const cn = (...x) => x.filter(Boolean).join(" ");'
           : "export {};",
@@ -24,7 +25,7 @@ const built = await build({
   format: "esm",
   plugins: [stub],
 });
-const { quotaLiveWindows, quotaHasNumbers, quotaEffectiveStatus, quotaStatusText, quotaSummary, quotaSourceText, quotaOldNote, quotaOutNote, quotaWorst } = await import(
+const { quotaWindowText, quotaRemainingText, quotaSpent, quotaLiveWindows, quotaHasNumbers, quotaEffectiveStatus, quotaStatusText, quotaSummary, quotaSourceText, quotaOldNote, quotaOutNote, quotaWorst } = await import(
   `data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`
 );
 
@@ -94,3 +95,28 @@ assert.equal(quotaOutNote(two, now), undefined, "an expired spent window is not 
 assert.ok(quotaOutNote({ ...two, windows: [win("five_hour", 1, now + hour)] }, now).includes("5 小时额度已用完"));
 
 console.log("quota: live windows, expiry, staleness, summary and source passed");
+
+// A key allowance is money, without a fabricated window/reset. Explicit
+// unlimited is a successful observation, including in compact member tags.
+const balanceWindow = { name: "balance", used: 0.65, balance: { currency: "USD", limit: 50, remaining: 17.5 } };
+const balance = { ...two, source: "openrouter", provider: "openrouter", plan: "api_balance", windows: [balanceWindow] };
+assert.equal(quotaWindowText(balanceWindow, now), "$17.50 / $50.00");
+assert.equal(quotaRemainingText(balanceWindow), "剩 $17.50");
+assert.equal(quotaSummary(balance, [], now).short, "剩 $17.50");
+assert.ok(!quotaSummary(balance, [], now).line.includes("重置"));
+const unlimitedWindow = { name: "balance", used: 0, balance: { currency: "USD", unlimited: true } };
+assert.equal(quotaHasNumbers({ ...balance, windows: [unlimitedWindow] }, now), true);
+assert.equal(quotaSpent(unlimitedWindow), false);
+assert.equal(quotaWindowText(unlimitedWindow, now), "不限额");
+assert.equal(quotaSummary({ ...balance, windows: [unlimitedWindow] }, [], now).short, "不限额");
+assert.equal(quotaOutNote({ ...balance, windows: [{ ...balanceWindow, used: 1, balance: { ...balanceWindow.balance, remaining: 0 } }] }, now), "API 额度已用完；请检查 key 的限额或充值。");
+
+// English uses the same money/unlimited semantics.
+testLanguage = "en";
+const enBuilt = await build({ entryPoints: [new URL("../src/app/quota.ts", import.meta.url).pathname], bundle: true, write: false, format: "esm", plugins: [stub] });
+const enQuota = await import(`data:text/javascript;base64,${Buffer.from(enBuilt.outputFiles[0].text).toString("base64")}`);
+assert.equal(enQuota.quotaWindowText(balanceWindow, now), "$17.50 / $50.00");
+assert.equal(enQuota.quotaSummary(balance, [], now).short, "$17.50 left");
+assert.equal(enQuota.quotaSummary({ ...balance, windows: [unlimitedWindow] }, [], now).short, "Unlimited");
+assert.ok(!enQuota.quotaSummary(balance, [], now).line.includes("reset"));
+console.log("quota: balance and unlimited in Chinese and English passed");

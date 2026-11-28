@@ -257,10 +257,19 @@ type Quota struct {
 	Windows []QuotaWindow `json:"windows"`
 }
 
-// QuotaWindow is one limit: Used is the share used (0..1).
+// QuotaBalance is a key spending allowance, separate from timed windows.
+type QuotaBalance struct {
+	Currency  string   `json:"currency"`
+	Limit     *float64 `json:"limit,omitempty"`
+	Remaining *float64 `json:"remaining,omitempty"`
+	Unlimited bool     `json:"unlimited,omitempty"`
+}
+
+// QuotaWindow is one limit: Used is the share spent (0..1).
 type QuotaWindow struct {
-	DurationSec int    `json:"duration_sec,omitempty"`
-	ModelScope  string `json:"model_scope,omitempty"`
+	Balance     *QuotaBalance `json:"balance,omitempty"`
+	DurationSec int           `json:"duration_sec,omitempty"`
+	ModelScope  string        `json:"model_scope,omitempty"`
 	// Name: five_hour, seven_day (Claude Code), primary, secondary (Codex).
 	Name     string     `json:"name"`
 	Label    string     `json:"label,omitempty"`

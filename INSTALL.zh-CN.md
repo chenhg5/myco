@@ -1360,3 +1360,6 @@ App 自动化编辑器按本机时间填写起止时间，并在列表显示有�
 设置默认额度；项目上传的磁盘剩余空间保护也适用于页面附件。
 附件权限跟随页面，删除页面时清理，不进入 project pull 或 agent 的项目上下文。
 迁移和 CLI 命令见[页面附件 API](docs/api.md#page-owned-files)。
+
+
+账号额度采集还支持当前连接使用的 GLM Coding Plan、Kimi Coding Plan 和 OpenRouter。OpenRouter 显示 key 的美元可用额度或「不限额」，不显示重置倒计时。识别地址和限制见[支持的额度来源](docs/quota-sources.md)。
