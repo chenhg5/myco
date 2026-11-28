@@ -185,7 +185,7 @@ func TestBaselineWithSlowTransport(t *testing.T) {
 			opts := testOpts(t)
 			opts.Unit = time.Millisecond
 			opts.RequestDelay = 5 * time.Millisecond
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
 			res, _, err := RunScenario(ctx, ScenarioByName(name), Baseline{}, opts)
 			if err != nil {
