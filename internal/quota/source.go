@@ -326,7 +326,9 @@ func planEndpoint(base string) (string, string) {
 			return "glm", "https://" + strings.ToLower(u.Host) + "/api/monitor/usage/quota/limit"
 		}
 	case "api.kimi.com":
-		if strings.HasPrefix(path, "/coding/") {
+		// Kimi documents https://api.kimi.com/coding/ for Claude Code and
+		// https://api.kimi.com/coding/v1 for OpenAI-compatible tools.
+		if path == "/coding" || strings.HasPrefix(path, "/coding/") {
 			return "kimi", "https://api.kimi.com/coding/v1/usages"
 		}
 	case "openrouter.ai":

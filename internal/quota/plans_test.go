@@ -22,6 +22,8 @@ func TestPlanDiscovery(t *testing.T) {
 		{"https://open.bigmodel.cn/api/coding/paas/v4", "glm", "https://open.bigmodel.cn/api/monitor/usage/quota/limit"},
 		{"https://api.z.ai/api/coding/paas/v4", "glm", "https://api.z.ai/api/monitor/usage/quota/limit"},
 		{"https://api.kimi.com/coding/v1", "kimi", "https://api.kimi.com/coding/v1/usages"},
+		{"https://api.kimi.com/coding/", "kimi", "https://api.kimi.com/coding/v1/usages"},
+		{"https://api.kimi.com/coding", "kimi", "https://api.kimi.com/coding/v1/usages"},
 		{"https://openrouter.ai/api/v1/", "openrouter", "https://openrouter.ai/api/v1/key"},
 	}
 	for _, tc := range cases {

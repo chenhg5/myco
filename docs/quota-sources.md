@@ -14,7 +14,7 @@ No inference request, login, token refresh or helper is used for these API reads
 | OpenCode Go | Explicit Go connection | `https://opencode.ai/inference/go/v1/usage`, Bearer |
 | MiniMax Coding Plan | Existing supported MiniMax origins | `/v1/token_plan/remains`, Bearer |
 | GLM Coding Plan | HTTPS `open.bigmodel.cn` or `api.z.ai`, path `/api/anthropic`, `/api/anthropic/v1` or `/api/coding/paas/v4` | Same host, `/api/monitor/usage/quota/limit`, raw key in `Authorization` (no Bearer prefix) |
-| Kimi Coding Plan | HTTPS `api.kimi.com`, path below `/coding/` | `https://api.kimi.com/coding/v1/usages`, Bearer |
+| Kimi Coding Plan | HTTPS `api.kimi.com`, path `/coding` or below it (`/coding/`, `/coding/v1`) | `https://api.kimi.com/coding/v1/usages`, Bearer |
 | OpenRouter | HTTPS `openrouter.ai/api/v1` | `https://openrouter.ai/api/v1/key`, Bearer |
 
 Trailing slashes are accepted. For the three new sources, HTTP, explicit ports,
