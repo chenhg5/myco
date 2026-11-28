@@ -91,7 +91,7 @@ func TestAccountQuotaCloudAndCrossMachineSharing(t *testing.T) {
 	if got.Runtime.Quota.Windows[0].Used != .95 {
 		t.Fatal("older observation won")
 	}
-	issue := &api.Quota{Source: "claude", Provider: "claude", Plan: "claude_subscription", SourceKind: "cloud_session", Status: "auth_required", CheckedAt: now}
+	issue := &api.Quota{Source: "claude", Provider: "claude", Plan: "claude_subscription", SourceKind: "cloud_session", Status: "auth_required", CheckedAt: now.Add(-2 * time.Hour)}
 	if e = clients[1].ReportRuntime(c, api.Runtime{CLI: "claude-cloud", Account: "shared@example.com", Quota: issue}); e != nil {
 		t.Fatal(e)
 	}
@@ -142,7 +142,14 @@ func TestAccountQuotaCloudAndCrossMachineSharing(t *testing.T) {
 		t.Fatal(e)
 	}
 	found := false
+	foundAuth := false
 	for _, pick := range picks.Candidates {
+		if pick.Name == "cloud-1" {
+			foundAuth = true
+			if pick.Quota != "blocked" {
+				t.Fatal("old local authentication check hid a fresh shared limit")
+			}
+		}
 		if pick.Name == "cloud-2" {
 			found = true
 			if pick.Quota != "blocked" {
@@ -150,7 +157,7 @@ func TestAccountQuotaCloudAndCrossMachineSharing(t *testing.T) {
 			}
 		}
 	}
-	if !found {
+	if !found || !foundAuth {
 		t.Fatal("picker omitted target")
 	}
 	// Exercise list/overview visibility in addition to individual reads.

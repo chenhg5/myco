@@ -7,7 +7,8 @@ func QuotaAvailability(q *Quota, now time.Time) string {
 		return "unknown"
 	}
 	at := q.CheckedAt
-	if at.IsZero() {
+	// A newer shared observation can outlive this agent's last local check.
+	if q.At.After(at) {
 		at = q.At
 	}
 	if at.IsZero() || now.Sub(at) > QuotaMaxAge {

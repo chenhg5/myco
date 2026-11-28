@@ -6686,7 +6686,7 @@ async function runMatrix(browser, size, scheme) {
         if (Array.isArray(v)) { v.forEach(put); return; }
         if (!v || typeof v !== "object") return;
         if (v.name === "release-cloud" && v.runtime) v.runtime = { ...v.runtime, quota };
-        if (v.name === "mcp-claude" && v.runtime) v.runtime = { ...v.runtime, quota: { ...quota, status: "auth_required", source_kind: "cache" } };
+        if (v.name === "mcp-claude" && v.runtime) v.runtime = { ...v.runtime, quota: { ...quota, status: "auth_required", source_kind: "cache", checked_at: new Date(Date.now() - 2 * 3600e3).toISOString() } };
         for (const x of Object.values(v)) put(x);
       };
       const routeURL = /\/app\/overview(\?|$)/;
