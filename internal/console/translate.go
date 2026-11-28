@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/myco-ai/myco/internal/api"
 	"github.com/myco-ai/myco/internal/client"
 )
 
@@ -37,7 +38,7 @@ import (
 //
 // GET /app/translate/config → the settings, and which services have a key.
 // PUT /app/translate/config {provider, base_url, model, key?, clear_key?}.
-// POST /app/translate {text, to: "zh"|"en"} → {text, provider}.
+// POST /app/translate {text, to: UILanguage} → {text, provider}.
 
 // TranslateConfig is what the person chose (no keys).
 type TranslateConfig struct {
@@ -57,6 +58,17 @@ var translateEndpoints = struct {
 	deeplFree: "https://api-free.deepl.com/v2/translate",
 	deeplPro:  "https://api.deepl.com/v2/translate",
 	google:    "https://translation.googleapis.com/language/translate/v2",
+}
+
+// Provider codes are allowlisted independently of text sent for translation.
+var translationTargets = map[string]struct{ deepL, google, name string }{
+	"zh":      {"ZH-HANS", "zh-CN", "Simplified Chinese"},
+	"zh-Hant": {"ZH-HANT", "zh-TW", "Traditional Chinese"},
+	"en":      {"EN-US", "en", "English"},
+	"ja":      {"JA", "ja", "Japanese"},
+	"ko":      {"KO", "ko", "Korean"},
+	"es":      {"ES", "es", "Spanish"},
+	"pt-BR":   {"PT-BR", "pt", "Brazilian Portuguese"},
 }
 
 type translator struct {
@@ -171,8 +183,8 @@ func (b *Backend) translateRoutes(m *http.ServeMux) {
 		if !decode(w, r, &in) {
 			return
 		}
-		if in.To != "zh" && in.To != "en" {
-			writeErr(w, &client.Error{Code: "invalid_argument", Message: "to must be zh or en", Status: http.StatusBadRequest})
+		if !api.UILanguage(in.To).Valid() {
+			writeErr(w, &client.Error{Code: "invalid_argument", Message: "to must be a supported UI language", Status: http.StatusBadRequest})
 			return
 		}
 		if strings.TrimSpace(in.Text) == "" || len(in.Text) > 20000 {
@@ -330,10 +342,7 @@ func (t *translator) deepL(ctx context.Context, key string, todo []string, to st
 	if strings.HasSuffix(key, ":fx") {
 		endpoint = translateEndpoints.deeplFree
 	}
-	target := "ZH-HANS"
-	if to == "en" {
-		target = "EN-US"
-	}
+	target := translationTargets[to].deepL
 	body, _ := json.Marshal(map[string]any{"text": todo, "target_lang": target})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	req.Header.Set("Authorization", "DeepL-Auth-Key "+key)
@@ -354,10 +363,7 @@ func (t *translator) deepL(ctx context.Context, key string, todo []string, to st
 }
 
 func (t *translator) google(ctx context.Context, key string, todo []string, to string) ([]string, error) {
-	target := "zh-CN"
-	if to == "en" {
-		target = "en"
-	}
+	target := translationTargets[to].google
 	body, _ := json.Marshal(map[string]any{"q": todo, "target": target, "format": "text"})
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, translateEndpoints.google, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -388,10 +394,7 @@ func (t *translator) openAI(ctx context.Context, c TranslateConfig, key, text, t
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
-	lang := "Simplified Chinese"
-	if to == "en" {
-		lang = "English"
-	}
+	lang := translationTargets[to].name
 	body, _ := json.Marshal(map[string]any{
 		"model": model,
 		"messages": []map[string]string{

@@ -1,3 +1,4 @@
+import { RichText } from "@/app/RichText";
 import { useEffect, useState } from "react";
 import { ArrowLeft, ChevronDown, Link2 } from "lucide-react";
 import { confirmNameLater } from "@/app/NamePrompt";
@@ -6,7 +7,7 @@ import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { setupPrompt } from "@/app/agentSetup";
 import { ConnectOver } from "@/app/ConnectOver";
-import { L, lang } from "@/lib/i18n";
+import { L } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const INSTALL_COMMAND =
@@ -154,9 +155,8 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
                 />
               </label>
               <div className="app-hint">
-                {lang() === "zh"
-                  ? <>在 Hub 所在机器上运行 <code>myco console token create --name {name.trim() || "<设备名>"}</code> 获取令牌。</>
-                  : <>Run <code>myco console token create --name {name.trim() || "<device-name>"}</code> on the Hub’s machine to get a token.</>}
+                <RichText text={L("在工作区所在电脑上运行 {0} 获取令牌。", "Run {0} on the workspace's computer to get a token.")}
+                  values={[<code>myco console token create --name {name.trim() || "<device-name>"}</code>]} />
               </div>
               <div className="app-actions">
                 <button
@@ -198,9 +198,7 @@ export function ConnectHubDialog({ open, onOpenChange, prefill, onAdded }: {
             <CopyButton value={INSTALL_COMMAND} />
           </div>
           <div className="app-hint" style={{ marginTop: 12 }}>
-            {lang() === "zh"
-              ? <>已经装过 Hub？在服务器上运行 <code>sudo myco console link</code> 生成新链接。</>
-              : <>Already installed a Hub? Run <code>sudo myco console link</code> on the server to make a new link.</>}
+            <RichText text={L("已经安装过工作区？在服务器上运行 {0} 生成新链接。", "Already installed a workspace? Run {0} on the server to make a new link.")} values={[<code>sudo myco console link</code>]} />
           </div>
           {/* Or the agent the person already has does all of it. */}
           <div className="add-agent-way" data-testid="connect-agent-way">

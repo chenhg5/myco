@@ -167,7 +167,7 @@ export function machineSubtitle(m: Machine): string {
     osInfo(m.os).label,
     m.arch,
     ver(m.myco_version),
-    L(E`${m.agents.length} 个节点`, E`${m.agents.length} node${m.agents.length === 1 ? "" : "s"}`),
+    L(E`${m.agents.length} 个节点`, (m.agents.length === 1 ? E`${m.agents.length} node` : E`${m.agents.length} nodes`)),
     m.legacy ? L("升级 myco 后识别", "Upgrade myco to identify") : "",
   ].filter(Boolean).join(" · ");
 }

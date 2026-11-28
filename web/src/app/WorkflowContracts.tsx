@@ -126,7 +126,7 @@ export function ContractsSection({ def, hubId, rows }: { def: WorkflowDef; hubId
               <div className="wfc-side">
                 <span className="wfc-label"><ArrowUpFromLine />{L("交回", "Hands back")}</span>
                 {kind === "human" ? <div className="wfc-empty">{L(E`选一个：${(s.options || []).join(" / ")}，可以带一句话`, E`One of: ${(s.options || []).join(" / ")}, with a word`)}</div>
-                  : kind === "computer" ? <div className="wfc-empty">{L(E`退出码、输出${s.parse === "json" ? "，输出按 JSON 读进 json" : ""}；退出码不是 0 算失败`, E`Exit code and output${s.parse === "json" ? ", stdout read as JSON" : ""}; non-zero fails`)}</div>
+                  : kind === "computer" ? <div className="wfc-empty">{L(E`退出码、输出${s.parse === "json" ? "，输出按 JSON 读进 json" : ""}；退出码不是 0 算失败`, (s.parse === "json" ? E`Exit code and output, stdout read as JSON; non-zero fails` : E`Exit code and output; non-zero fails`))}</div>
                     : <SchemaView schema={c} empty={L("一段文字（没有约定结构）", "Text (no contract)")} />}
               </div>
             </div>

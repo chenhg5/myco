@@ -16,7 +16,7 @@ export const languageLocale = (value: Lang): string => LANGUAGES.find((x) => x.i
 export const isChinese = (value: Lang): boolean => value === "zh" || value === "zh-Hant";
 
 function match(tag: string): Lang | undefined {
-  const normalized = tag.replaceAll("_", "-").toLowerCase();
+  const normalized = tag.replace(/_/g, "-").toLowerCase();
   if (/^zh(?:-|$)/.test(normalized)) return /^zh-(?:hant|tw|hk|mo)(?:-|$)/.test(normalized) ? "zh-Hant" : "zh";
   if (/^pt(?:-|$)/.test(normalized)) return "pt-BR";
   return (["en", "ja", "ko", "es"] as const).find((l) => normalized === l || normalized.startsWith(`${l}-`));
@@ -35,7 +35,7 @@ export function formattingLocale(choice: string, host: readonly string[]): strin
   if (choice === "system" || !isLang(choice)) {
     const tag = host.find((x) => match(x) === language);
     if (tag) {
-      try { return Intl.getCanonicalLocales(tag.replaceAll("_", "-"))[0]; } catch { /* use the language's default region */ }
+      try { return Intl.getCanonicalLocales(tag.replace(/_/g, "-"))[0]; } catch { /* use the language's default region */ }
     }
   }
   return languageLocale(language);
@@ -44,10 +44,14 @@ export function formattingLocale(choice: string, host: readonly string[]): strin
 export type Message = { readonly source: string; readonly values: readonly unknown[] };
 /** Tag dynamic copy without guessing which user-provided substrings are variables. */
 export function E(parts: TemplateStringsArray, ...values: unknown[]): Message {
-  return { source: parts.reduce((s, p, i) => s + (i ? `{${i - 1}}` : "") + p, ""), values };
+  return { source: parts.reduce((s, p, i) => s + (i ? `{${i - 1}}` : "") + p.replace(/\{/g, "{{").replace(/\}/g, "}}"), ""), values };
 }
 export function formatMessage(source: string, values: readonly unknown[]): string {
-  return source.replace(/\{(\d+)\}/g, (token, index: string) => Number(index) < values.length ? String(values[Number(index)]) : token);
+  return source.replace(/\{\{|\}\}|\{(\d+)\}/g, (token, index: string | undefined) => {
+    if (token === "{{") return "{";
+    if (token === "}}") return "}";
+    return index !== undefined && Number(index) < values.length ? String(values[Number(index)]) : token;
+  });
 }
 export function renderMessage(value: string | Message): string {
   return typeof value === "string" ? value : formatMessage(value.source, value.values);

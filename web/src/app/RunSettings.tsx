@@ -10,7 +10,7 @@ import { ConfirmDialog, ErrorText } from "@/app/dialogs";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { quotaHasNumbers, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaTight, quotaWindowLabel, quotaWindowText } from "@/app/quota";
 import { cn, timeAgo } from "@/lib/utils";
-import { L, lang, E } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /** The models a node may be told to use when its computer does not say
  *  (Claude Code's aliases; Codex on runners before v0.21.1, which do not
@@ -111,7 +111,7 @@ function SourceValue({ value, source, sourceLabel }: { value?: string; source?: 
     <>
       {value || "—"}
       {value && label && (
-        <span className="app-kv-note">{lang() === "zh" ? <>（{label}）</> : <> ({label})</>}</span>
+        <span className="app-kv-note">{L(E`（${label}）`, E` (${label})`)}</span>
       )}
     </>
   );

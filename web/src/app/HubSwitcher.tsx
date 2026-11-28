@@ -196,7 +196,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
         E`Connected${count === undefined ? "" : ` · ${count} node${count === 1 ? "" : "s"}`}`,
       )
       : L("连不上", "Unreachable")
-    : L(E`${hubs.length} 个工作区 · ${connected} 个已连上`, E`${hubs.length} workspace${hubs.length === 1 ? "" : "s"} · ${connected} connected`);
+    : L(E`${hubs.length} 个工作区 · ${connected} 个已连上`, (hubs.length === 1 ? E`${hubs.length} workspace · ${connected} connected` : E`${hubs.length} workspaces · ${connected} connected`));
 
   const dotClass = selected
     ? selected.ok ? "working" : "down"

@@ -433,7 +433,7 @@ export function WorkflowsPage({ hubId, rows, now, projects = [], open, onOpened,
                           ) : <span>{w.run_counts?.total ? L("最近记录暂不可用", "Latest run unavailable") : L("还没跑过", "Not run yet")}</span>}
                         </span>
                         <span className="wf-row-counts" data-testid="workflow-counts">{w.run_counts ? <>
-                          <span>{L(E`运行 ${w.run_counts.total.toLocaleString()} 次`, E`${w.run_counts.total.toLocaleString()} ${w.run_counts.total === 1 ? "run" : "runs"}`)}</span>
+                          <span>{L(E`运行 ${w.run_counts.total.toLocaleString()} 次`, (w.run_counts.total === 1 ? E`${w.run_counts.total.toLocaleString()} run` : E`${w.run_counts.total.toLocaleString()} runs`))}</span>
                           <span>{L(E`成功 ${w.run_counts.succeeded.toLocaleString()}`, E`${w.run_counts.succeeded.toLocaleString()} succeeded`)}</span>
                           <span className={w.run_counts.failed ? "is-bad" : undefined}>{L(E`失败 ${w.run_counts.failed.toLocaleString()}`, E`${w.run_counts.failed.toLocaleString()} failed`)}</span>
                           {!!w.run_counts.cancelled && <span>{L(E`取消 ${w.run_counts.cancelled.toLocaleString()}`, E`${w.run_counts.cancelled.toLocaleString()} cancelled`)}</span>}
@@ -575,7 +575,7 @@ function StartDialog({ hubId, wf, onClose, onStarted }: { hubId: string; wf: Wor
           {missing && def && <span className="app-modal-hint">{L(E`还没填「${def.inputs?.properties?.[missing]?.title || missing}」`, E`Fill in "${def.inputs?.properties?.[missing]?.title || missing}"`)}</span>}
           <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>
           <button type="submit" className="app-btn app-btn-primary" disabled={busy || !!missing || !def}
-            title={L(E`开始运行（${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}↵）`, E`Start (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}↵)`)}>
+            title={L(E`开始运行（${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}↵）`, (navigator.platform.includes("Mac") ? E`Start (⌘↵)` : E`Start (Ctrl+↵)`))}>
             <Play />{busy ? L("正在开始…", "Starting…") : L("开始运行", "Start")}
           </button>
         </div>

@@ -11052,3 +11052,7 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .machine-health-process { min-width: 0; overflow-wrap: anywhere; }
 .machine-health-process div { color: var(--muted); font-size: 11.5px; }
 .machine-health-alert .pc-online { color: var(--amber); }
+
+/* Seven native language names use a compact picker at both window widths. */
+.language-control { display: grid; gap: 4px; min-width: 0; }
+.app-language-select { width: 13rem; max-width: 100%; }

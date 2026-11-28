@@ -1,5 +1,5 @@
 import type { Agent, Machine, Quota, QuotaWindow } from "@/api";
-import { L, E } from "@/lib/i18n";
+import { L, E, locale } from "@/lib/i18n";
 import { timeAgo } from "@/lib/utils";
 
 const HOUR = 3600;
@@ -77,7 +77,7 @@ export function resetLabel(iso: string | undefined, now = Date.now()): string {
       ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()],
     );
   }
-  return L(E`${d.getMonth() + 1} 月 ${d.getDate()} 日`, d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+  return d.toLocaleDateString(locale(), { month: "short", day: "numeric" });
 }
 
 /** "3 小时后重置": how long until a window resets; "" when the source

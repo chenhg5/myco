@@ -1,5 +1,5 @@
 import { localPreferences, PREFERENCES_CHANGED, PREFERENCES_ERROR, preferencesProblem, flushPreferences } from "@/lib/localPreferences";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowUpDown, Bell, ChevronLeft, ChevronRight, LayoutGrid, Minimize2, Monitor, MoreHorizontal, Pin, Plus, Search, WifiOff, Workflow, X, Zap } from "lucide-react";
 import { ComputerSettings } from "@/app/ComputerSettings";
 import { UsagePage } from "@/app/Usage";
@@ -49,7 +49,7 @@ import type { Notice } from "@/api";
 import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { ErrorText } from "@/app/dialogs";
-import { L, lang, setLangChoice, storedLangChoice, type LangChoice, E } from "@/lib/i18n";
+import { L, lang, setLangChoice, storedLangChoice, subscribeLanguage, type LangChoice, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { setSystemDictation } from "@/app/Dictate";
 import { setSystemPicker } from "@/app/AvatarPicker";
@@ -246,7 +246,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [newServerOpen, setNewServerOpen] = useState(false);
   // The desktop app's tray menu speaks the pages' language: say it when
   // they load and when it changes (AppMode is drawn again then).
-  const uiLang = lang();
+  const uiLang = useSyncExternalStore(subscribeLanguage, lang);
   useEffect(() => { void appApi.putUILang(uiLang).catch(() => undefined); }, [uiLang]);
   // Settings › Voice, from a chat's voice button (VoiceBar).
   useEffect(() => {

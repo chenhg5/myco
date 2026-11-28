@@ -1,6 +1,6 @@
 import type { Template } from "@/api";
 import builtins from "./app-locales.json";
-import { lang } from "./i18n";
+import { lang, L } from "./i18n";
 /** The catalog is translated. A page's own name and records never are. */
 export function templateDisplay(t: Template): Template {
   const all =
@@ -20,5 +20,5 @@ export function templateDisplay(t: Template): Template {
         name: match.name || t.name,
         description: match.description ?? t.description,
       }
-    : t;
+    : all?.en ? { ...t, name: L(all.zh?.name || t.name, all.en.name || t.name), description: L(all.zh?.description || t.description || "", all.en.description ?? t.description ?? "") } : t;
 }

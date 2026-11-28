@@ -36,3 +36,29 @@ func TestUILangIsKeptAndHeard(t *testing.T) {
 		t.Fatalf("kept: %q", got)
 	}
 }
+
+func TestUILangAllSupportedLanguagesSurviveRestart(t *testing.T) {
+	for _, language := range []string{"zh", "zh-Hant", "en", "ja", "ko", "es", "pt-BR"} {
+		t.Run(language, func(t *testing.T) {
+			dir := t.TempDir()
+			heard := make(chan string, 1)
+			b := &Backend{Store: NewStore(dir + "/hubs.json"), OnUILang: func(l string) { heard <- l }}
+			request := httptestServer(t, b)
+			if code, body := request("PUT", "/app/ui-lang", `{"lang":"`+language+`"}`); code != 200 {
+				t.Fatalf("put: %d %s", code, body)
+			}
+			select {
+			case got := <-heard:
+				if got != language {
+					t.Fatalf("callback: %s", got)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("no callback")
+			}
+			restarted := &Backend{Store: NewStore(dir + "/hubs.json")}
+			if got := restarted.UILang(); got != language {
+				t.Fatalf("restart: %s", got)
+			}
+		})
+	}
+}

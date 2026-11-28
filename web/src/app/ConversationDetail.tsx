@@ -308,7 +308,7 @@ function SuperagentIntro({ agent }: { agent?: Agent }) {
       <ul className="sa-intro-list">
         {items.map(([z, e]) => <li key={z}>{L(z, e)}</li>)}
       </ul>
-      <p className="sa-intro-foot">{L(E`它总是以自己的名义说话，不会冒充你。${mac ? "在哪儿都可以按 ⌘⇧Space 叫它。" : ""}`, E`It always speaks as itself, never as you.${mac ? " Press ⌘⇧Space anywhere to call it." : ""}`)}</p>
+      <p className="sa-intro-foot">{L(E`它总是以自己的名义说话，不会冒充你。${mac ? "在哪儿都可以按 ⌘⇧Space 叫它。" : ""}`, (mac ? E`It always speaks as itself, never as you. Press ⌘⇧Space anywhere to call it.` : E`It always speaks as itself, never as you.`))}</p>
     </div>
   );
 }
@@ -2770,7 +2770,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             <span className="shell-stuck-text">
               {L(
                 E`这台电脑上有 ${shellStuck.length} 条命令可能卡住（来自 ${shellFrom.join("、")}）`,
-                E`${shellStuck.length} command${shellStuck.length === 1 ? "" : "s"} on this computer may be stuck (from ${shellFrom.join(", ")})`,
+                (shellStuck.length === 1 ? E`${shellStuck.length} command on this computer may be stuck (from ${shellFrom.join(", ")})` : E`${shellStuck.length} commands on this computer may be stuck (from ${shellFrom.join(", ")})`),
               )}
             </span>
             <button type="button" className="shell-stuck-toggle" aria-expanded={moreStuck} onClick={() => setMoreStuck((v) => !v)}>
@@ -2994,11 +2994,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             <span className="conv-busy-text">
               {elsewhereStale > 0
                 ? elsewhereStale === elsewhere.length
-                  ? L(E`它有 ${elsewhere.length} 条别处来的任务好一阵没有动静`, E`It has ${elsewhere.length} open task${elsewhere.length > 1 ? "s" : ""} from elsewhere with no activity for a while`)
+                  ? L(E`它有 ${elsewhere.length} 条别处来的任务好一阵没有动静`, (elsewhere.length > 1 ? E`It has ${elsewhere.length} open tasks from elsewhere with no activity for a while` : E`It has ${elsewhere.length} open task from elsewhere with no activity for a while`))
                   : L(E`它还有 ${elsewhere.length} 条别处来的任务没做完，其中 ${elsewhereStale} 条好一阵没有动静`, E`It has ${elsewhere.length} more open tasks from elsewhere, ${elsewhereStale} with no activity for a while`)
-                : L(E`它还有 ${elsewhere.length} 条别处来的任务没做完`, E`It has ${elsewhere.length} more open task${elsewhere.length > 1 ? "s" : ""} from elsewhere`)}
+                : L(E`它还有 ${elsewhere.length} 条别处来的任务没做完`, (elsewhere.length > 1 ? E`It has ${elsewhere.length} more open tasks from elsewhere` : E`It has ${elsewhere.length} more open task from elsewhere`))}
               {askingOthers.length > 0 && L(E`，其中 ${askingOthers.length} 条在等 ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join("、")} 回答它的问题`,
-                E`; ${askingOthers.length} wait${askingOthers.length > 1 ? "" : "s"} on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question`)}
+                (askingOthers.length > 1 ? E`; ${askingOthers.length} wait on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question` : E`; ${askingOthers.length} waits on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question`))}
               {L("。", ".")}
             </span>
             <button type="button" className="conv-steer-btn" onClick={() => setElsewhereOpen(true)} data-testid="open-elsewhere-handle">

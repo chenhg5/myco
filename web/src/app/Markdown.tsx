@@ -386,7 +386,7 @@ function PrettyJSON({ data }: { data: unknown }) {
       <summary>
         <ChevronDown />
         <span>{L("JSON 数据", "JSON data")}</span>
-        <span className="md-json-meta">{L(E`${lines} 行`, E`${lines} line${lines === 1 ? "" : "s"}`)}</span>
+        <span className="md-json-meta">{L(E`${lines} 行`, (lines === 1 ? E`${lines} line` : E`${lines} lines`))}</span>
       </summary>
       <pre>{text}</pre>
     </details>
