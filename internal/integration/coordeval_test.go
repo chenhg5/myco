@@ -40,11 +40,24 @@ func TestTheCoordinationTestDrivesARealCLIThroughTheRunner(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("needs python3 for the fake CLI")
 	}
-	home := isolatedHome(t)
+	// The caller's Go caches, read before the home moves: a module cache
+	// made under the test's temporary home would be read-only, and slow.
+	goEnv := map[string]string{}
+	for _, k := range []string{"GOMODCACHE", "GOCACHE", "GOPATH"} {
+		out, err := exec.Command("go", "env", k).Output()
+		if err != nil {
+			t.Fatalf("go env %s: %v", k, err)
+		}
+		goEnv[k] = strings.TrimSpace(string(out))
+	}
+	isolatedHome(t)
 	bin := t.TempDir()
 	myco := filepath.Join(bin, "myco")
-	build := exec.Command("go", "build", "-o", myco, "../../cmd/myco")
+	build := exec.Command("go", "build", "-modcacherw", "-o", myco, "../../cmd/myco")
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	for k, v := range goEnv {
+		build.Env = append(build.Env, k+"="+v)
+	}
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("building myco: %v\n%s", err, out)
 	}
@@ -52,7 +65,6 @@ func TestTheCoordinationTestDrivesARealCLIThroughTheRunner(t *testing.T) {
 	if err := os.WriteFile(claude, []byte(fakeCoordinator), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_ = home
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	var log bytes.Buffer
