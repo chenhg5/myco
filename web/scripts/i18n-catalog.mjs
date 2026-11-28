@@ -9,7 +9,7 @@ const src = path.join(root, "web/src");
 const english = new Map(), chinese = new Map();
 const unresolved = [];
 function add(map, text, file) {
-  if (!text || /^https?:\/\//.test(text)) return;
+  if (!text?.trim() || /^https?:\/\//.test(text)) return;
   const files = map.get(text) || new Set(); files.add(path.relative(root, file)); map.set(text, files);
 }
 function texts(node) {
