@@ -6704,6 +6704,7 @@ async function runMatrix(browser, size, scheme) {
         const body = page.locator(".ms .ms-fold-body");
         await body.locator(".app-quota", { hasText: "$17.50 / $50.00" }).waitFor();
         if ((await body.innerText()).includes("重置")) throw Error("余额不该显示重置倒计时");
+        await body.locator(".app-quota", { hasText: "$17.50 / $50.00" }).scrollIntoViewIfNeeded();
         await shot(page, size, scheme, "member-account-quota-balance");
         if (size.width === 1200) {
           for (const language of ["zh", "en"]) {
@@ -6720,6 +6721,7 @@ async function runMatrix(browser, size, scheme) {
               const rows = capture.locator(".ms .ms-fold-body");
               await rows.locator(".app-quota", { hasText: "$17.50 / $50.00" }).waitFor();
               await rows.getByText(language === "zh" ? "余额" : "Balance", { exact: true }).waitFor();
+              await rows.locator(".app-quota", { hasText: "$17.50 / $50.00" }).scrollIntoViewIfNeeded();
               if (/重置|resets in/i.test(await rows.innerText())) throw Error("balance must not invent a reset");
               await settle(capture, 200);
               await shot(capture, size, scheme, `member-account-quota-balance-${language}-2x`);
