@@ -18,10 +18,10 @@ Note: instructions guide the model; they are not a permission boundary, and some
 
 ## Bind a Feishu bot to an agent
 
-1. Open the agent's profile, click **Details** and switch to the **Channels** tab. Feishu, Lark and Slack each have a row.
-2. In the Feishu row, click **Bind**. A QR code appears.
+1. Open the agent's profile, click **Details** and switch to the **Channels** tab. Channels already connected are under **Connected**; the others under **Add a channel**.
+2. Under **Add a channel**, click **Feishu**. A QR code appears.
 3. Scan it with the Feishu phone app and approve on the phone. Feishu makes the bot, with you as its owner.
-4. The dialog closes by itself. A few seconds later the Feishu row shows "Online".
+4. The dialog closes by itself. A few seconds later Feishu is under **Connected**, showing "Online".
 
 ![Binding Feishu: scan the code](shot:member-chat-apps-feishu)
 
@@ -31,11 +31,11 @@ Then:
 
 ## Bind a Lark bot
 
-Lark is the international version of Feishu, with separate accounts and apps, so it has its own QR code. In the Lark row, click **Bind** and scan with the Lark phone app; the rest is as for Feishu. A Feishu code does not work in Lark, nor the other way round.
+Lark is the international version of Feishu, with separate accounts and apps, so it has its own QR code. Under **Add a channel**, click **Lark** and scan with the Lark phone app; the rest is as for Feishu. A Feishu code does not work in Lark, nor the other way round.
 
 ## Bind a Slack bot
 
-1. In the Slack row, click **Bind**.
+1. Under **Add a channel**, click **Slack**.
 2. Click "Create in Slack". Slack's create-app page opens with the settings filled in. Pick your workspace and create the app.
 3. Click "Install App" in Slack to install it to the workspace. Paste the **Bot User OAuth Token** (starts xoxb-) into the first box.
 4. Under "Basic Information", generate an **App-Level Token** with `connections:write`. Paste it (starts xapp-) into the second box and click **Connect**.

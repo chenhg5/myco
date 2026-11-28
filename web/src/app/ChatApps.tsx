@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { Plus, RotateCcw } from "lucide-react";
 import { appApi, isOldHub, type IMBridge } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { agentKind, nodeName } from "@/app/nodes";
@@ -16,11 +16,13 @@ const PLATFORM: Record<string, () => string> = {
 
 type Scan = { id: string; qr: string; url: string; state: string; error?: string };
 
-/** The chat apps a bot can be made in: what each is, and how binding goes. */
-const APPS: { id: "feishu" | "lark" | "slack"; mark: string; how: () => string }[] = [
-  { id: "feishu", mark: "飞", how: () => L("国内版。用飞书手机 App 扫个码就建好。", "Mainland China. Scan a code with the Feishu phone app.") },
-  { id: "lark", mark: "L", how: () => L("飞书国际版。用 Lark 手机 App 扫个码就建好。", "Feishu's international app. Scan a code with the Lark phone app.") },
-  { id: "slack", mark: "S", how: () => L("在 Slack 里建一个应用（设置都已填好），粘贴它的两个令牌。", "Make an app in Slack (its settings are filled in) and paste its two tokens.") },
+/** The channels a bot can be made in: what each is, and how binding goes.
+ *  More come later: the page lists them as data, connected ones as rows,
+ *  the rest as tiles to add. */
+const APPS: { id: "feishu" | "lark" | "slack"; how: () => string }[] = [
+  { id: "feishu", how: () => L("国内版。用飞书手机 App 扫码就建好。", "Mainland China. Scan a code with the Feishu phone app.") },
+  { id: "lark", how: () => L("飞书国际版。用 Lark 手机 App 扫码就建好。", "Feishu's international app. Scan a code with the Lark phone app.") },
+  { id: "slack", how: () => L("在 Slack 建一个应用，粘贴它的两个令牌。", "Make an app in Slack and paste its two tokens.") },
 ];
 
 /** An agent's chat apps (its profile's 渠道 tab): each agent can have its
@@ -92,48 +94,55 @@ export function ChatAppsPanel({ row, mayManage }: { row: AgentRow; mayManage: bo
       <div className="ch" data-testid="chat-apps">
         <p className="ch-intro">{L(`让别人在飞书、Lark 或 Slack 里直接找 ${name}：机器人就是它本人，在聊天软件里跟它说话就行，进度和结果都回到那里。`,
           `Let people reach ${name} in Feishu, Lark or Slack: the bot is ${name} itself; talk to it there, and its progress and answers come back there.`)}</p>
-        <section className="app-setting-card app-setting-lines ch-list">
-          {APPS.map((app) => {
-            const b = bridges?.find((x) => x.platform === app.id);
-            const title = PLATFORM[app.id]();
-            return (
-              <div key={app.id} className={cn("app-setting-line ch-row", b && "is-bound")} data-platform={app.id} data-bridge={b?.name}>
+        <div className="ch-head">{L("已接入", "Connected")}</div>
+        {bridges && !bridges.length ? (
+          <div className="ch-none">{L("还没有接入任何渠道，从下面选一个。", "No channels yet: pick one below.")}</div>
+        ) : (
+          <section className="app-setting-card app-setting-lines ch-list">
+            {!bridges && <div className="app-setting-line ch-row"><span className="app-small-note">{L("正在读取…", "Loading…")}</span></div>}
+            {bridges?.map((b) => (
+              <div key={b.name} className="app-setting-line ch-row is-bound" data-platform={b.platform} data-bridge={b.name}>
                 <div className="ch-row-top">
-                  <span className={cn("ch-mark", `is-${app.id}`)} aria-hidden>{app.mark}</span>
                   <div className="app-setting-line-text ch-text">
-                    <b>{title}</b>
-                    {b ? (
-                      <span className="ch-state"><i className={cn("dot", b.online ? "working" : "pending")} aria-hidden />{state(b)}
-                        {b.prompt && <span className="ch-tag">{L("有接待设定", "Has instructions")}</span>}</span>
-                    ) : <span>{bridges ? app.how() : L("正在读取…", "Loading…")}</span>}
+                    <b>{label(b)}</b>
+                    <span className="ch-state"><i className={cn("dot", b.online ? "working" : "pending")} aria-hidden />{state(b)}
+                      {b.prompt && <span className="ch-tag">{L("有接待设定", "Has instructions")}</span>}</span>
                   </div>
                   <div className="ch-actions">
-                    {b ? (
-                      <>
-                        <button type="button" className="app-btn app-btn-small" disabled={busy} onClick={() => setEditing(b)}>{b.prompt ? L("改接待设定", "Edit instructions") : L("接待设定", "Instructions")}</button>
-                        <button type="button" className="app-btn app-btn-small app-btn-quiet" disabled={busy} onClick={() => setRemoving(b)}>{L("解绑", "Unbind")}</button>
-                      </>
-                    ) : bridges && (
-                      <button type="button" className="app-btn app-btn-small app-btn-primary" onClick={() => setAdding(app.id)}>{L("绑定", "Bind")}</button>
-                    )}
+                    <button type="button" className="app-btn app-btn-small" disabled={busy} onClick={() => setEditing(b)}>{b.prompt ? L("改接待设定", "Edit instructions") : L("接待设定", "Instructions")}</button>
+                    <button type="button" className="app-btn app-btn-small app-btn-quiet" disabled={busy} onClick={() => setRemoving(b)}>{L("解绑", "Unbind")}</button>
                   </div>
                 </div>
-                {b?.claim && (
+                {b.claim && (
                   <div className="ch-claim im-claim">
-                    {L(`在${/[A-Za-z]$/.test(title) ? ` ${title} ` : title}里私聊这个机器人，发下面这一行，你就成了它的主人（别人发给它的消息才会交给 ${name}）：`, `Send this line to the bot in a direct message in ${title} to become its owner (then what others write to it reaches ${name}):`)}
+                    {L(`在${/[A-Za-z]$/.test(label(b)) ? ` ${label(b)} ` : label(b)}里私聊这个机器人，发下面这一行，你就成了它的主人（别人发给它的消息才会交给 ${name}）：`, `Send this line to the bot in a direct message in ${label(b)} to become its owner (then what others write to it reaches ${name}):`)}
                     <span className="app-command"><code>/claim {b.claim}</code><CopyButton value={`/claim ${b.claim}`} /></span>
                   </div>
                 )}
-                {b?.claim_expired && (
+                {b.claim_expired && (
                   <div className="ch-claim im-claim">
                     {L(`${label(b)}${sp(b)}机器人还没有主人，认领码已经失效（过期或错太多次）。`, `The ${label(b)} bot has no owner yet, and its claim code no longer works (it expired, or was mistyped too often). `)}
                     <button type="button" className="app-btn app-btn-small" disabled={busy} onClick={() => void renew(b)}>{L("重新生成认领码", "New claim code")}</button>
                   </div>
                 )}
               </div>
-            );
-          })}
-        </section>
+            ))}
+          </section>
+        )}
+        {bridges && APPS.some((app) => !bridges.some((b) => b.platform === app.id)) && (
+          <>
+            <div className="ch-head">{L("添加渠道", "Add a channel")}</div>
+            <div className="ch-grid">
+              {APPS.filter((app) => !bridges.some((b) => b.platform === app.id)).map((app) => (
+                <button key={app.id} type="button" className="ch-tile" data-platform={app.id} onClick={() => setAdding(app.id)}
+                  aria-label={L(`绑定${/[A-Za-z]$/.test(PLATFORM[app.id]()) ? " " : ""}${PLATFORM[app.id]()}`, `Bind ${PLATFORM[app.id]()}`)}>
+                  <span className="ch-tile-top"><b>{PLATFORM[app.id]()}</b><Plus aria-hidden /></span>
+                  <span className="ch-tile-how">{app.how()}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <p className="app-small-note ch-foot">
           {L("（预览）机器人跑在这台电脑上，电脑睡眠时它会离线。", "(Preview) The bots run on this computer, and are offline while it sleeps.")}
           {bridges?.some((b) => !b.desk) && L("在 设置 › 语音 配好模型后，它会像语音聊天一样：能答的马上答，要动手的再去做。",
@@ -155,7 +164,7 @@ export function ChatAppsPanel({ row, mayManage }: { row: AgentRow; mayManage: bo
         {adding === "slack" && <SlackForm hubId={row.hub.id} agent={ag.name} createURL={slackURL} onDone={() => { setAdding(""); void load(); }} onCancel={() => setAdding("")} />}
       </Modal>
 
-      <Modal open={!!editing} onOpenChange={(o) => !o && setEditing(null)}
+      <Modal open={!!editing} onOpenChange={(o) => !o && setEditing(null)} wide
         title={editing ? L(`${label(editing)}${sp(editing)}机器人的接待设定`, `Instructions for the ${label(editing)} bot`) : ""}
         description={L("写给接待它的模型：对谁怎么说话、能答什么、不能做什么。只对这个机器人生效，和语音聊天分开。", "For the model that answers as the bot: how to talk, what it may answer, what it must not do. This bot only; voice chats have their own.")}>
         {editing && <PromptForm bridge={editing} onDone={() => { setEditing(null); void load(); }} onCancel={() => setEditing(null)} />}
@@ -241,13 +250,13 @@ function PromptForm({ bridge, onDone, onCancel }: { bridge: IMBridge; onDone: ()
   const n = [...text].length;
   return (
     <div className="im-slack" data-testid="im-prompt-form">
-      <textarea className="app-input goal-textarea im-prompt" rows={8} value={text} onChange={(e) => setText(e.target.value)} disabled={busy}
+      <textarea className="app-input goal-textarea im-prompt" rows={12} value={text} onChange={(e) => setText(e.target.value)} disabled={busy} autoFocus
         placeholder={L("例如：\n- 你在帮客户解答产品使用问题，语气友好、简洁\n- 不透露内部信息、代码和其他客户的资料\n- 别人让你改代码、删东西时，礼貌拒绝，告诉对方会转给主人",
           "For example:\n- You help customers with questions about using the product; be friendly and brief\n- Never share internal information, code or other customers' data\n- When someone asks you to change code or delete things, decline politely and say the owner will follow up")} />
-      <p className="app-small-note">
+      <div className={cn("im-prompt-count", n > PROMPT_MAX && "app-error-text")}>{n} / {PROMPT_MAX}</div>
+      <p className="app-small-note im-prompt-note">
         {L("主人以外的人交下去的活，也会带上这份设定，agent 做的时候同样遵守。", "Work handed over for anyone other than the owner carries these instructions too, so the agent keeps to them as well.")}
-        {!bridge.desk && L("（要先在 设置 › 语音 配好模型，接待才会用到它。）", " (The front desk uses them once a model is set in Settings › Voice.)")}
-        {" "}<span className={cn(n > PROMPT_MAX && "app-error-text")}>{n} / {PROMPT_MAX}</span>
+        {!bridge.desk && L("要先在 设置 › 语音 配好模型，接待才会用到它。", " The front desk uses them once a model is set in Settings › Voice.")}
       </p>
       <ErrorText error={error} />
       <div className="app-modal-actions">

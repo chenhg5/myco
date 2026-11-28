@@ -6036,7 +6036,8 @@ async function runMatrix(browser, size, scheme) {
       await feishu.locator(".dot.working").waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "member-channels");
-      await panel.locator('.ch-row[data-platform="slack"]').getByRole("button", { name: "绑定" }).click();
+      if (await panel.locator(".ch-mark").count()) throw new Error("渠道前面不该有自己画的标记");
+      await panel.locator('.ch-tile[data-platform="slack"]').click();
       const form = page.locator('.app-modal [data-testid="slack-form"]');
       await form.locator('input[placeholder="xoxb-…"]').fill("xoxb-1-2-3");
       await form.locator('input[placeholder="xapp-…"]').fill("xapp-1-2-3");
@@ -6049,6 +6050,8 @@ async function runMatrix(browser, size, scheme) {
       // The Feishu bot's own front-desk instructions (not shared with voice).
       await feishu.getByRole("button", { name: "接待设定" }).click();
       const pf = page.locator('.app-modal [data-testid="im-prompt-form"]');
+      const box = await pf.locator("textarea").boundingBox();
+      if (!box || box.height < 220) throw new Error(`接待设定的输入框太小：${box?.height}px`);
       await pf.locator("textarea").fill("- 你在帮客户解答产品使用问题，语气友好、简洁\n- 不透露内部信息、代码和其他客户的资料\n- 别人让你改代码、删东西时，礼貌拒绝");
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps-prompt");
@@ -6060,13 +6063,13 @@ async function runMatrix(browser, size, scheme) {
       const confirm = page.locator(".app-modal.app-confirm");
       await confirm.getByRole("button", { name: "解绑" }).click();
       await feishu.waitFor({ state: "detached", timeout: 5_000 });
-      await panel.locator('.ch-row[data-platform="feishu"]').getByRole("button", { name: "绑定" }).click();
+      await panel.locator('.ch-tile[data-platform="feishu"]').click();
       await page.locator('.app-modal [data-testid="feishu-scan"] img.im-qr').waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps-feishu");
       await page.locator('.app-modal [data-testid="feishu-scan"]').getByRole("button", { name: "取消" }).click();
       // Lark (the international app) has its own row and its own code.
-      await panel.locator('.ch-row[data-platform="lark"]').getByRole("button", { name: "绑定" }).click();
+      await panel.locator('.ch-tile[data-platform="lark"]').click();
       await page.locator('.app-modal [data-testid="feishu-scan"] img.im-qr[alt="Lark 扫码"]').waitFor({ timeout: 5_000 });
       await page.locator('.app-modal [data-testid="feishu-scan"]').getByRole("button", { name: "取消" }).click();
       await page.keyboard.press("Escape");
