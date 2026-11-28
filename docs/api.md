@@ -508,6 +508,43 @@ A run:
 
 `waiting`: only decisions are open. A step's `status` is `running`, `waiting` (a decision), `done`, `failed` or `cancelled`; `options` and `due_at` come with decisions.
 
+### Compact workflow run reads
+
+The default `GET /v1/workflow-runs/{id}` response and authorization are unchanged.
+Two explicit read-only views omit the workflow definition, events, artifacts,
+evaluations, metrics, and each step's rendered `input` and `payload`:
+
+| Request | Response |
+|---|---|
+| `GET /v1/workflow-runs/{id}?view=compact` | Run identity (`id`, `workflow_id`, `name`, `version`, `owner`, `project`, `status`, `by`, `trigger`, `error`, timestamps) and original run `inputs`; `view:"compact"`; ordered `steps` with `id`, logical `step`, `attempt`, `status`, `error`, `started_at`, nullable `ended_at`, and `output_sha256`. No step output. |
+| `GET /v1/workflow-runs/{id}?view=step&step={instance}` | Same run identity and inputs; `view:"step"`; exactly one step with the same metadata plus its `output` when present. No logs, rendered task or payload. |
+
+`step` first matches an immutable instance ID belonging to this run. An optional
+logical name selects its highest attempt (latest start/order breaks ties).
+Missing or foreign instance IDs return `404 not_found` naming the run/selector;
+a missing selector or unknown/empty explicit `view` returns `400 invalid_argument`.
+The existing run-read permission check runs before loading its steps; selecting
+an instance never bypasses it or reads another run. Instances retain the normal
+order by start time then insertion order.
+
+`output_sha256` is lowercase SHA-256 hex of compact `encoding/json.Marshal` of
+the stored output object: object keys are recursively sorted by the Go JSON
+encoder, using its normal number/string encoding and HTML escaping, without
+trailing newline. No output means an empty hash and no `output` field; an explicit
+empty object hashes `{}` and appears as `{}` in the step view. The hash binds the
+two projections; it is not a signature or an authorization grant. API contracts
+are `api.WorkflowRunView` / `api.WorkflowStepView`.
+
+CLI: `myco workflow run show --id RUN --compact`, or add `--step INSTANCE`.
+`--step` requires `--compact`. Old Hubs can silently ignore query parameters, so
+the new client requires the matching `view` marker and never falls back to
+printing a full run. A missing/wrong marker returns `unsupported_by_hub`,
+`retryable:false`, an upgrade suggestion and CLI exit **12**. A malformed supported
+projection returns `invalid_response`. Existing clients continue reading the
+unchanged full response. These views perform no mutation and need no `dry_run`.
+Their byte size still depends on original run inputs, errors and selected output;
+they do not truncate those fields.
+
 ## Superagents
 
 A person's own agent with the App's powers in its workspace (v0.21.1+). Only the person names it; it uses its **own agent token** on the App's routes, and the hub acts as that person, marked as through it (the audit log names it: `alice（经 superagent shroom）`, the hub's Chinese for "alice (via superagent shroom)"). Each route the App uses is listed in `internal/transport/httpapi/superagent.go`:

@@ -289,6 +289,10 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request, c app.Caller) 
 }
 
 func (s *Server) getRun(w http.ResponseWriter, r *http.Request, c app.Caller) {
+	if r.URL.Query().Has("view") {
+		s.getRunView(w, r, c)
+		return
+	}
 	d, err := s.workflows.GetRun(r.Context(), c, r.PathValue("id"))
 	if err != nil {
 		writeError(w, err)

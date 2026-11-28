@@ -24,11 +24,14 @@ const (
 	ExitDryRun      = 10
 	// ExitReplaced: another session took this session's node over.
 	ExitReplaced = 11
+	// ExitUnsupportedHub: an old Hub ignored a required view/capability.
+	ExitUnsupportedHub = 12
 )
 
 const exitCodeHelp = `Exit codes: 0 ok, 1 error, 2 invalid usage, 3 not found, 4 permission/auth,
 5 conflict or invalid state, 6 hub unavailable (retryable), 7 wait timed out, 10 dry-run ok,
-11 replaced (another session took this node over: stop handling its messages).
+11 replaced (another session took this node over: stop handling its messages),
+12 unsupported by Hub (upgrade required; not retryable).
 Output: JSON on stdout when not a TTY (or --format json); logs and errors on stderr.`
 
 // Error is the CLI's structured error (printed as JSON to stderr).
@@ -73,6 +76,7 @@ var exitByCode = map[string]int{
 	"conflict":             ExitConflict,
 	"invalid_state":        ExitConflict,
 	"unsupported":          ExitUnavailable,
+	"unsupported_by_hub":   ExitUnsupportedHub,
 	client.CodeUnavailable: ExitUnavailable,
 	client.CodeTimeout:     ExitTimeout,
 	"not_configured":       ExitUsage,

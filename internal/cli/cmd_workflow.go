@@ -329,12 +329,27 @@ upper trim. Names that are not there are refused by validate.`,
 	show := &Command{
 		Name:     "show",
 		Summary:  "Show a run: each step, who did it, its summary; and the log",
-		Examples: []string{"myco workflow run show --id run_abc123"},
-		Flags:    []Flag{runFlag, adminFlag},
+		Examples: []string{"myco workflow run show --id run_abc123", "myco workflow run show --id run_abc123 --compact", "myco workflow run show --id run_abc123 --compact --step step_abc123"},
+		Flags:    []Flag{runFlag, adminFlag, {Name: "compact", Kind: Bool, Help: "Return only run identity and ordered step statuses/hashes (requires Hub support)"}, {Name: "step", Kind: String, Help: "With --compact, return one instance output (or latest instance of a logical step)"}},
 		Run: handler(func(e *env) error {
+			if e.in.String("step") != "" && !e.in.Bool("compact") {
+				return errorf("invalid_argument", ExitUsage, "pass --compact --step <instance-id>", "--step requires --compact")
+			}
 			c, err := e.projectClient()
 			if err != nil {
 				return err
+			}
+			if e.in.Bool("compact") {
+				var view *api.WorkflowRunView
+				if step := e.in.String("step"); step != "" {
+					view, err = c.WorkflowRunStep(e.in.Ctx, e.in.String("id"), step)
+				} else {
+					view, err = c.WorkflowRunCompact(e.in.Ctx, e.in.String("id"))
+				}
+				if err != nil {
+					return err
+				}
+				return e.p.Print(view, func(w io.Writer) { data, _ := json.MarshalIndent(view, "", "  "); fmt.Fprintln(w, string(data)) })
 			}
 			r, err := c.WorkflowRun(e.in.Ctx, e.in.String("id"))
 			if err != nil {
