@@ -5985,13 +5985,13 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".ms .ms-fold"));
       await page.locator(".ms .ms-fold-body .app-kv").first().waitFor({ timeout: 5_000 });
       if (await page.locator(".app-inspector").count()) throw new Error("详细信息不该再弹出另一个面板");
-      // The details are four tabs, one subject at a time (settings first).
+      // The details are five tabs, one subject at a time (settings first).
       const tabs = page.locator(".ms [data-testid=ms-tabs] [role=tab]");
-      if ((await tabs.allInnerTexts()).join("|") !== "设置|能力|记录|身份") throw new Error(`详细信息应分成 设置/能力/记录/身份 四页，实际「${(await tabs.allInnerTexts()).join("|")}」`);
+      if ((await tabs.allInnerTexts()).join("|") !== "设置|能力|记录|渠道|身份") throw new Error(`详细信息应分成 设置/能力/记录/渠道/身份 五页，实际「${(await tabs.allInnerTexts()).join("|")}」`);
       await page.locator(".ms [data-testid=ms-tabs]").scrollIntoViewIfNeeded();
       await settle(page, 300);
       await shot(page, size, scheme, "member-card-details");
-      for (const t of ["skills", "records", "identity"]) {
+      for (const t of ["skills", "records", "channels", "identity"]) {
         await clickVisible(page, page.locator(`.ms [data-testid=ms-tabs] [data-tab=${t}]`));
         await settle(page, 200);
         await shot(page, size, scheme, `member-card-details-${t}`);
