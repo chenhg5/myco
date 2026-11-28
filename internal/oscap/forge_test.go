@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -216,5 +217,44 @@ func TestForgeRepositoryPathsAreFixed(t *testing.T) {
 	}
 	if !forgeValidRepo("gitlab", "acme/group/widget") || !forgeValidRepo("github", "acme/a..b") {
 		t.Fatal("legitimate repository rejected")
+	}
+}
+
+func TestForgePreservesAppProxyAndCanonicalHTTPS(t *testing.T) {
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	old := http.DefaultTransport
+	defer func() { http.DefaultTransport = old }()
+	used := false
+	base.Proxy = func(*http.Request) (*url.URL, error) { used = true; return url.Parse("http://proxy.example.com:8080") }
+	http.DefaultTransport = base
+	transport := forgeNetworkTransport().(*http.Transport)
+	defer transport.CloseIdleConnections()
+	req, _ := http.NewRequest("GET", "https://api.github.com/user", nil)
+	proxy, err := transport.Proxy(req)
+	if err != nil || !used || proxy.Host != "proxy.example.com:8080" {
+		t.Fatal("App proxy ignored")
+	}
+	host, err := forgeHost("github", "https://GitHub.com:443/")
+	if err != nil || host != "https://github.com" || forgeBase(forgeAccount{Provider: "github", Host: host}) != "https://api.github.com" {
+		t.Fatal("default HTTPS port misclassified as enterprise", host, err)
+	}
+}
+func TestForgeGiteaRepositoryFilter(t *testing.T) {
+	old := forgeTransport
+	t.Cleanup(func() { forgeTransport = old })
+	p := forgeAccount{Provider: "gitea", Host: "https://git.example.com", Login: "demo"}
+	forgeTransport = forgeTestTransport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/api/v1/repos/acme/widget/issues" || r.URL.Query().Get("created_by") != "demo" || r.Header.Get("Authorization") != "token fixture-secret" {
+			t.Fatalf("invalid Gitea request path or scope %s", r.URL.Path)
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`[{"number":12,"title":"Gitea issue","state":"open","user":{"login":"demo"},"html_url":"https://git.example.com/acme/widget/issues/12"}]`))}, nil
+	})
+	result, err := forgeItems(context.Background(), p, "fixture-secret", forgeRequest{Kind: "issue", Repo: "acme/widget", Scope: "created", State: "open", Page: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := result.(map[string]any)["items"].([]forgeItem)
+	if len(rows) != 1 || rows[0].Repo != "acme/widget" || rows[0].Title != "Gitea issue" {
+		t.Fatal("Gitea response not normalized", rows)
 	}
 }

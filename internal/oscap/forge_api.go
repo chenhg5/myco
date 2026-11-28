@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/myco-ai/myco/internal/sysproxy"
 	"io"
 	"net/http"
 	"net/url"
@@ -19,14 +18,9 @@ import (
 var forgeTransport http.RoundTripper // nil in production; replaced only by tests
 
 func forgeNetworkTransport() http.RoundTripper {
-	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.Proxy = func(r *http.Request) (*url.URL, error) {
-		if proxy, err := http.ProxyFromEnvironment(r); proxy != nil || err != nil {
-			return proxy, err
-		}
-		return sysproxy.For(r.URL.Hostname()), nil
-	}
-	return t
+	// The App installs its dynamic proxy selector on the default transport.
+	// Preserve it, including explicit direct mode and manual authenticated proxies.
+	return http.DefaultTransport.(*http.Transport).Clone()
 }
 func forgeBase(p forgeAccount) string {
 	if p.Provider == "github" {

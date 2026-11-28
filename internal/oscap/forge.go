@@ -114,7 +114,11 @@ func forgeHost(provider, host string) (string, error) {
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || strings.ContainsAny(u.Host, "\\\r\n\x00") || strings.HasSuffix(u.Hostname(), ".") {
 		return "", errf(CodeInvalid, "enter an HTTPS server origin without a path or credentials")
 	}
-	return "https://" + strings.ToLower(u.Host), nil
+	hostPort := strings.ToLower(u.Host)
+	if u.Port() == "443" {
+		hostPort = strings.TrimSuffix(hostPort, ":443")
+	}
+	return "https://" + hostPort, nil
 }
 func forgeCLI(ctx context.Context, e *Env, provider, host string) (string, error) {
 	u, _ := url.Parse(host)
