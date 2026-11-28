@@ -6705,6 +6705,27 @@ async function runMatrix(browser, size, scheme) {
         await body.locator(".app-quota", { hasText: "$17.50 / $50.00" }).waitFor();
         if ((await body.innerText()).includes("重置")) throw Error("余额不该显示重置倒计时");
         await shot(page, size, scheme, "member-account-quota-balance");
+        if (size.width === 1200) {
+          for (const language of ["zh", "en"]) {
+            const preview = await browser.newContext({ viewport: size, colorScheme: scheme, deviceScaleFactor: 2, storageState: await context.storageState() });
+            try {
+              await preview.addInitScript(({ language, scheme }) => { localStorage.setItem("myco-lang", language); localStorage.setItem("myco-theme", scheme); }, { language, scheme });
+              const capture = await preview.newPage();
+              await capture.route(routeURL, handler);
+              const url = new URL(page.url()); url.searchParams.set("lang", language);
+              await capture.goto(url.href); await capture.locator(".app-shell").waitFor();
+              await go(capture, language === "zh" ? "成员" : "Members", false);
+              await clickVisible(capture, capture.locator(".mb-card", { hasText: "Myco (Grok)" }));
+              await capture.locator(".ms").waitFor(); await clickVisible(capture, capture.locator(".ms .ms-fold"));
+              const rows = capture.locator(".ms .ms-fold-body");
+              await rows.locator(".app-quota", { hasText: "$17.50 / $50.00" }).waitFor();
+              await rows.getByText(language === "zh" ? "余额" : "Balance", { exact: true }).waitFor();
+              if (/重置|resets in/i.test(await rows.innerText())) throw Error("balance must not invent a reset");
+              await settle(capture, 200);
+              await shot(capture, size, scheme, `member-account-quota-balance-${language}-2x`);
+            } finally { await preview.close(); }
+          }
+        }
         await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
         await openMember(page, narrow, "聊天", "Myco (Grok)");
         const pill = page.locator(".conv-detail [data-testid=quota-pill]");
