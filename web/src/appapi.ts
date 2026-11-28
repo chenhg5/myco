@@ -1,5 +1,5 @@
 import type { UsageResponse } from "@/lib/usage";
-import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList, Goal, GoalList, GoalStartRequest, GoalPatchRequest, ModelProvider, ModelProviderTestResponse } from "@/api";
+import type { PageAttachment, PageAttachmentList, Page, PageChanges, PageOpen, PageRecord, PageRecordQuery, PageRecordList, PageRecordCount, PageState, Pin, Template, PinCreate, PinList, Automation, AutomationDetail, Backup, Backups, Handover, HandoverLink, HandoverRequest, HandoverResult, AutomationRequest, AutomationResponse, AutomationRun, Workflow, WorkflowApplyResponse, WorkflowCheck, WorkflowDecision, WorkflowDef, WorkflowRun, WorkflowStats, StepLog, RuntimeModel, MCPServer, ToolSkill, ToolPlugin, SuperagentState, Approval, ActionGrant, RunEvaluation, RunComparison, RunStatus, Agent, AuditEntry, Project, ProjectDoc, ProjectLink, Skill, Device, Machine, Member, MemberRole, Message, NoticeFeed, NoticePrefs, Overview, Peer, RuntimeAccess, Whoami, Trace, Watch, WatchList, Goal, GoalList, GoalStartRequest, GoalPatchRequest, ModelProvider, ModelProviderTestResponse, MachineConcurrency } from "@/api";
 import { L } from "@/lib/i18n";
 import { latencySend } from "@/lib/latency";
 
@@ -230,6 +230,19 @@ export interface SpawnInput {
 }
 /** What a computer allows and has, as its machine node says
  *  (GET /app/hubs/{id}/machines/{mid}/info; "too_old" from an older myco). */
+/** GET /app/local/concurrency. */
+export interface LocalConcurrency {
+  /** runner.max_concurrent in machine.yaml (0: not set) */
+  setting: number;
+  /** what the runner running here does; null when none says it follows the
+   *  setting (none running, or one older than it: restart it) */
+  runner: MachineConcurrency | null;
+  default: number;
+  ceiling: number;
+  /** this computer joined a workspace (the setting can be written) */
+  joined: boolean;
+}
+
 export interface MachineInfo {
   /** folders sessions may start in, as written there ("~/code/x"); ["~"]: anywhere in its home */
   dirs: string[];
@@ -237,6 +250,8 @@ export interface MachineInfo {
   new_dir: string;
   /** the highest access a session there may get */
   max_access: RuntimeAccess;
+  /** how many agent CLIs it runs at once (machines newer than v0.23.9) */
+  concurrency?: MachineConcurrency;
   ais: MachineAI[];
   sessions: MachineSession[];
   /** its home directory (what "~" stands for there) */
@@ -1116,6 +1131,17 @@ export const appApi = {
     request<AgentProvider>("PUT", `app/local/agents/${enc(name)}/provider?hub_id=${enc(hubId)}`, body),
   /** Starts this computer's runner service, or restarts it when running. */
   restartRunner: () => request<{ runner: string }>("POST", "app/local/runner"),
+  /** How many agent CLIs this computer's runner runs at once: the setting
+   *  in its machine.yaml and what its runner does now (null: none says). */
+  localConcurrency: () => request<LocalConcurrency>("GET", "app/local/concurrency"),
+  /** Sets it; the runner applies it within seconds, without a restart. */
+  setLocalConcurrency: (n: number) => request<LocalConcurrency>("POST", "app/local/concurrency", { max_concurrent: n }),
+  /** Another computer's, asked of its machine node (too_old: upgrade myco there). */
+  machineConcurrency: (hubId: string, machineId: string) =>
+    request<MachineConcurrency>("GET", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/concurrency`),
+  /** Sets it there: its owner only (the hub checks). */
+  setMachineConcurrency: (hubId: string, machineId: string, n: number) =>
+    request<MachineConcurrency>("POST", `app/hubs/${enc(hubId)}/machines/${enc(machineId)}/concurrency`, { max_concurrent: n }),
   /** Allow (or stop allowing) shell nodes and full-access sessions on this computer. */
   /** max_access: the limit this computer's agents now run under (newer
    *  consoles; runners that list "live_max_access" pick it up within

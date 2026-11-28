@@ -238,7 +238,7 @@ node right away. --allow-shell also lets agents open a terminal (shell node) her
 			return e.joinMachine(hub, tok, nil)
 		}),
 	}
-	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join, machineShellCommand(), machineDirsCommand(), machineRemoveCommand())
+	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join, machineShellCommand(), machineDirsCommand(), machineConcurrencyCommand(), machineRemoveCommand())
 }
 
 // joinMachine trades join link token tok of hub for this machine's
@@ -318,7 +318,7 @@ func (e *env) joinMachine(hub, tok string, extra func(out map[string]any) []stri
 	case e.in.Bool("no-service"):
 		notes = append(notes, "service not installed (--no-service): run `myco runner start --all` to serve this machine's agents")
 	default:
-		if sr, err := e.installService(3, "info", false); err != nil {
+		if sr, err := e.installService(0, "info", false); err != nil {
 			notes = append(notes, "could not install the background service ("+toError(err, "").Message+"); keep `myco runner start --all` running instead, e.g. in tmux")
 		} else {
 			out["service"] = sr.Plan.Manager

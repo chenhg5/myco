@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -84,13 +85,27 @@ claude/codex (e.g. under nvm); re-run install after changing it. Re-running is s
 			"myco runner service install --max-concurrent 2",
 		},
 		Flags: []Flag{
-			{Name: "max-concurrent", Kind: Int, Default: "3", Help: "Max agent CLIs running at once"},
+			{Name: "max-concurrent", Kind: Int, Help: "Max agent CLIs running at once (default: runner.max_concurrent in ~/.myco/machine.yaml, else 10); also kept there as the setting"},
 			{Name: "log-level", Kind: Enum, Values: []string{"debug", "info", "warn", "error"}, Default: "info", Help: "Runner log verbosity"},
 		},
 		Run: handler(func(e *env) error {
-			res, err := e.installService(e.in.Int("max-concurrent"), e.in.String("log-level"), e.in.Bool("dry-run"))
+			n := 0
+			if e.in.IsSet("max-concurrent") {
+				if n = e.in.Int("max-concurrent"); n < 1 || n > config.MaxConcurrentCeiling {
+					return errorf("invalid_argument", ExitUsage, fmt.Sprintf("pass a number from 1 to %d", config.MaxConcurrentCeiling), "--max-concurrent %d is out of range", n)
+				}
+			}
+			res, err := e.installService(n, e.in.String("log-level"), e.in.Bool("dry-run"))
 			if err != nil {
 				return err
+			}
+			if n > 0 && !e.in.Bool("dry-run") {
+				// The number chosen now is the setting too: a later install
+				// without the flag (myco join does one) keeps it, and the App
+				// shows and changes the same number.
+				if err := config.SetRunnerConcurrency(e.defaultPath, n, time.Now()); err != nil && !errors.Is(err, config.ErrNotJoined) {
+					return err
+				}
 			}
 			if e.in.Bool("dry-run") {
 				return e.dryRun(map[string]any{"action": "install_service", "plan": res.Plan})
@@ -219,10 +234,14 @@ func (e *env) installService(maxConcurrent int, logLevel string, dry bool) (*ser
 		bin = real
 	}
 	spec := service.Spec{
-		Binary: bin,
-		Args: []string{"runner", "start", "--all", "--max-concurrent", strconv.Itoa(maxConcurrent),
-			"--log-level", logLevel},
+		Binary:  bin,
+		Args:    []string{"runner", "start", "--all", "--log-level", logLevel},
 		LogPath: filepath.Join(config.Dir(e.defaultPath), "runner.log"),
+	}
+	if maxConcurrent > 0 {
+		// Only a number chosen here: without it the runner follows
+		// machine.yaml's setting, else the default.
+		spec.Args = append(spec.Args, "--max-concurrent", strconv.Itoa(maxConcurrent))
 	}
 	var envNotes []string
 	spec.Env, envNotes = serviceEnv(e.in.Getenv)

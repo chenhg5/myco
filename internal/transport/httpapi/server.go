@@ -1846,6 +1846,19 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 		// Upgrading its myco: the release, nothing else.
 		in = api.SpawnRequest{CLI: api.UpgradeCLI, Version: strings.TrimSpace(in.Version)}
 	}
+	if strings.TrimSpace(in.CLI) == api.ConcurrencyCLI {
+		// How many agent CLIs run at once there: the number, nothing else.
+		// Seeing it is for whoever may use the machine; changing it is its
+		// owner's call only.
+		in = api.SpawnRequest{CLI: api.ConcurrencyCLI, MaxConcurrent: in.MaxConcurrent}
+		if in.MaxConcurrent < 0 || in.MaxConcurrent > 64 {
+			writeError(w, domain.Errf(domain.CodeInvalidArgument, "the limit must be between 1 and 64"))
+			return
+		}
+		if in.MaxConcurrent != 0 && !s.isMachineOwner(w, r, r.PathValue("id"), "change how many agent CLIs run at once on it") {
+			return
+		}
+	}
 	if strings.TrimSpace(in.CLI) == api.StopProcessCLI {
 		if in.ProcessRef == "" || len(in.ProcessRef) > 128 {
 			writeError(w, domain.Errf(domain.CodeInvalidArgument, "a current process reference is required"))
@@ -1941,6 +1954,11 @@ func (s *Server) spawnOnMachine(w http.ResponseWriter, r *http.Request) {
 	case in.CLI == api.InfoCLI:
 		// Only looking: nothing to record.
 		writeJSON(w, http.StatusOK, res)
+	case in.CLI == api.ConcurrencyCLI:
+		if in.MaxConcurrent != 0 && res.Concurrency != nil {
+			s.record(r, "machine.concurrency", r.PathValue("id"), strconv.Itoa(res.Concurrency.Limit)+" at once")
+		}
+		writeJSON(w, http.StatusOK, res)
 	case in.CLI == api.UpgradeCLI:
 		if res.Upgrade != nil {
 			s.record(r, "machine.upgrade", r.PathValue("id"), res.Upgrade.From+" -> "+orNone(res.Upgrade.To))
@@ -2015,7 +2033,7 @@ func (s *Server) reportRuntime(w http.ResponseWriter, r *http.Request, a *domain
 	slots := ""
 	if in.RunnerSlots != nil {
 		v := in.RunnerSlots
-		if v.MaxConcurrent < 1 || v.InUse < 0 || v.InUse > v.MaxConcurrent || v.Waiting < 0 || len(v.Queue) > 256 || v.At.IsZero() {
+		if v.MaxConcurrent < 1 || v.InUse < 0 || v.InUse > v.MaxConcurrent || v.Limit < 0 || v.Limit > v.MaxConcurrent || v.Waiting < 0 || len(v.Queue) > 256 || v.At.IsZero() {
 			writeError(w, domain.Errf(domain.CodeInvalidArgument, "invalid runner slot counts"))
 			return
 		}

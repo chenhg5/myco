@@ -53,6 +53,29 @@ func WorkspaceKey(raw string) string {
 	return u.String()
 }
 
+// SetMax changes the limit while turns run. Raising it starts waiting turns
+// at once; lowering it only stops new starts: running turns finish.
+func (p *SlotPool) SetMax(n int) {
+	if n < 1 {
+		n = 1
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.max == n {
+		return
+	}
+	p.max = n
+	p.dispatch()
+	p.changed()
+}
+
+// Max is the limit in force.
+func (p *SlotPool) Max() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.max
+}
+
 func (p *SlotPool) Request(workspace, owner, message string) *SlotTicket {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -140,10 +163,13 @@ func (p *SlotPool) dispatch() {
 
 // Snapshot exposes machine totals and only this agent's waiting message IDs.
 // Queue positions simulate this same scheduler, not raw arrival order.
+// After the limit was lowered, turns still running can outnumber it:
+// MaxConcurrent then says how many run (hubs refuse in_use above it) and
+// Limit the limit itself.
 func (p *SlotPool) Snapshot(owner string) *api.RunnerSlots {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	s := &api.RunnerSlots{MaxConcurrent: p.max, InUse: p.used, Waiting: len(p.queue), At: time.Now()}
+	s := &api.RunnerSlots{MaxConcurrent: max(p.max, p.used), Limit: p.max, InUse: p.used, Waiting: len(p.queue), At: time.Now()}
 	q := append([]*SlotTicket(nil), p.queue...)
 	active := map[string]int{}
 	for w, n := range p.active {

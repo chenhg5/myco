@@ -670,6 +670,65 @@ func TestAgentSpawnEndToEnd(t *testing.T) {
 		t.Fatal("spawn without a token")
 	}
 
+	// How many agent CLIs it runs at once: anyone who may use the machine
+	// sees it; only its owner changes it (here nobody owns it, so the
+	// hub's owner), and its runner applies it at once.
+	cc, err := h.admin().SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: api.ConcurrencyCLI}, 20*time.Second)
+	if err != nil || cc.Concurrency == nil || cc.Concurrency.Limit != config.DefaultMaxConcurrent || cc.Concurrency.Source != config.ConcurrencyFromDefault {
+		t.Fatalf("concurrency: %v %+v", err, cc)
+	}
+	ops, err := h.admin().InviteMember(c, api.InviteRequest{Name: "ops", Role: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	opsPair, err := h.client("").Pair(c, ops.Link[strings.Index(ops.Link, "/c/")+3:], "ops-laptop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.client(opsPair.Token).SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: api.ConcurrencyCLI}, 20*time.Second); err != nil {
+		t.Fatalf("an administrator cannot see it: %v", err)
+	}
+	_, err = h.client(opsPair.Token).SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: api.ConcurrencyCLI, MaxConcurrent: 2}, 20*time.Second)
+	if e, ok := client.AsError(err); !ok || e.Code != "permission_denied" || !strings.Contains(e.Message, "only the owner of this computer") {
+		t.Fatalf("an administrator who does not own it changed it: %v", err)
+	}
+	leadCfg, err := config.Load(filepath.Join(home, "lead.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.client(leadCfg.Token).SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: api.ConcurrencyCLI, MaxConcurrent: 2}, 20*time.Second); err == nil {
+		t.Fatal("an agent changed it")
+	}
+	cc, err = h.admin().SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: api.ConcurrencyCLI, MaxConcurrent: 7}, 20*time.Second)
+	if err != nil || cc.Concurrency == nil || cc.Concurrency.Limit != 7 || cc.Concurrency.Source != config.ConcurrencyFromSetting {
+		t.Fatalf("set concurrency: %v %+v", err, cc)
+	}
+	if info, err := h.admin().SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: api.InfoCLI}, 20*time.Second); err != nil || info.Info.Concurrency == nil || info.Info.Concurrency.Limit != 7 {
+		t.Fatalf("info after: %v %+v", err, info)
+	}
+	// Once the computer is ops's, ops changes it from the App (its console
+	// asks the machine node through the hub), and the hub's owner no longer.
+	if opsPair.Member == nil {
+		t.Fatal("pairing named no member")
+	}
+	if err := h.admin().SetMachineOwner(c, boxID, opsPair.Member.ID); err != nil {
+		t.Fatal(err)
+	}
+	opsApp := newAppDevice(t, h.url, opsPair.Token)
+	if code, m, raw := opsApp.do("GET", "/app/hubs/"+opsApp.hub+"/machines/"+boxID+"/concurrency", nil); code != 200 || m["limit"] != float64(7) {
+		t.Fatalf("app reads it: %d %s", code, raw)
+	}
+	if code, _, raw := opsApp.do("POST", "/app/hubs/"+opsApp.hub+"/machines/"+boxID+"/concurrency", map[string]int{"max_concurrent": 99}); code != 400 {
+		t.Fatalf("app out of range: %d %s", code, raw)
+	}
+	if code, m, raw := opsApp.do("POST", "/app/hubs/"+opsApp.hub+"/machines/"+boxID+"/concurrency", map[string]int{"max_concurrent": 12}); code != 200 || m["limit"] != float64(12) || m["source"] != "setting" {
+		t.Fatalf("app sets it: %d %s", code, raw)
+	}
+	_, err = h.admin().SpawnOnMachine(c, boxID, api.SpawnRequest{CLI: api.ConcurrencyCLI, MaxConcurrent: 3}, 20*time.Second)
+	if e, ok := client.AsError(err); !ok || e.Code != "permission_denied" {
+		t.Fatalf("the hub's owner changed ops's computer: %v", err)
+	}
+
 	// Handing box-rev over to a new session on the machine: its first turn
 	// is the handover note; the node keeps its name; from then on the
 	// runner wakes the new session (the old one's runner stops by itself).

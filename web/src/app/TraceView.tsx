@@ -324,13 +324,15 @@ function useNear(): [(el: Element | null) => void, boolean] {
   return [ref, near];
 }
 
-export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, from, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, others, cli, onStatus, queueText, onPlan }: {
+export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, from, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, others, cli, onStatus, queueText, queueAction, onPlan }: {
   hubId: string; task: Message; onGrow?: () => void;
   /** told the plan this run is working through (and when it was written),
    *  for the bar at the top of the chat (PlanBar); null when it has none */
   onPlan?: (key: string, taskId: string, plan: { items: PlanItem[]; at: string } | null) => void;
   cli?: string;
   queueText?: string;
+  /** beside queueText: e.g. raise the computer's limit (its owner) */
+  queueAction?: React.ReactNode;
   onStatus?: (taskId: string, status: string) => void;
   /** where the finished run's time, tokens and cost go (next to the
    *  answer's time and copy); without it they end the run */
@@ -597,7 +599,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     : node);
   if (!wanted && rawEvents === null && !reports.length) return withSteers(null);
   if (running && isOpen(traceStatus || task.status) && queueText) return withSteers(
-    <div className="trace" data-testid="runner-queue"><div className="trace-head trace-wait"><span className="trace-title">{queueText}</span></div></div>
+    <div className="trace" data-testid="runner-queue"><div className="trace-head trace-wait"><span className="trace-title">{queueText}</span>{queueAction}</div></div>
   );
   if (running && (traceStatus || task.status) !== "acked" && (traceStatus || task.status) !== "held" && !events?.length && !reports.length) {
     // (said under your message, not as a line here: ConversationDetail)

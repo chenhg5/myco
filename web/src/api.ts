@@ -111,11 +111,28 @@ export interface MCPServer { name: string; transport: string; host?: string; sco
 export interface ToolSkill { name: string; description?: string; scope: "user" | "project"; managed_by?: string }
 export interface ToolPlugin { name: string; marketplace?: string; enabled: boolean }
 export interface RunnerSlots {
+  /** how many run now, or the limit when fewer run (after the limit was
+   *  lowered, running ones finish: then above limit) */
   max_concurrent: number;
+  /** the limit in force (runners newer than v0.23.9; older: max_concurrent) */
+  limit?: number;
   in_use: number;
   waiting: number;
   at: string;
   queue?: { message_id: string; position: number }[];
+}
+/** How many agent CLIs a computer's runner runs at once (shared between
+ *  its workspaces), and how many run and wait now. */
+export interface MachineConcurrency {
+  limit: number;
+  in_use: number;
+  waiting: number;
+  /** where limit comes from: machine.yaml's setting (from the App or myco
+   *  machine concurrency), the runner's --max-concurrent, or the default */
+  source: "setting" | "flag" | "default";
+  flag?: number;
+  /** the highest limit it takes */
+  ceiling: number;
 }
 export interface Runtime {
  machine_health?: MachineHealth;

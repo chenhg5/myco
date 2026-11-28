@@ -130,11 +130,15 @@ type EncryptedProvider struct {
 // RunnerSlots describes one runner process, shared across its workspaces.
 // Queue contains only the reporting agent's waiting message IDs.
 type RunnerSlots struct {
-	MaxConcurrent int                `json:"max_concurrent"`
-	InUse         int                `json:"in_use"`
-	Waiting       int                `json:"waiting"`
-	Queue         []RunnerQueuedTask `json:"queue,omitempty"`
-	At            time.Time          `json:"at"`
+	MaxConcurrent int `json:"max_concurrent"`
+	// Limit is the limit in force (MaxConcurrent can be above it for a
+	// while after it was lowered: running turns finish). Older runners
+	// leave it out: MaxConcurrent is the limit then.
+	Limit   int                `json:"limit,omitempty"`
+	InUse   int                `json:"in_use"`
+	Waiting int                `json:"waiting"`
+	Queue   []RunnerQueuedTask `json:"queue,omitempty"`
+	At      time.Time          `json:"at"`
 }
 type RunnerQueuedTask struct {
 	MessageID string `json:"message_id"`
@@ -1062,6 +1066,9 @@ type SpawnRequest struct {
 	JoinLink string `json:"join_link,omitempty"`
 	// Version, with CLI UpgradeCLI: the release to install ("" = latest).
 	Version string `json:"version,omitempty"`
+	// MaxConcurrent, with CLI ConcurrencyCLI: the new limit (0: only say
+	// what it is). Hubs older than it drop the field: nothing changes.
+	MaxConcurrent int `json:"max_concurrent,omitempty"`
 }
 
 // HubUpgrade is POST /v1/admin/upgrade: the hub brings its own myco to a
@@ -1135,6 +1142,30 @@ type SpawnResult struct {
 	Info *MachineInfo `json:"info,omitempty"`
 	// Upgrade answers a request with CLI UpgradeCLI (also as JSON in Reply).
 	Upgrade *MachineUpgrade `json:"upgrade,omitempty"`
+	// Concurrency answers a request with CLI ConcurrencyCLI (also as JSON
+	// in Reply, which hubs older than it pass on).
+	Concurrency *MachineConcurrency `json:"concurrency,omitempty"`
+}
+
+// ConcurrencyCLI, as a spawn request's CLI, asks the machine node how many
+// agent CLIs its runner runs at once, or sets it (MaxConcurrent). Only the
+// machine's owner may set it: the hub checks. Machines older than it refuse
+// it as an unknown CLI.
+const ConcurrencyCLI = "concurrency"
+
+// MachineConcurrency is how many agent CLIs a machine's runner runs at once
+// (shared between all its workspaces), and how many run and wait now.
+type MachineConcurrency struct {
+	Limit   int `json:"limit"`
+	InUse   int `json:"in_use"`
+	Waiting int `json:"waiting"`
+	// Source is where Limit comes from: "setting" (runner.max_concurrent in
+	// machine.yaml, set from the App or myco machine concurrency), "flag"
+	// (the runner's --max-concurrent, Flag) or "default".
+	Source string `json:"source"`
+	Flag   int    `json:"flag,omitempty"`
+	// Ceiling is the highest limit it takes.
+	Ceiling int `json:"ceiling"`
 }
 
 // InfoCLI, as a spawn request's CLI, asks the machine node about its
@@ -1152,10 +1183,13 @@ type MachineInfo struct {
 	// (a missing folder directly inside it is made): "~/myco" when allowed.
 	NewDir string `json:"new_dir"`
 	// MaxAccess is the highest access a session there may get.
-	MaxAccess string           `json:"max_access"`
-	AIs       []MachineAI      `json:"ais"`
-	Sessions  []MachineSession `json:"sessions"`
-	Home      string           `json:"home,omitempty"`
+	MaxAccess string `json:"max_access"`
+	// Concurrency: how many agent CLIs it runs at once (machines older
+	// than it leave it out).
+	Concurrency *MachineConcurrency `json:"concurrency,omitempty"`
+	AIs         []MachineAI         `json:"ais"`
+	Sessions    []MachineSession    `json:"sessions"`
+	Home        string              `json:"home,omitempty"`
 }
 
 // MachineAI is an agent CLI on the machine.

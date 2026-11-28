@@ -292,6 +292,8 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/local/hub/stop", b.stopLocal)
 		m.HandleFunc("POST /app/local/runner", b.postLocalRunner)
 		m.HandleFunc("POST /app/local/shell-access", b.postShellAccess)
+		m.HandleFunc("GET /app/local/concurrency", b.getLocalConcurrency)
+		m.HandleFunc("POST /app/local/concurrency", b.postLocalConcurrency)
 		// (pages using this computer: only an App on it)
 		b.osRoutes(m)
 		b.browserRoutes(m)
@@ -1033,6 +1035,14 @@ func (b *Backend) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, res.Info)
+	}))
+	// How many agent CLIs a computer runs at once: asked of its machine
+	// node; changing it is its owner's call (the hub checks).
+	m.HandleFunc("GET /app/hubs/{id}/machines/{mid}/concurrency", b.withHubTimeout(45*time.Second, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		b.machineConcurrency(w, r, c, 0)
+	}))
+	m.HandleFunc("POST /app/hubs/{id}/machines/{mid}/concurrency", b.withHubTimeout(45*time.Second, func(w http.ResponseWriter, r *http.Request, c *client.Client) {
+		b.setMachineConcurrency(w, r, c)
 	}))
 	// Bring the workspace's own myco (the hub) up to date: it does so and
 	// restarts (hubs before this answer not_found: upgrade on the server).

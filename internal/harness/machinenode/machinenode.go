@@ -105,6 +105,12 @@ type Deps struct {
 	// its runner restart onto it shortly after the answer is sent. Nil:
 	// upgrading is not offered.
 	Upgrade func(ctx context.Context, version string) (api.MachineUpgrade, error)
+	// Concurrency is how many agent CLIs this machine's runner runs at
+	// once, and SetConcurrency changes it (machine.yaml's
+	// runner.max_concurrent, applied at once). Nil: not offered (a runner
+	// serving one agent).
+	Concurrency    func() *api.MachineConcurrency
+	SetConcurrency func(n int) (*api.MachineConcurrency, error)
 	// Machine fills in the agent CLIs and the recent sessions on this
 	// machine for an info request (api.InfoCLI). Nil: they are left empty.
 	Machine func(ctx context.Context) (ais []api.MachineAI, sessions []api.MachineSession)
@@ -197,6 +203,9 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 		}
 		b, _ := json.Marshal(up)
 		return api.SpawnResult{CLI: api.UpgradeCLI, Upgrade: &up, Reply: string(b)}
+	}
+	if strings.TrimSpace(sr.CLI) == api.ConcurrencyCLI {
+		return n.concurrency(req, sr.MaxConcurrent)
 	}
 	if strings.TrimSpace(sr.CLI) == api.InfoCLI {
 		info := n.info(ctx)
@@ -302,6 +311,28 @@ func (n *Node) spawn(ctx context.Context, req harness.Request) api.SpawnResult {
 	}
 	return api.SpawnResult{Agent: name, SessionID: out.SessionID, CLI: plan.CLI, Workdir: plan.Workdir,
 		Access: string(plan.Access), Reply: strings.TrimSpace(out.Output)}
+}
+
+// concurrency answers a ConcurrencyCLI request: the limit and slots, after
+// setting the limit to max when it is not 0. Only through the hub (its
+// administrator sender), which lets only the machine's owner change it.
+func (n *Node) concurrency(req harness.Request, max int) api.SpawnResult {
+	if req.From != AdminSender {
+		return denied("only this computer's owner can see or change how many agent CLIs run at once on machine %s", n.Machine)
+	}
+	if n.Deps.Concurrency == nil || n.Deps.SetConcurrency == nil {
+		return denied("machine %s runs no shared runner (myco runner start --all), so it has no limit to change", n.Machine)
+	}
+	v := n.Deps.Concurrency()
+	if max != 0 {
+		var err error
+		if v, err = n.Deps.SetConcurrency(max); err != nil {
+			return api.SpawnResult{CLI: api.ConcurrencyCLI, Error: "changing the limit failed: " + err.Error()}
+		}
+	}
+	// Also as text in Reply: hubs older than it keep only the fields they know.
+	b, _ := json.Marshal(v)
+	return api.SpawnResult{CLI: api.ConcurrencyCLI, Concurrency: v, Reply: string(b)}
 }
 
 func (n *Node) senderAllowed(from string) bool {
@@ -432,6 +463,9 @@ func (n *Node) info(ctx context.Context) *api.MachineInfo {
 	}
 	info := &api.MachineInfo{Dirs: dirs, NewDir: n.newDir(), MaxAccess: string(limit), Home: n.Policy.Home,
 		AIs: []api.MachineAI{}, Sessions: []api.MachineSession{}}
+	if n.Deps.Concurrency != nil {
+		info.Concurrency = n.Deps.Concurrency()
+	}
 	if n.Deps.Machine != nil {
 		ais, sessions := n.Deps.Machine(ctx)
 		if ais != nil {

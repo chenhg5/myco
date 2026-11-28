@@ -12,7 +12,8 @@ import { heldTaskLabel, agentKind, canManage, isInbox, isMe, lastActivityAt, mac
 import { MessageContent, filesBelow, filesFor, inlineAttachmentIds, type InlineFiles } from "@/app/Markdown";
 import { UI_REPLY } from "@/app/ui/UiBlock";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
-import { runnerQueueText } from "@/app/RunnerQueue";
+import { runnerQueueText, waitsOnLimit } from "@/app/RunnerQueue";
+import { RaiseLimit, ownsMachine } from "@/app/Concurrency";
 import { TraceView, type PlanItem } from "@/app/TraceView";
 import { AskCard } from "@/app/AskCard";
 import { WorkingLine } from "@/app/Working";
@@ -2208,6 +2209,14 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Its loading (and what it reports about activity) belongs to the last
   // part still open: under the last addition when that part has no end.
   const goesOnBelow = (taskId: string) => { const l = laterSteers.get(taskId); return !!l?.length && !steerWindow.get(l[l.length - 1].id)?.until; };
+  // A task that waits only because its computer runs as many agents as it
+  // may: its owner can raise the limit right there.
+  const queueActionFor = (m: Message): React.ReactNode => {
+    const r = rowOf(m.to);
+    const slots = r ? waitsOnLimit(r.st.agent, m.id) : undefined;
+    const machine = r && slots ? machineOfRow(r) : undefined;
+    return r && slots && machine && ownsMachine(r.hub, machine) ? <RaiseLimit hub={r.hub} machine={machine} slots={slots} /> : undefined;
+  };
   // Questions are answered by whoever sent the task they are on.
   const mayAnswerTask = (t: Message) => isMe(t.from, row?.hub);
   // Your earlier tasks a run goes on with (borrow), still open: a question
@@ -2562,7 +2571,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           <>
             {/* (its run stays: what it did and said; the line about being
                 stuck goes under it) */}
-            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} onPlan={onPlan} answered={answerOf.has(m.id)} quiet={m.id !== liveId || goesOnBelow(m.id)} footed={m.id === liveId && liveFoot} onPaused={goesOnBelow(m.id) ? undefined : onPaused} onActivity={goesOnBelow(m.id) ? undefined : onActivity} until={cutOf(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
+            <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} queueAction={queueActionFor(m)} onStatus={onTraceStatus} onGrow={followBottom} onPlan={onPlan} answered={answerOf.has(m.id)} quiet={m.id !== liveId || goesOnBelow(m.id)} footed={m.id === liveId && liveFoot} onPaused={goesOnBelow(m.id) ? undefined : onPaused} onActivity={goesOnBelow(m.id) ? undefined : onActivity} until={cutOf(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
           answers={answerTo} canAnswer={mayAnswerTask} onAnswer={answerAsk} others={othersIn(m.id)} />
             {isStuck(m) && (<div className="conv-stuck" data-stuck={m.id}>
             <span className="dot pending" aria-hidden />
@@ -2590,7 +2599,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         )}
         {/* What it did for a task someone else gave it, the same way. */}
         {m.type === "task" && !m.e2e && fromOther && m.to === target.agent && (
-          <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} onPlan={onPlan} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
+          <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} queueAction={queueActionFor(m)} onStatus={onTraceStatus} onGrow={followBottom} onPlan={onPlan} answered={answerOf.has(m.id)} quiet={m.id !== liveId} footed={m.id === liveId && liveFoot} onPaused={onPaused} steers={runSteers.get(m.id)} said={progressOf.get(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined} answers={answerTo} />
         )}
         </Fragment>
       );
