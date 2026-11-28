@@ -3247,6 +3247,9 @@ async function runMatrix(browser, size, scheme) {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
       const older = await sendFromElsewhere("hub_studio", "review-cloud", "保留任务，等我补充");
+      // The mock records milliseconds. Observe the first task before sending
+      // the next one, so equal timestamps cannot erase their intended order.
+      await page.waitForFunction((id) => !!document.querySelector(`[data-msg="${id}"]`), older.id, { timeout: 15000 });
       // (The mock answers 启动预览 after 7 seconds, 保留任务 after 20.)
       const newer = await sendFromElsewhere("hub_studio", "review-cloud", "启动预览：先回复这条新任务");
       await page.waitForFunction((id) => !!document.querySelector(`[data-msg="${id}"]`), newer.id, { timeout: 15000 });
@@ -4455,7 +4458,15 @@ async function runMatrix(browser, size, scheme) {
       // and one opens full size.
       const pics = doc.locator(".md img");
       if ((await pics.count()) < 1) throw new Error("项目那篇应有配图");
-      await page.waitForFunction(() => [...document.querySelectorAll("[data-testid=help-doc] .md img")].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 10_000 });
+      // Guide pictures load lazily. Visit each one before asserting it loaded;
+      // offscreen pictures are not broken merely because the browser deferred them.
+      for (let i = 0; i < await pics.count(); i++) {
+        await pics.nth(i).scrollIntoViewIfNeeded();
+        await page.waitForFunction((index) => {
+          const img = document.querySelectorAll("[data-testid=help-doc] .md img")[index];
+          return img instanceof HTMLImageElement && img.complete && img.naturalWidth > 0;
+        }, i, { timeout: 10_000 });
+      }
       await clickVisible(page, pics.first());
       await page.locator(".lightbox").waitFor({ timeout: 5_000 });
       await page.keyboard.press("Escape");
