@@ -1535,7 +1535,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
   if (folded) {
     return (
       <aside className="sp-side is-folded" aria-label={L("会话", "Conversations")}>
-        <button type="button" className="sp-side-fold" onClick={() => onFold(false)} title={L("展开会话", "Show conversations")} aria-label={L("展开会话", "Show conversations")}>
+        <button type="button" className="sp-side-fold" onClick={() => onFold(false)} title={L("展开会话栏", "Show the conversations column")} aria-label={L("展开会话栏", "Show the conversations column")}>
           <PanelRightOpen />
         </button>
         {/* (folded too: groups, and how they show) */}
@@ -1624,7 +1624,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
               <button type="button" className="sp-side-add" data-testid="member-groups-menu" onClick={(e) => styleMenu(e.currentTarget)}
                 title={L("分组", "Groups")} aria-label={L("会话分组", "Conversation groups")}><MoreHorizontal /></button>
             )}
-            <button type="button" className="sp-side-add" onClick={() => onFold(true)} title={L("收起会话，只留头像", "Fold to faces")} aria-label={L("收起会话", "Fold conversations")}><PanelRightClose /></button>
+            <button type="button" className="sp-side-add" onClick={() => onFold(true)} title={L("收起会话栏，只留头像", "Fold to faces")} aria-label={L("收起会话栏", "Fold the conversations column")}><PanelRightClose /></button>
           </span>
         </div>
         {showGroups ? (

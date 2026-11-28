@@ -3519,5 +3519,7 @@
   "Which conversations are in it, its brief, documents and links are deleted; the nodes and their conversations stay.": "어떤 대화가 들어 있는지, 설명, 문서, 링크가 삭제됩니다. 노드와 그 대화는 남습니다.",
   "While conversations run, the notch at the top of the screen grows a little: a walking mushroom and how many are at work; point at it to see who is doing what. Turn it off if you'd rather not.": "대화가 실행되는 동안 화면 위쪽 노치가 조금 늘어납니다: 걷는 버섯과 몇 개가 일하고 있는지. 가리키면 누가 무엇을 하는지 보입니다. 원하지 않으면 끌 수 있습니다.",
   "Write what every conversation in the project should know: repository, branch and release rules, how to test, what to watch out for. Agents read it with myco project show / pull.": "프로젝트의 모든 대화가 알아야 할 것을 쓰세요: 저장소, 브랜치와 릴리스 규칙, 테스트 방법, 주의할 점. 에이전트는 myco project show / pull로 읽습니다.",
-  "You can add more any time with New conversation.": "'새 대화'에서 언제든 더 추가할 수 있습니다."
+  "You can add more any time with New conversation.": "'새 대화'에서 언제든 더 추가할 수 있습니다.",
+  "Show the conversations column": "대화 열 펼치기",
+  "Fold the conversations column": "대화 열 접기"
 }

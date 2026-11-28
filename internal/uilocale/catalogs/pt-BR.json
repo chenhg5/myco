@@ -3519,5 +3519,7 @@
   "Which conversations are in it, its brief, documents and links are deleted; the nodes and their conversations stay.": "São excluídos quais conversas estão nele, seu resumo, documentos e links; os nós e suas conversas permanecem.",
   "While conversations run, the notch at the top of the screen grows a little: a walking mushroom and how many are at work; point at it to see who is doing what. Turn it off if you'd rather not.": "Enquanto as conversas estão em andamento, o entalhe no topo da tela cresce um pouco: um cogumelo andando e quantas estão trabalhando; aponte para ver quem está fazendo o quê. Desligue se preferir.",
   "Write what every conversation in the project should know: repository, branch and release rules, how to test, what to watch out for. Agents read it with myco project show / pull.": "Escreva o que toda conversa do projeto deve saber: repositório, regras de branch e versão, como testar, o que observar. Os agentes leem com myco project show / pull.",
-  "You can add more any time with New conversation.": "Você pode adicionar mais a qualquer momento com Nova conversa."
+  "You can add more any time with New conversation.": "Você pode adicionar mais a qualquer momento com Nova conversa.",
+  "Show the conversations column": "Mostrar a coluna de conversas",
+  "Fold the conversations column": "Recolher a coluna de conversas"
 }
