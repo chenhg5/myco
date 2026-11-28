@@ -2557,6 +2557,31 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true });
   }
 
+  // /app/mock/late-ask — a question that comes after its run went quiet:
+  // a long task to MCP Claude still open, a later task answered, then the long
+  // one asks (it shows in the chat, in time, answerable).
+  if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "late-ask" && parts.length === 3) {
+    if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);
+    const hub = state.hubs.find((h) => h.id === "hub_studio");
+    const agent = "mcp-claude";
+    const t = "th_late_ask";
+    const long = makeMessage({ thread_id: t, from: CONSOLE, to: agent, type: "task", status: "held",
+      body: "把这五件事做完：发版、清理分支、改 CI、更新文档、收紧 wsl-shell 的名单", created_at: iso(600), updated_at: iso(60) });
+    const said = makeMessage({ thread_id: t, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: long.id,
+      body: "先做发版和清理分支。", created_at: iso(560), updated_at: iso(560) });
+    const ask2 = makeMessage({ thread_id: t, from: CONSOLE, to: agent, type: "task", status: "done",
+      body: "现在进度怎样？", created_at: iso(420), updated_at: iso(360) });
+    const ans = makeMessage({ thread_id: t, from: agent, to: CONSOLE, type: "reply", status: "done", reply_to: ask2.id,
+      body: "五件里四件的代码已经在 main 了，剩下收紧名单这件要你定。", created_at: iso(360), updated_at: iso(360) });
+    const q = makeMessage({ thread_id: t, from: agent, to: CONSOLE, type: "progress", status: "done", reply_to: long.id, ask: true,
+      body: "wsl-shell 现在允许任何人。要不要收紧成只放用过它的 11 个？\n\n1. 收紧成这 11 个 — 以后有新 agent 要用再加\n2. 保持允许任何人 — 省事，但谁都能在 WSL 上执行命令",
+      created_at: iso(60), updated_at: iso(60) });
+    long.asking = q.id;
+    hub.threads[t] = [long, said, ask2, ans, q];
+    askingBy.set(agent, long);
+    return send(res, 200, { task: long.id, ask: q.id });
+  }
+
   // /app/mock/held-for-other {on} — Myco (Grok) waits on PM's answer.
   if (parts[0] === "app" && parts[1] === "mock" && parts[2] === "held-for-other" && parts.length === 3) {
     if (method !== "POST") return fail(res, 405, "method_not_allowed", `不支持 ${method} 请求`);

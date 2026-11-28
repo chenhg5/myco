@@ -14,6 +14,7 @@ import { UI_REPLY } from "@/app/ui/UiBlock";
 import { PromptSign, STOPPED, Terminal } from "@/app/Terminal";
 import { runnerQueueText } from "@/app/RunnerQueue";
 import { TraceView, type PlanItem } from "@/app/TraceView";
+import { AskCard } from "@/app/AskCard";
 import { WorkingLine } from "@/app/Working";
 import { AccessPill, RunPill } from "@/app/RunSettings";
 import { QuotaPill } from "@/app/QuotaTag";
@@ -1450,8 +1451,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     const until = cutOf(taskId);
     const borrow = borrowOf.get(taskId);
     const own = (progressOf.get(taskId) || []).filter((m) => !until || m.created_at < until);
+    // (another task's, only until this one is answered: after that they
+    // go on in the chat, in time, not above this one's answer)
+    const ans = answerOf.get(taskId)?.created_at;
     const more = borrow ? borrow.ids.flatMap((id) => progressOf.get(id) || [])
-      .filter((m) => m.created_at >= borrow.since && (!until || m.created_at < until)) : [];
+      .filter((m) => m.created_at >= borrow.since && (!until || m.created_at < until) && (!ans || m.created_at < ans)) : [];
     const all = more.length ? [...own, ...more].sort((a, b) => a.created_at.localeCompare(b.created_at)) : own;
     return all.length ? all : undefined;
   };
@@ -2204,7 +2208,44 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   // Its loading (and what it reports about activity) belongs to the last
   // part still open: under the last addition when that part has no end.
   const goesOnBelow = (taskId: string) => { const l = laterSteers.get(taskId); return !!l?.length && !steerWindow.get(l[l.length - 1].id)?.until; };
-  const answerAsk = (task: Message) => async (text: string) => {
+  // Questions are answered by whoever sent the task they are on.
+  const mayAnswerTask = (t: Message) => isMe(t.from, row?.hub);
+  // Your earlier tasks a run goes on with (borrow), still open: a question
+  // one of them asks there is answered for it.
+  const othersIn = (taskId: string): Message[] | undefined => {
+    const list = (borrowOf.get(taskId)?.ids || []).map((id) => byId.get(id)).filter((t): t is Message => !!t && isOpen(t.status) && !answerOf.has(t.id));
+    return list.length ? list : undefined;
+  };
+  // Whether a run draws this report (or question): its task's own, up to
+  // where that is cut; an addition's part, for its task, or for the run it
+  // cut while that is open (until the part's task is answered); a later
+  // task's run that goes on with it, until that one is answered. What no
+  // run draws (an earlier task still at work after the later one was
+  // answered) goes in the chat, in time.
+  const drawnInRun = (p: Message): boolean => {
+    const tid = taskOfProgress.get(p.id) || "";
+    const t = byId.get(tid);
+    if (!t || !inRun(t)) return false;
+    if (!isMe(t.from, row?.hub)) return true; // someone else's: its run shows all of it
+    const at = p.created_at;
+    const cut = cutOf(tid);
+    if (!cut || at < cut) return true;
+    for (const w of steerWindow.values()) {
+      if (at < w.from || (w.until && at >= w.until)) continue;
+      if (w.task.id === tid) return true;
+      const ans = answerOf.get(w.task.id)?.created_at;
+      if (w.host?.id === tid && isOpen(w.host.status) && !answerOf.has(tid) && (!ans || at < ans)) return true;
+    }
+    for (const [bid, b] of borrowOf) {
+      if (!b.ids.includes(tid) || at < b.since) continue;
+      const u = cutOf(bid);
+      const ans = answerOf.get(bid)?.created_at;
+      if ((!u || at < u) && (!ans || at < ans)) return true;
+    }
+    return false;
+  };
+  // An answer goes to the task the question was asked on.
+  const answerAsk = async (text: string, task: Message) => {
     const m = await appApi.steer(target.hubId, task.id, text, undefined);
     setMessages((prev) => mergeById(prev || [], [m]));
     atBottom.current = true;
@@ -2236,7 +2277,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     if (m.type === "steer" && m.answers && answerTo.get(m.answers) === m) return false;
     if (m.type === "steer" && m.reply_to && (steersOf.get(m.reply_to)?.includes(m) || runSteers.get(m.reply_to)?.includes(m))) return false;
     if (m.type !== "progress") return true;
-    if (!observed) return !inRun(byId.get(taskOfProgress.get(m.id) || ""));
+    if (!observed) return !drawnInRun(m);
     const task = taskOfProgress.get(m.id) || "";
     if (answerOf.has(task) || task === working?.task.id) return false;
     const all = progressOf.get(task);
@@ -2292,6 +2333,18 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     return best?.id;
   };
   const renderMessage = (m: Message, showName = true) => {
+      if (m.type === "progress" && m.ask && !observed) {
+        // A question no run shows (its run was answered before it came):
+        // here, in time, answerable for the task it is on.
+        const t = byId.get(taskOfProgress.get(m.id) || "");
+        return (
+          <div className="conv-ask" key={m.id} data-msg={m.id}>
+            <AskCard hubId={target.hubId} ask={m} answer={answerTo.get(m.id)}
+              open={!!t && isOpen(t.status) && t.asking === m.id && !answerOf.has(t.id)}
+              canAnswer={!!t && mayAnswerTask(t)} onAnswer={t ? (text) => answerAsk(text, t) : undefined} />
+          </div>
+        );
+      }
       if (m.type === "progress") {
         const line = (
           <div className="conv-progress" key={m.id} title={clockTime(m.created_at)}>
@@ -2489,7 +2542,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           const live = w.last && !w.until;
           // (the run it cut, still open: what that one does goes on here too)
           const also = w.host && isOpen(w.host.status) && !answerOf.has(w.host.id) ? w.host : undefined;
-          const said = [t, ...(also ? [also] : [])].flatMap((x) => progressOf.get(x.id) || [])
+          // (the cut run's own, only until this one is answered: after
+          // that they go on in the chat, in time)
+          const ans = answerOf.get(t.id)?.created_at;
+          const said = [t, ...(also ? [also] : [])].flatMap((x) => (progressOf.get(x.id) || [])
+            .filter((p) => x === t || !ans || p.created_at < ans))
             .filter((x) => x.created_at >= w.from && (!w.until || x.created_at < w.until))
             .sort((a, b) => a.created_at.localeCompare(b.created_at));
           return (
@@ -2498,7 +2555,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               onPaused={live ? onPaused : undefined} onActivity={live ? onActivity : undefined}
               from={w.from} until={w.until} said={said.length ? said : undefined}
               borrow={also ? { ids: [also.id], since: w.from } : undefined}
-              answers={answerTo} canAnswer={isMe(t.from, row?.hub)} onAnswer={answerAsk(t)} />
+              answers={answerTo} canAnswer={mayAnswerTask} onAnswer={answerAsk} others={also ? [also] : undefined} />
           );
         })()}
         {m.type === "task" && !m.e2e && isMe(m.from, row?.hub) && (
@@ -2506,7 +2563,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {/* (its run stays: what it did and said; the line about being
                 stuck goes under it) */}
             <TraceView hubId={target.hubId} task={m} cli={rowOf(m.to)?.st.agent.runtime?.cli} queueText={runnerQueueText(rowOf(m.to)?.st.agent, m.id)} onStatus={onTraceStatus} onGrow={followBottom} onPlan={onPlan} answered={answerOf.has(m.id)} quiet={m.id !== liveId || goesOnBelow(m.id)} footed={m.id === liveId && liveFoot} onPaused={goesOnBelow(m.id) ? undefined : onPaused} onActivity={goesOnBelow(m.id) ? undefined : onActivity} until={cutOf(m.id)} borrow={borrowOf.get(m.id)} steers={runSteers.get(m.id)} said={saidIn(m.id)} onUsage={answerOf.has(m.id) ? onUsage : undefined}
-          answers={answerTo} canAnswer={isMe(m.from, row?.hub)} onAnswer={answerAsk(m)} />
+          answers={answerTo} canAnswer={mayAnswerTask} onAnswer={answerAsk} others={othersIn(m.id)} />
             {isStuck(m) && (<div className="conv-stuck" data-stuck={m.id}>
             <span className="dot pending" aria-hidden />
             <span className="conv-stuck-text">{stuckLine(m)}</span>
