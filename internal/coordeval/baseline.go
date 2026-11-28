@@ -43,7 +43,7 @@ func (b Baseline) Start(ctx context.Context, w *World) (func(), error) {
 	ctx, cancel := context.WithCancel(ctx)
 	s := &baseline{w: w, c: w.CoordClient(), naive: b.Naive, busy: map[string]*assignment{}}
 	s.wg.Add(1)
-	go s.serve(ctx)
+	goScenario(ctx, s.serve)
 	return func() { cancel(); s.wg.Wait() }, nil
 }
 
@@ -75,10 +75,13 @@ var resourceRe = regexp.MustCompile(`\b[\w-]+\.(toml|yaml|yml|json|md|go|txt)\b`
 func (s *baseline) serve(ctx context.Context) {
 	defer s.wg.Done()
 	for ctx.Err() == nil {
-		msgs, err := s.c.Pull(ctx, 5, s.w.Unit())
+		msgs, err := s.c.Pull(ctx, 5, pollDuration(ctx, s.w.Unit()))
 		if err != nil {
 			sleepCtx(ctx, s.w.Unit())
 			continue
+		}
+		if len(msgs) == 0 {
+			sleepCtx(ctx, s.w.Unit()/2)
 		}
 		for _, m := range msgs {
 			if m.Type != "task" {
@@ -86,10 +89,11 @@ func (s *baseline) serve(ctx context.Context) {
 			}
 			_ = s.c.Ack(ctx, m.ID)
 			s.wg.Add(1)
-			go func(m api.Message) {
+			m := m
+			goScenario(ctx, func(ctx context.Context) {
 				defer s.wg.Done()
 				s.goal(ctx, m)
-			}(m)
+			})
 		}
 	}
 }
@@ -173,17 +177,17 @@ func (s *baseline) goal(ctx context.Context, g api.Message) {
 		}
 		groups[key] = append(groups[key], i)
 	}
-	var wg sync.WaitGroup
+	joined := newScenarioJoin(ctx, len(order))
 	for _, key := range order {
-		wg.Add(1)
-		go func(idx []int) {
-			defer wg.Done()
+		idx := groups[key]
+		goScenario(ctx, func(ctx context.Context) {
+			defer joined.done()
 			for _, i := range idx {
 				results[i] = s.item(ctx, g, items[i], constraint, skill, urgent)
 			}
-		}(groups[key])
+		})
 	}
-	wg.Wait()
+	joined.wait()
 	if ctx.Err() != nil {
 		return
 	}
@@ -293,7 +297,7 @@ func (s *baseline) pick(ctx context.Context, skill string, tried map[string]bool
 				*toldWait = true
 				msg := fmt.Sprintf("%s is the only agent who can do %s, and it is busy with %d other task(s): I have queued %s behind them and will send you the result when it is done.",
 					a.Name, it.name, a.Queued+a.InProgress, it.name)
-				go func() { _, _ = s.c.Progress(context.WithoutCancel(ctx), g.ID, msg, false) }()
+				_, _ = s.c.Progress(ctx, g.ID, msg, false)
 			}
 		}
 		s.busy[a.Name] = &assignment{agent: a.Name}
@@ -330,7 +334,7 @@ func (s *baseline) release(agent string) {
 func (s *baseline) await(ctx context.Context, a *assignment) (string, string) {
 	away := 0
 	for ctx.Err() == nil {
-		reply, err := s.c.WaitReply(ctx, a.msg, s.w.Unit())
+		reply, err := s.c.WaitReply(ctx, a.msg, pollDuration(ctx, s.w.Unit()))
 		if err == nil && reply != nil {
 			return reply.Body, "ok"
 		}
@@ -354,6 +358,7 @@ func (s *baseline) await(ctx context.Context, a *assignment) (string, string) {
 				}
 			}
 		}
+		sleepCtx(ctx, s.w.Unit())
 	}
 	return "", "gone"
 }
@@ -390,17 +395,23 @@ func (s *baseline) naiveGoal(ctx context.Context, g api.Message, items []goalIte
 		return
 	}
 	for ctx.Err() == nil {
-		reply, err := s.c.WaitReply(ctx, sent.Message.ID, s.w.Unit())
+		reply, err := s.c.WaitReply(ctx, sent.Message.ID, pollDuration(ctx, s.w.Unit()))
 		if err == nil && reply != nil {
 			_, _ = s.c.Reply(ctx, g.ID, reply.Body, false)
 			return
 		}
+		sleepCtx(ctx, s.w.Unit())
 	}
 }
 
-func sleepCtx(ctx context.Context, d time.Duration) {
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	if a, _ := ctx.Value(scenarioActorKey{}).(*scenarioActor); a != nil {
+		return a.sleep(ctx, d)
+	}
 	select {
 	case <-ctx.Done():
+		return false
 	case <-time.After(d):
+		return true
 	}
 }

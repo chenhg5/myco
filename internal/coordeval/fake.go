@@ -102,25 +102,25 @@ var notWords = regexp.MustCompile(`(?i)\b(not|never|don't|do not|must not|mustn'
 // keeps its presence up while it works, from its own goroutine (a slow
 // machine stalling its work does not make it look away).
 func (f *Fake) run(ctx context.Context) {
-	go func() {
+	f.w.wg.Add(1)
+	goScenario(ctx, func(ctx context.Context) {
+		defer f.w.wg.Done()
 		for ctx.Err() == nil && !f.offline.Load() {
 			_, _ = f.c.Me(ctx)
 			sleepCtx(ctx, f.w.opts.Unit/4)
 		}
-	}()
+	})
 	for ctx.Err() == nil {
 		if f.offline.Load() {
-			<-ctx.Done()
 			return
 		}
-		msgs, err := f.c.Pull(ctx, 1, f.w.opts.Unit)
+		msgs, err := f.c.Pull(ctx, 1, pollDuration(ctx, f.w.opts.Unit))
 		if err != nil {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(f.w.opts.Unit / 2):
-			}
+			sleepCtx(ctx, f.w.opts.Unit/2)
 			continue
+		}
+		if len(msgs) == 0 {
+			sleepCtx(ctx, f.w.opts.Unit/2)
 		}
 		for _, m := range msgs {
 			if m.Type != "task" {
@@ -239,16 +239,17 @@ func (f *Fake) work(ctx context.Context, msgID string, it Item, d time.Duration)
 		offlineAt = time.Duration(f.GoesOfflineAt * float64(d))
 	}
 	step := max(f.w.opts.Unit/2, 10*time.Millisecond)
+	if f.w.opts.clock != nil {
+		step = max(f.w.opts.Unit/2, time.Nanosecond)
+	}
 	for spent := time.Duration(0); spent < d; spent += step {
 		if spent >= offlineAt {
 			f.offline.Store(true)
 			f.w.record(Event{Agent: f.Name, Kind: EvOffline, Item: it.Name, Msg: msgID})
 			return false
 		}
-		select {
-		case <-ctx.Done():
+		if !sleepCtx(ctx, min(step, d-spent)) {
 			return false
-		case <-time.After(min(step, d-spent)):
 		}
 		// stopped by its sender?
 		if got, err := f.c.GetMessage(ctx, msgID); err == nil && (got.Status == "done" || got.Status == "failed") {

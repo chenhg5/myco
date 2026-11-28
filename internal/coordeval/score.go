@@ -188,6 +188,14 @@ func RunScenario(ctx context.Context, sc *Scenario, coord Coordinator, opts RunO
 		defer os.RemoveAll(dir)
 	}
 	o := opts.Options
+	switch coord.(type) {
+	case Baseline, *Baseline:
+		o.clock = newScenarioClock()
+		ctx = context.WithValue(ctx, scenarioClockKey{}, o.clock)
+		var done func()
+		ctx, done = scenarioActorContext(ctx)
+		defer done()
+	}
 	o.Dir = dir
 	w, err := NewWorld(ctx, o)
 	if err != nil {
@@ -224,11 +232,11 @@ func RunScenario(ctx context.Context, sc *Scenario, coord Coordinator, opts RunO
 	if err != nil {
 		return Result{}, nil, fmt.Errorf("%s: starting %s: %w", sc.Name, coord.Name(), err)
 	}
-	start := time.Now()
+	start := w.now()
 	deadline := start.Add(w.Units(sc.Deadline))
 	pending := append([]goalSpec(nil), sc.goals...)
-	for ctx.Err() == nil && time.Now().Before(deadline) {
-		for len(pending) > 0 && time.Since(start) >= w.Units(pending[0].At) && w.briefed(ctx, pending[0].After) {
+	for ctx.Err() == nil && w.now().Before(deadline) {
+		for len(pending) > 0 && w.now().Sub(start) >= w.Units(pending[0].At) && w.briefed(ctx, pending[0].After) {
 			if _, err := w.SendGoal(ctx, pending[0].Body, pending[0].Priority); err != nil {
 				stop()
 				return Result{}, nil, fmt.Errorf("%s: sending the goal: %w", sc.Name, err)
@@ -238,11 +246,11 @@ func RunScenario(ctx context.Context, sc *Scenario, coord Coordinator, opts RunO
 		if len(pending) == 0 && allAnswered(ctx, w) {
 			break
 		}
-		time.Sleep(min(w.Unit()/2, 250*time.Millisecond))
+		sleepCtx(ctx, min(w.Unit()/2, 250*time.Millisecond))
 	}
 	stop()
 	w.Stop()
-	r := &Run{Scenario: sc, World: w, Start: start, End: time.Now(), Goals: w.Goals(), Events: w.Events(), fakes: fakeNames, Forks: map[string]string{}}
+	r := &Run{Scenario: sc, World: w, Start: start, End: w.now(), Goals: w.Goals(), Events: w.Events(), fakes: fakeNames, Forks: map[string]string{}}
 	if r.Messages, err = w.Messages(ctx); err != nil {
 		return Result{}, nil, err
 	}
