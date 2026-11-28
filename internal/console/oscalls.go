@@ -150,7 +150,7 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 			}
 			scoped.CredentialAudit = func(origin, method, rule string, status int) {
 				raw, _ := json.Marshal(map[string]any{"origin": origin, "method": method, "path_template": rule, "status": status})
-				b.osCredentialAudit(in.Page, start, raw)
+				b.osCredentialAudit(start, raw)
 			}
 		}
 		if !b.osAllowed(w, r, permissionIn) {
@@ -158,7 +158,9 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 		}
 
 		v, err := oscap.Call(r.Context(), &scoped, in.Name, in.Args)
-		b.osLog(in, "", start, err)
+		if auth.Credential == "" {
+			b.osLog(in, "", start, err)
+		}
 		if err == nil && in.Name == "ssh.profiles" && b.Local != nil && b.Store != nil {
 			go b.reconcileActionHosts()
 		}
@@ -304,7 +306,7 @@ func (b *Backend) osAllowed(w http.ResponseWriter, r *http.Request, in osCallIn)
 }
 
 // osCredentialAudit contains only destination, method, granted path template and status.
-func (b *Backend) osCredentialAudit(page osPage, start time.Time, record json.RawMessage) {
+func (b *Backend) osCredentialAudit(start time.Time, record json.RawMessage) {
 	if b.Local == nil || b.Local.Home == "" {
 		return
 	}

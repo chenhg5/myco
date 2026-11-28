@@ -166,6 +166,8 @@ var TemplatePermissions = []string{"send", "download"}
 // files.delete, exec (commands, ending processes), screen, microphone, speech,
 // clipboard (reading it), notify, system, network (net.fetch, to the hosts in
 // "net"), ssh, database, proxy, browser (dedicated browser profiles).
+// The retired codehost declaration remains readable solely to show old pages an upgrade path.
+// No forge capability is registered or executed.
 var TemplateOSGroups = []string{"files", "files.write", "files.delete", "exec", "screen", "microphone", "speech", "clipboard", "notify", "system", "network", "ssh", "database", "proxy", "browser", "credentials", "codehost"}
 
 // netHost is a host a manifest's "net" names: a DNS name or an IP address,
