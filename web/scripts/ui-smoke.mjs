@@ -4720,6 +4720,22 @@ async function runMatrix(browser, size, scheme) {
         const d = document.querySelector(".conv-detail");
         return !!d && d.querySelectorAll(".trace.is-live, .trace.is-waiting").length === 0;
       }, null, { timeout: 30_000 });
+      // An answer with no run above it (a cloud session, 只看进度) sits
+      // right under your bubble: it keeps clear of the bubble's floating
+      // time and copy button.
+      const clear = await page.evaluate(() => {
+        const m = [...document.querySelectorAll(".conv-detail .conv-msg.is-me:not(.is-system)")].pop();
+        if (!m) return null;
+        const bare = document.createElement("div");
+        bare.className = "conv-msg is-agent";
+        bare.textContent = "一条紧跟在你气泡下面、没有过程的回答";
+        m.after(bare);
+        m.querySelector(".conv-msg-meta")?.classList.remove("is-shown");
+        const gap = bare.getBoundingClientRect().top - m.querySelector(".conv-msg-meta").getBoundingClientRect().bottom;
+        bare.remove();
+        return gap;
+      });
+      if (clear !== null && clear < 0) throw new Error(`没有过程的回答压到了气泡下面的时间和复制按钮上（差 ${clear}px）`);
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
