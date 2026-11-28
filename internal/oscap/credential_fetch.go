@@ -186,7 +186,7 @@ func credentialFetch(ctx context.Context, e *Env, id, path string, query map[str
 	}
 	encoding := "utf8"
 	text := string(raw)
-	if response == "base64" || !utf8.Valid(raw) {
+	if !(response == "text" || response != "base64" && isText(res.Header.Get("Content-Type")) && utf8.Valid(raw)) {
 		encoding = "base64"
 		text = base64.StdEncoding.EncodeToString(raw)
 	}

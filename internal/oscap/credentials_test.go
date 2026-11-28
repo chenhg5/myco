@@ -215,3 +215,23 @@ func TestCredentialLimitsAndPrivateDNS(t *testing.T) {
 		t.Fatal("private DNS rebinding accepted")
 	}
 }
+
+func TestCredentialFetchPreservesNetworkResponseEncoding(t *testing.T) {
+	e := credentialTestEnv(t)
+	c := credentialTestStore(t, e)
+	old := credentialTransport
+	t.Cleanup(func() { credentialTransport = old })
+	credentialTransport = credentialTestTransport(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/octet-stream"}}, Body: io.NopCloser(strings.NewReader("binary-ascii"))}, nil
+	})
+	for _, fixture := range []struct{ response, encoding, body string }{{"auto", "base64", "YmluYXJ5LWFzY2lp"}, {"text", "utf8", "binary-ascii"}} {
+		result, err := credentialTestCall(t, e, "net.fetch", map[string]any{"credential": c.ID, "path": "/user", "response": fixture.response})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := result.(map[string]any)
+		if out["encoding"] != fixture.encoding || out["body"] != fixture.body {
+			t.Fatal("authenticated and ordinary network response semantics differ", out)
+		}
+	}
+}

@@ -78,3 +78,29 @@ func TestCredentialHostConfirmationAndIdentityBoundary(t *testing.T) {
 		t.Fatal("old bridge remained available", status)
 	}
 }
+
+// Owner-configured services use per-host network consent, not a fixed public
+// service list that would silently exclude private/self-hosted destinations.
+func TestCredentialConfiguredServerRequiresExactNetworkConsent(t *testing.T) {
+	b := &Backend{}
+	g := b.grants()
+	page := osPage{Hub: "workspace", ID: "page"}
+	g.decl[osKey(page.Hub, page.ID)] = osDecl{known: true, app: true, declares: true, os: []string{"credentials", "network"}, at: time.Now()}
+	p := g.perm(page.Hub, page.ID)
+	p.once["network"] = true
+	request := func(host string) osCallIn {
+		raw, _ := json.Marshal(map[string]string{"url": "https://" + host + "/api/user"})
+		return osCallIn{Name: "net.fetch", Page: page, Args: raw}
+	}
+	consent, err := b.osCheck(t.Context(), request("127.0.0.1:8443"))
+	if err != nil || consent == nil || consent.Host != "127.0.0.1:8443" {
+		t.Fatal("configured private server cannot request exact consent", consent, err)
+	}
+	p.onceHosts["127.0.0.1:8443"] = true
+	if consent, err := b.osCheck(t.Context(), request("127.0.0.1:8443")); err != nil || consent != nil {
+		t.Fatal("confirmed server refused", consent, err)
+	}
+	if consent, err := b.osCheck(t.Context(), request("127.0.0.2:8443")); err != nil || consent == nil || consent.Host != "127.0.0.2:8443" {
+		t.Fatal("one server approval expanded to another", consent, err)
+	}
+}
