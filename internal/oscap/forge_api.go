@@ -119,6 +119,7 @@ type forgeItem struct {
 	State    string   `json:"state"`
 	Author   string   `json:"author"`
 	Updated  string   `json:"updated"`
+	Created  string   `json:"created,omitempty"`
 	Labels   []string `json:"labels"`
 	Comments int      `json:"comments"`
 	Draft    bool     `json:"draft"`
@@ -137,16 +138,18 @@ type forgeFileDiff struct {
 	Patch  string `json:"patch"`
 }
 type forgeRequest struct {
-	Account string `json:"account"`
-	Action  string `json:"action"`
-	Kind    string `json:"kind"`
-	Repo    string `json:"repo"`
-	Project string `json:"project"`
-	Scope   string `json:"scope"`
-	State   string `json:"state"`
-	Search  string `json:"search"`
-	Page    int    `json:"page"`
-	Number  int    `json:"number"`
+	Account string        `json:"account"`
+	Action  string        `json:"action"`
+	Kind    string        `json:"kind"`
+	Repo    string        `json:"repo"`
+	Project string        `json:"project"`
+	Scope   string        `json:"scope"`
+	State   string        `json:"state"`
+	Search  string        `json:"search"`
+	Page    int           `json:"page"`
+	Number  int           `json:"number"`
+	Filters *forgeFilters `json:"filters,omitempty"`
+	Ref     string        `json:"ref,omitempty"`
 }
 
 var forgeRepoPattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)+$`)
@@ -190,8 +193,8 @@ func forgeQuery(ctx context.Context, e *Env, args json.RawMessage, _ Emit) (any,
 	if in.State == "" {
 		in.State = "open"
 	}
-	if in.State != "open" && in.State != "closed" && in.State != "all" {
-		return nil, errf(CodeInvalid, "choose open, closed or all")
+	if in.State != "open" && in.State != "closed" && in.State != "all" && in.State != "merged" {
+		return nil, errf(CodeInvalid, "choose open, closed, merged or all")
 	}
 	if in.Scope == "" {
 		in.Scope = "created"
@@ -208,6 +211,8 @@ func forgeQuery(ctx context.Context, e *Env, args json.RawMessage, _ Emit) (any,
 	switch in.Action {
 	case "repos":
 		return forgeRepos(ctx, p, t, in)
+	case "branches", "commits":
+		return forgeHistory(ctx, p, t, in)
 	case "list":
 		return forgeItems(ctx, p, t, in)
 	case "detail", "comments", "files":
@@ -216,7 +221,7 @@ func forgeQuery(ctx context.Context, e *Env, args json.RawMessage, _ Emit) (any,
 		}
 		return forgeDetail(ctx, p, t, in)
 	}
-	return nil, errf(CodeInvalid, "choose repos, list, detail, comments or files")
+	return nil, errf(CodeInvalid, "choose repos, list, detail, comments, files, branches or commits")
 }
 func forgePage(in forgeRequest) url.Values {
 	return url.Values{"page": {strconv.Itoa(in.Page)}, "per_page": {"50"}}
@@ -254,6 +259,9 @@ func forgeRepos(ctx context.Context, p forgeAccount, t string, in forgeRequest) 
 	return map[string]any{"items": out, "has_more": more, "page": in.Page}, nil
 }
 func forgeItems(ctx context.Context, p forgeAccount, t string, in forgeRequest) (any, error) {
+	if err := forgeValidateFilters(p, in); err != nil {
+		return nil, err
+	}
 	if in.Scope == "repo" && in.Repo == "" {
 		return nil, errf(CodeInvalid, "select a repository")
 	}
@@ -288,9 +296,10 @@ func forgeItems(ctx context.Context, p forgeAccount, t string, in forgeRequest) 
 		if in.Search != "" {
 			query = append(query, strconv.Quote(in.Search))
 		}
-		q.Set("q", strings.Join(query, " "))
 		q.Set("sort", "updated")
 		q.Set("order", "desc")
+		forgeGitHubFilters(q, &query, in)
+		q.Set("q", strings.Join(query, " "))
 		var data struct {
 			Items      []map[string]any `json:"items"`
 			Incomplete bool             `json:"incomplete_results"`
@@ -315,9 +324,14 @@ func forgeItems(ctx context.Context, p forgeAccount, t string, in forgeRequest) 
 		q.Set("sort", "desc")
 		scope := map[string]string{"created": "created_by_me", "assigned": "assigned_to_me", "review": "reviews_for_me", "repo": "all"}[in.Scope]
 		q.Set("scope", scope)
+		if in.Scope == "review" {
+			q.Set("scope", "all")
+			q.Set("reviewer_username", p.Login)
+		}
 		if in.Search != "" {
 			q.Set("search", in.Search)
 		}
+		forgeGitLabFilters(q, in)
 		more, err = forgeGet(ctx, p, t, path, q, &raw)
 	} else {
 		if in.Repo != "" {
@@ -347,6 +361,7 @@ func forgeItems(ctx context.Context, p forgeAccount, t string, in forgeRequest) 
 		if in.Search != "" {
 			q.Set("q", in.Search)
 		}
+		forgeGiteaFilters(q, in)
 		more, err = forgeGet(ctx, p, t, path, q, &raw)
 	}
 	if err != nil {
@@ -448,7 +463,7 @@ func boolean(r map[string]any, key string) bool       { v, _ := r[key].(bool); r
 func obj(r map[string]any, key string) map[string]any { v, _ := r[key].(map[string]any); return v }
 func num(r map[string]any, key string) int            { v, _ := r[key].(float64); return int(v) }
 func forgeNormalize(p forgeAccount, r map[string]any, in forgeRequest) forgeItem {
-	item := forgeItem{Number: num(r, "number"), Repo: in.Repo, Kind: in.Kind, Title: str(r, "title"), Body: str(r, "body"), URL: str(r, "html_url"), State: str(r, "state"), Author: str(obj(r, "user"), "login"), Updated: str(r, "updated_at"), Comments: num(r, "comments"), Draft: boolean(r, "draft"), Labels: []string{}}
+	item := forgeItem{Number: num(r, "number"), Repo: in.Repo, Kind: in.Kind, Title: str(r, "title"), Body: str(r, "body"), URL: str(r, "html_url"), State: str(r, "state"), Author: str(obj(r, "user"), "login"), Updated: str(r, "updated_at"), Created: str(r, "created_at"), Comments: num(r, "comments"), Draft: boolean(r, "draft"), Labels: []string{}}
 	if repository := obj(r, "repository"); str(repository, "full_name") != "" {
 		item.Repo = str(repository, "full_name")
 	}

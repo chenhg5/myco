@@ -2172,4 +2172,10 @@ and returns `{confirmation,provider,host,source,private_network}`. Connect takes
 The one-use confirmation binds the workspace sign-in, page and immutable server
 origin for two minutes. The token is entered in the host dialog; it is never a
 page bridge argument. See [Code hosts](app-os.md#code-hosts-desktop) for the
-read-only `forge.accounts` and `forge.query` page contracts and network policy.
+read-only `forge.accounts`, `forge.query` and optional `forge.filters` page contracts
+and network policy. Optional `forge.history` negotiates read-only repository
+`branches` / `commits` queries with a branch or SHA ref; credentials stay local.
+`forge.filters` negotiates version 1 of structured query filters
+(`author`, `label`, `updated_after`, `draft`, `sort`); provider support is explicit,
+and filters run on the provider before pagination. This is a desktop page bridge,
+not a Hub credential or agent action API. See `docs/app-os.md` for the field matrix.

@@ -539,7 +539,7 @@ active browser windows or controlled profiles return `busy` and stay open.
 
 ## Code hosts (desktop)
 
-The `codehost` OS permission group provides `forge.accounts` and `forge.query`.
+The `codehost` OS permission group provides `forge.accounts`, `forge.query` and optional `forge.filters` / `forge.history`.
 This is a read-only page bridge, not an agent capability. An interactive page
 with an isolated origin can connect GitHub, GitLab (including self-hosted HTTPS
 servers), or Gitea / Forgejo. Credentials stay in the system credential store,
@@ -568,6 +568,42 @@ redirects, a 20-second deadline and a 4 MiB response cap. Provider error bodies
 and credentials are never logged or returned. Raw HTML/images in descriptions
 are not executed. Errors include `no_credentials`, `permission_denied`,
 `rate_limited`, `network_error`, `invalid_response` and `provider_error`.
+
+Feature-detect `forge.filters` before sending an optional `filters` object on
+`forge.query` list calls. It returns `{version:1,providers:{github:[...],gitlab:[...],gitea:[...]}}`.
+GitHub/GitLab advertise `author`, `label`, `updated_after`, `draft`, `sort`,
+and `merged`; Gitea advertises `author_repo` and `updated_after`. The fields are:
+
+- `author`: exact username. In `created` scope it must match the connected login;
+  choose a repository (`scope:repo`) to view another author's items, or combine
+  the author with `assigned`/`review`. Gitea requires a repository.
+- `label`: one exact label name (at most 100 bytes, no comma); GitHub/GitLab only.
+- `updated_after`: inclusive UTC date `YYYY-MM-DD` (Gitea's `since` is exclusive).
+- `draft`: `only` or `exclude`, for GitHub/GitLab pull requests.
+- `sort`: `updated_desc`, `updated_asc`, `created_desc` or `created_asc`, for
+  GitHub/GitLab. The default is recently updated. Items include optional `created`.
+
+The optional `merged` state is only available for GitHub/GitLab pull requests.
+Closed includes merged on GitHub; GitLab distinguishes closed from merged.
+Conditions are combined at the provider before 50-item pagination. Unsupported
+combinations return `filter_unavailable`; invalid fields return `invalid_argument`
+before network access. Older hosts continue to accept the baseline query without
+`filters`; do not hide a failure by filtering only the currently loaded page.
+Repository lists are paged; an exact path may be supplied even when it is not in
+the currently loaded repository list. Selecting a repository does not authorize
+access beyond the connected account's provider permissions.
+
+Feature-detect `forge.history` before using `forge.query` actions `branches` and
+`commits`. It returns `{version:1,actions:["branches","commits"]}`. Both actions
+require `account` and `repo`, and use the same 50-item pagination and fixed HTTPS
+GET policy. `commits` optionally takes `ref` (a branch name or commit SHA, at most
+255 bytes); leaving it empty selects the provider's default branch. Branches
+return `{name,sha}`. Commits return `{sha,parents,subject,message,author,date,url}`.
+No separate email fields, file contents or credentials are included. GitHub fine-grained tokens
+also need repository **Contents: read** for history. A selected branch's reachable
+history is not the entire repository/fork network; unloaded parents must remain
+visible as incomplete rather than fabricated connections. The official app caps
+loaded history and branch metadata at 500 entries each.
 
 No merge, comment, edit, close, arbitrary HTTP, shell or agent operations are
 exposed. Reviews, inline comments and check runs can be viewed on the original

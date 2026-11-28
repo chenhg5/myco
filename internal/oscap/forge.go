@@ -19,6 +19,8 @@ import (
 
 func init() {
 	register(&Cap{Name: "forge.accounts", About: "Connect this page to GitHub, GitLab or Gitea using local credentials", Fn: forgeAccounts},
+		&Cap{Name: "forge.history", About: "Describe read-only repository history support", Fn: forgeHistoryCapabilities},
+		&Cap{Name: "forge.filters", About: "Describe server-side code-host query filters", Fn: forgeFilterCapabilities},
 		&Cap{Name: "forge.query", About: "Read repositories, pull requests, issues and discussions from a connected account", Fn: forgeQuery})
 }
 
