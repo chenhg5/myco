@@ -9,6 +9,8 @@
 //   cd web && npm run test:ui
 //   npm run test:ui -- --only 单聊            # just the steps whose name has 单聊
 //   npm run test:ui -- --combo 1200-light     # one size and theme (or 760-dark, ...)
+//   npm run test:ui -- --language-gate      # required macOS WebKit language checks, no retry
+//   npm run test:ui -- --browser webkit       # use WebKit for selected UI steps
 //   npm run test:ui -- --serial               # one after another (easier to read)
 //   npm run test:ui -- --shard 2/3            # the second third of the steps (CI runs the parts in parallel)
 //   npm run test:ui -- --write-weights        # after a full run, save each step's time for balancing the parts
@@ -69,7 +71,12 @@ function flag(name) {
   });
   return out.flatMap((x) => x.split(",")).map((x) => x.trim()).filter(Boolean);
 }
-const ONLY = flag("only");
+const LANGUAGE_GATE = process.argv.includes("--language-gate");
+const LANGUAGE_STEPS = ["七种语言 · 首次使用和连接", "设置 · 七种语言核心流程"];
+const ONLY = LANGUAGE_GATE ? LANGUAGE_STEPS : flag("only");
+const BROWSER = flag("browser")[0] || (LANGUAGE_GATE ? "webkit" : "chromium");
+if (!["chromium", "webkit"].includes(BROWSER)) throw Error(`Unsupported UI browser: ${BROWSER}`);
+const NO_RETRY = LANGUAGE_GATE || process.argv.includes("--no-retry");
 // --shard i/n: the i-th of n consecutive parts of each window's steps (steps
 // build on the ones before them, so a part keeps its run of them in order).
 const SHARD = (() => {
@@ -81,6 +88,9 @@ const SHARD = (() => {
 })();
 const COMBOS = flag("combo");
 const SERIAL = process.argv.includes("--serial");
+if (LANGUAGE_GATE && (process.platform !== "darwin" || BROWSER !== "webkit" || SHARD || COMBOS.length || flag("only").length)) {
+  throw Error("The language gate requires macOS WebKit, both language steps and all four size/theme combinations");
+}
 
 // What each running size and theme has of its own: its mock backend, the
 // App's address, its log and the step it is on.
@@ -191,7 +201,7 @@ async function loadPlaywright() {
   const tryImport = async (specifier, label) => {
     try {
       const mod = await import(specifier);
-      return { label, chromium: mod.chromium ?? mod.default?.chromium };
+      return { label, browserType: mod[BROWSER] ?? mod.default?.[BROWSER] };
     } catch (err) {
       attempts.push(`${label}: ${err.code || err.message}`);
       return null;
@@ -218,7 +228,7 @@ async function loadPlaywright() {
       try {
         const resolved = fromRoot.resolve(pkg);
         const mod = await import(pathToFileURL(resolved).href);
-        return { label: `${pkg} (${resolved})`, chromium: mod.chromium ?? mod.default?.chromium };
+        return { label: `${pkg} (${resolved})`, browserType: mod[BROWSER] ?? mod.default?.[BROWSER] };
       } catch (err) {
         attempts.push(`${pkg} under ${root}: ${err.code || err.message}`);
       }
@@ -525,17 +535,32 @@ async function pcMore(page, item) {
   await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: item, exact: true }));
 }
 
-// Pick through the actual menu: selectOption bypasses WebKit's native popup.
-async function selectLanguage(page, language) {
-  const names = { zh: "简体中文", "zh-Hant": "繁體中文", en: "English", ja: "日本語", ko: "한국어", es: "Español", "pt-BR": "Português (Brasil)" };
+// Pointer events must exercise the real control. selectOption skips the native
+// WebKit popup lifecycle that crashed when a language remount removed it.
+async function languageClick(page, locator) {
+  if (await locator.isDisabled()) throw Error("Language control unexpectedly disabled");
+  const box = await locator.boundingBox();
+  if (!box) throw Error("Language control is not visible");
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+}
+async function openLanguageMenu(page) {
   const picker = page.getByTestId("language-select");
+  await picker.waitFor({state:"visible"});
+  if (await picker.evaluate(el => el.tagName === "SELECT")) {
+    throw Error("Native language select is forbidden: WebKit popup callbacks can outlive the language remount");
+  }
   await picker.scrollIntoViewIfNeeded();
   await page.waitForTimeout(300);
-  await clickVisible(page, picker);
+  await languageClick(page, picker);
   const items = page.locator(".language-menu [role=menuitem]");
   await items.last().waitFor();
   if (await items.count() !== 8) throw Error("Expected System plus seven languages");
-  await clickVisible(page, language === "system" ? items.first() : page.locator(".language-menu").getByRole("menuitem", {name:names[language],exact:true}));
+  return items;
+}
+async function selectLanguage(page, language) {
+  const names = { zh: "简体中文", "zh-Hant": "繁體中文", en: "English", ja: "日本語", ko: "한국어", es: "Español", "pt-BR": "Português (Brasil)" };
+  const items = await openLanguageMenu(page);
+  await languageClick(page, language === "system" ? items.first() : page.locator(".language-menu").getByRole("menuitem", {name:names[language],exact:true}));
 }
 
 async function menuPick(page, row, item) {
@@ -620,6 +645,10 @@ async function runMatrix(browser, size, scheme) {
     try {
       await fn();
     } catch (first) {
+      if (NO_RETRY) {
+        await page.screenshot({ path: path.join(OUT, `failed-${size.width}x${size.height}-${scheme}-${no}.png`) }).catch(() => undefined);
+        throw first;
+      }
       // Once more from a freshly loaded App: a pass then is a flake, noted
       // but not failing the run; a second failure is the real thing.
       const where = String(first?.stack || "").split("\n").find((l) => l.includes("ui-smoke.mjs:"))?.trim().replace(/^at\s+/, "") || "";
@@ -652,6 +681,12 @@ async function runMatrix(browser, size, scheme) {
         const preview=await browser.newContext({viewport:size,colorScheme:scheme,deviceScaleFactor:Number(process.env.UI_SMOKE_SCALE)||1});
         const check=await preview.newPage();const errors=[];
         check.on("pageerror",error=>errors.push(error.stack||String(error)));
+        check.on("crash",()=>errors.push("Language page crashed"));
+        check.on("console",message=>{
+          // An older host can omit preferences; browser storage is the supported fallback.
+          const legacyPreferences404=/\/app\/preferences$/.test(message.location().url||"") && message.text().includes("404");
+          if(message.type()==="error" && !legacyPreferences404)errors.push(`${message.text()} (${message.location().url||"unknown resource"})`);
+        });
         await preview.route("**/app/hubs",route=>route.fulfill({status:200,contentType:"application/json",body:"[]"}));
         await preview.addInitScript(({scheme})=>localStorage.setItem("myco-theme",scheme),{scheme});
         try {
@@ -661,8 +696,7 @@ async function runMatrix(browser, size, scheme) {
           // Traditional spellings are catalog-authored, not inferred from glyph rules.
           const wanted=language==="zh-Hant"?catalog["在这台电脑上开始"]:start;
           if(await check.locator(".wl-start").innerText()!==wanted)throw new Error(`Welcome action is not localized: ${language}`);
-          await clickVisible(check,check.getByTestId("language-select"));
-          if(await check.locator(".language-menu [role=menuitem]").count()!==8)throw new Error("Missing language options on Welcome");
+          await openLanguageMenu(check);
           await check.keyboard.press("Escape");
           await settle(check);
           await shot(check,size,scheme,`welcome-language-${language}`);
@@ -673,6 +707,9 @@ async function runMatrix(browser, size, scheme) {
           await check.keyboard.press("Escape");
           if(await check.evaluate(w=>document.documentElement.scrollWidth>w+1,size.width))throw new Error(`Welcome overflow in ${language}`);
           if(errors.length)throw new Error(errors.join("\n"));
+        } catch (error) {
+          await check.screenshot({path:path.join(OUT,`failed-${size.width}x${size.height}-${scheme}-language-${language}.png`)}).catch(()=>undefined);
+          throw error;
         } finally {await preview.close();}
       }
     });
@@ -683,7 +720,23 @@ async function runMatrix(browser, size, scheme) {
       const errors = [], nativeLanguages = [], outbound = [];
       const durable = {"myco-lang":"zh", "myco-theme":scheme};
       check.on("pageerror", error => errors.push(error.stack || String(error)));
+      check.on("crash", () => errors.push("Language page crashed"));
+      check.on("console",message=>{
+        const expectedPack503=/\/assets\/ko-[^/]+\.json$/.test(message.location().url||"") && message.text().includes("503");
+        if(message.type()==="error" && !expectedPack503)errors.push(`${message.text()} (${message.location().url||"unknown resource"})`);
+      });
       check.on("request", request => { if (!request.url().startsWith(r.base) && !request.url().startsWith("data:")) outbound.push(request.url()); });
+      // Focus reporting is unrelated to localization. WebKit blocks a fetch
+      // started by unload blur even with route.fulfill; stub only that bridge
+      // so deliberate reloads do not produce unload-policy console errors.
+      await preview.addInitScript(()=>{
+        const fetch=window.fetch.bind(window);
+        window.fetch=(input,init)=>{
+          const url=new URL(input instanceof Request ? input.url : String(input),location.href);
+          return url.origin===location.origin && url.pathname==="/app/notices/focus"
+            ? Promise.resolve(new Response(null,{status:204})) : fetch(input,init);
+        };
+      });
       await preview.route(/\/app\/preferences(?:\/import)?$/, async route => {
         if (route.request().method() !== "GET") Object.assign(durable,route.request().postDataJSON().values);
         await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({version:1,values:durable})});
@@ -708,14 +761,26 @@ async function runMatrix(browser, size, scheme) {
           // Start from Chinese navigation, then retain the open settings section.
           await go(check,"设置",narrow);
           await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
+          let navigatedToLanguage = false;
+          const onLanguageNavigate = frame => { if(frame === check.mainFrame()) navigatedToLanguage = true; };
+          check.on("framenavigated", onLanguageNavigate);
           await selectLanguage(check,language);
           await check.waitForFunction(l=>document.documentElement.lang===l, language==="zh"?"zh-CN":language);
           await check.locator(".app-settings-tab.active").filter({hasText:expected[language]}).waitFor();
           if(await check.getByTestId("language-select").getAttribute("data-value")!==language) throw new Error("The selected language was not retained");
           await check.waitForFunction(l=>localStorage.getItem("myco-lang")===l,language);
-          const overflow=await check.evaluate(w=>document.documentElement.scrollWidth>w+1,size.width);
-          if(overflow) throw new Error(`Horizontal overflow in ${language}`);
+          // WebKit includes clipped screen-reader text behind the dialog in
+          // document.scrollWidth. Check the visible translated pane itself.
+          const overflow=await check.evaluate(w=>{
+            const dialog=document.querySelector('[data-testid="settings-dialog"]');
+            const body=document.querySelector(".app-settings-body");
+            const rect=dialog.getBoundingClientRect();
+            return rect.left < -1 || rect.right > w+1 || body.scrollWidth > body.clientWidth+1;
+          },size.width);
+          if(overflow) throw new Error(`Settings overflow in ${language}`);
           await saved(language);
+          check.off("framenavigated", onLanguageNavigate);
+          if(navigatedToLanguage)throw Error("Selecting a language reloaded the page");
           await shot(check,size,scheme,`language-${language}`);
           await closeSettings(check);
           if(await check.locator(".conv-detail .md").first().innerText()!==original) throw new Error("Language selection changed the original message");
@@ -726,17 +791,14 @@ async function runMatrix(browser, size, scheme) {
           await check.keyboard.press(process.platform === "darwin" ? "Meta+," : "Control+,");
           await clickVisible(check,check.locator(".app-settings-tab",{hasText:expected[language]}));
           let navigated = false;
-          const onNavigate = () => { navigated = true; };
+          const onNavigate = frame => { if(frame === check.mainFrame()) navigated = true; };
           check.on("framenavigated", onNavigate);
           try {
             if(language === "zh-Hant") {
-              await check.getByTestId("language-select").scrollIntoViewIfNeeded();
-              await check.waitForTimeout(300);
-              await clickVisible(check,check.getByTestId("language-select"));
+              await openLanguageMenu(check);
               await check.keyboard.press("Escape");
               if(!await check.getByTestId("settings-dialog").isVisible())throw Error("Escape from the language menu closed Settings");
-              await clickVisible(check,check.getByTestId("language-select"));
-              await check.locator(".language-menu [role=menuitem]").first().waitFor();
+              await openLanguageMenu(check);
               await check.keyboard.press("ArrowDown");
               await check.keyboard.press("Enter");
             } else await selectLanguage(check,"zh");
@@ -768,10 +830,16 @@ async function runMatrix(browser, size, scheme) {
         await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
         await selectLanguage(check,"system");
         await check.waitForFunction(()=>document.documentElement.lang==="ja");
-        if(await check.getByTestId("language-select").getAttribute("data-value")!=="system")throw new Error("System selection lost");
+        await check.waitForFunction(()=>document.querySelector('[data-testid="language-select"]')?.getAttribute("data-value")==="system");
+        await saved("system");
+        await check.reload();await check.locator(".app-shell").waitFor();
+        if(await check.locator("html").getAttribute("lang")!=="ja" || await check.evaluate(()=>localStorage.getItem("myco-lang"))!=="system")throw new Error("System selection lost after reload");
         for(const l of Object.keys(expected)) if(!nativeLanguages.includes(l))throw new Error(`Native bridge missed ${l}`);
         if(errors.length)throw new Error(errors.join("\n"));
         if(outbound.length)throw new Error("UI localization made an external request: "+outbound.join(","));
+      } catch (error) {
+        await check.screenshot({path:path.join(OUT,`failed-${size.width}x${size.height}-${scheme}-language-settings.png`)}).catch(()=>undefined);
+        throw error;
       } finally {await preview.close();}
     });
 
@@ -9447,6 +9515,7 @@ async function runMatrix(browser, size, scheme) {
       const check = await preview.newPage();
       const errors = [];
       check.on("pageerror", error => errors.push(error.stack || String(error)));
+      check.on("crash", () => errors.push("Language page crashed"));
       await preview.addInitScript(() => {
         // A full WebView cache must never discard an avatar that the App saved.
         const set = Storage.prototype.setItem;
@@ -9736,12 +9805,12 @@ async function main() {
   const mockEntry = path.join(WEB, "mock", "app-server.mjs");
   await access(mockEntry);
 
-  const { label, chromium } = await loadPlaywright();
-  log(`  Playwright ${label}`);
+  const { label, browserType } = await loadPlaywright();
+  log(`  Playwright ${BROWSER}: ${label}${NO_RETRY ? "; retry disabled" : ""}`);
 
   let browser;
   try {
-    browser = await chromium.launch({
+    browser = await browserType.launch({
       headless: true,
       ...(process.env.UI_SMOKE_EXECUTABLE ? { executablePath: process.env.UI_SMOKE_EXECUTABLE } : {}),
     });
@@ -9794,6 +9863,16 @@ async function main() {
   }
 
   const failed = runs.filter((r) => !r.ok);
+  if (LANGUAGE_GATE) {
+    const complete = runs.length === 4 && runs.every(r => r.ok && r.flakes.length === 0 && LANGUAGE_STEPS.every(label => r.timings.some(t => t.label === label)));
+    const report = { version:1, platform:process.platform, browser:BROWSER, retry:false,
+      source_sha:execFileSync("git",["rev-parse","HEAD"],{cwd:WEB,encoding:"utf8"}).trim(),
+      ok:complete && problems.length === 0, languages:["zh","zh-Hant","en","ja","ko","es","pt-BR"],
+      matrices:runs.map(r=>({matrix:r.matrix,ok:r.ok,steps:r.timings.map(t=>t.label)})) };
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(path.join(OUT,"language-gate.json"),JSON.stringify(report,null,2)+"\n");
+    if(!complete) { process.exitCode=1; log("Language gate failed or did not cover every required matrix/step"); }
+  }
   // The slowest steps, to know where the time goes.
   const slow = runs.flatMap((r) => r.timings.map((t) => ({ ...t, matrix: r.matrix }))).sort((a, b) => b.ms - a.ms).slice(0, 6);
   if (slow.length) {
@@ -9824,6 +9903,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  if(LANGUAGE_GATE && process.exitCode === 1) return;
   log("全部页面截图完成。");
   reportProblems();
 }

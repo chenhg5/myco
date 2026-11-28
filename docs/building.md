@@ -182,3 +182,34 @@ commit count and hash, plus `-dirty` for tracked changes. This also works when
 the published tag is on a release branch rather than an ancestor of main.
 A source archive without Git uses `VERSION` directly. Explicit `make ...
 VERSION=vX.Y.Z` overrides this label, as the publishing workflow does.
+
+## Required language-switching gate
+
+The release-required `app-macos` CI job runs the focused language gate on macOS
+with Playwright WebKit before packaging the App. It always checks seven languages
+at both window widths and in both themes, without retrying a failed step. It uses
+mouse coordinates and keyboard events, checks switching back to Simplified Chinese,
+reload persistence, System selection, failed-pack recovery, native-menu language
+reporting and unchanged original messages. A missing matrix or step fails the gate.
+
+The picker must use the App menu rather than an HTML `select`: macOS system WebKit
+can crash when a native popup reports a selection after the language change has
+removed its control. Programmatic `selectOption` bypasses that native-popup path.
+The gate therefore also rejects a native language `select` before interacting.
+Playwright WebKit is a browser-engine check, not a replacement for testing the
+signed Wails preview on the current system WebKit after picker or native-menu changes.
+
+To run the same gate on a Mac after preparing the pinned app fixtures:
+
+```sh
+cd web
+npm ci
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save playwright@1.57.0
+npx playwright install webkit
+node scripts/ui-smoke.mjs --language-gate --browser webkit
+```
+
+`web/ui-smoke/language-gate.json` records the source SHA, engine, complete matrix
+and outcome; CI uploads it alongside timings and the first failing screenshot.
+The gate cannot be reduced with `--only`, `--combo` or `--shard`. Other local UI
+checks can select `--browser webkit` or disable retry with `--no-retry`.

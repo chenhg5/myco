@@ -3101,7 +3101,7 @@ const server = http.createServer(async (req, res) => {
   if (parts[0] === "app" && parts[1] === "ui-lang" && parts.length === 2) {
     if (method === "PUT") {
       const b = await readBody(req);
-      if (b?.lang !== "zh" && b?.lang !== "en") return fail(res, 400, "invalid_argument", "lang is zh or en");
+      if (!["zh", "zh-Hant", "en", "ja", "ko", "es", "pt-BR"].includes(b?.lang)) return fail(res, 400, "invalid_argument", "lang must be a supported UI language");
       state.uiLang = b.lang;
     }
     return send(res, 200, { lang: state.uiLang || "" });

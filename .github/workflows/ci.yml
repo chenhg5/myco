@@ -242,6 +242,42 @@ jobs:
           go-version-file: go.mod
       - name: vet and test the app
         run: go vet ./cmd/myco-app/ ./internal/console/ && go test ./cmd/myco-app/ ./internal/console/
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - id: language-apps
+        run: printf 'commit=%s\n' "$(node -p 'require("./apps.lock.json").commit')" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: myco-ai/apps
+          ref: ${{ steps.language-apps.outputs.commit }}
+          path: .cache/apps-source
+          persist-credentials: false
+      - name: Prepare pinned language fixtures
+        run: python3 scripts/prepare-apps.py --apps-dir .cache/apps-source/dist/official
+      - name: Language gate dependencies
+        timeout-minutes: 5
+        run: |
+          npm ci --prefix web
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --prefix web --no-save --no-package-lock --no-audit --no-fund playwright@1.57.0
+          web/node_modules/.bin/playwright install webkit
+      # This is inside the release-required app-macos job, never a skipped
+      # or advisory UI shard. Any first failure prevents a green release source.
+      - name: Language switching gate (macOS WebKit)
+        timeout-minutes: 8
+        run: node web/scripts/ui-smoke.mjs --language-gate --browser webkit
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: language-gate-macos
+          path: |
+            web/ui-smoke/language-gate.json
+            web/ui-smoke/timings.json
+            web/ui-smoke/flakes.json
+            web/ui-smoke/failed-*.png
+          retention-days: 14
       - name: build myco.app
         run: make app
       - name: the app binary runs
