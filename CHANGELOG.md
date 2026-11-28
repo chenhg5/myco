@@ -4,57 +4,91 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
-## v0.23.11
+## v0.23.12
 
 Brief release notes, generated from commit titles. Formal notes will follow.
-- App, CLI, Hub: ` Quota older than an hour reads as unknown, not ok ` (5cd636e3)
-- CLI: ` Status line keeps Claude Code's usage limits for quota ` (7f0ab0a4)
+- CLI: ` Runner concurrency: a setting made in the same clock tick wins; every change is written ` (dd1daf37)
+- App: ` Pin code-host identity scopes and validate repository segments ` (d3e45560)
+- App, Hub: ` Add private read-only code-host account bridge ` (b4c7ea5b)
+- App: ` Localize runner update notices across all App languages ` (9290c262)
+- App: ` App: project file quotas get their own Settings entry ` (820db674)
+- App: ` Describe automatic command-line updates and idle runner restarts in About ` (afc7bbd3)
+- App, Runner, CLI, Hub: ` Restart updated runners when idle and retain App upgrade results ` (6d2417c0)
+- App: ` App: back to what a project's right pane showed; no underline on a chat's name ` (d07090f7)
+- App, Hub: ` Add seven offline App languages with system selection and core flow translations ` (fc991171)
+- App: ` App: an answer right under your bubble keeps clear of its copy button ` (b5755d80)
+- Hub: ` One rule decides whether quota is current ` (7ad819f0)
+- App: ` App: channels list what is connected and offer the rest as tiles ` (eeb51b0a)
+
+1 additional production commits are listed in the comparison below.
 
 **中文**
 
 简要说明，直接列出提交原标题；正式说明稍后补充。
-- 桌面应用、命令行、Hub：` Quota older than an hour reads as unknown, not ok ` (5cd636e3)
-- 命令行：` Status line keeps Claude Code's usage limits for quota ` (7f0ab0a4)
+- 命令行：` Runner concurrency: a setting made in the same clock tick wins; every change is written ` (dd1daf37)
+- 桌面应用：` Pin code-host identity scopes and validate repository segments ` (d3e45560)
+- 桌面应用、Hub：` Add private read-only code-host account bridge ` (b4c7ea5b)
+- 桌面应用：` Localize runner update notices across all App languages ` (9290c262)
+- 桌面应用：` App: project file quotas get their own Settings entry ` (820db674)
+- 桌面应用：` Describe automatic command-line updates and idle runner restarts in About ` (afc7bbd3)
+- 桌面应用、任务执行器、命令行、Hub：` Restart updated runners when idle and retain App upgrade results ` (6d2417c0)
+- 桌面应用：` App: back to what a project's right pane showed; no underline on a chat's name ` (d07090f7)
+- 桌面应用、Hub：` Add seven offline App languages with system selection and core flow translations ` (fc991171)
+- 桌面应用：` App: an answer right under your bubble keeps clear of its copy button ` (b5755d80)
+- Hub：` One rule decides whether quota is current ` (7ad819f0)
+- 桌面应用：` App: channels list what is connected and offer the rest as tiles ` (eeb51b0a)
 
-https://github.com/myco-ai/myco/compare/fb680da6831d8d75ec670e9b2186cfa3f72d6d61...6e3f68e266a54d8b42f6b150eda6477c0e8f2eec
+另有 1 条生产提交，见下方完整比较。
+
+https://github.com/myco-ai/myco/compare/6e3f68e266a54d8b42f6b150eda6477c0e8f2eec...dd1daf374e3730a288039c770b0fd36325fbca1a
+
+## v0.23.11
+
+
+- Hub: a quota snapshot previously marked OK becomes unknown when its observation is over an hour old; usage windows are omitted after their reset time passes.
+- App: list and composer indicators stop showing stale quota usage, while quota details identify old observations and omit windows whose reset time has passed.
+- CLI and runner: a healthy runner-collected quota remains the reported value when status-line data is available, even if its weekly window has an older observation time.
+- CLI: joining myco configures Claude Code's status line to collect account usage limits when it runs, for inbox wait or the runner to report to the Hub; an existing status line keeps working.
+- CLI: uninstalling myco's Claude Code status line restores the previously configured line.
+
+**中文**
+
+- Hub：原本标为正常的配额快照，若观测时间已超过一小时，会按未知处理；用量窗口的重置时间过后不再展示该窗口。
+- 桌面应用：列表和输入区提示不再展示过期配额用量；配额详情会指出观测数据已过期，并隐藏重置时间已过的用量窗口。
+- 命令行和任务执行器：即使每周用量窗口的观测时间较早，只要执行器采集的配额数据仍有效，就不会被状态栏数据替换。
+- 命令行：加入 myco 时会配置 Claude Code 状态栏，在其运行时采集账号用量限制，供 inbox wait 或任务执行器上报至 Hub；原有状态栏命令仍可运行。
+- 命令行：卸载 myco 的 Claude Code 状态栏配置后，会恢复此前配置的状态栏命令。
 
 ## v0.23.10
 
-Brief release notes, generated from commit titles. Formal notes will follow.
-- App, Runner, CLI, Hub: ` Runner concurrency: default 10, changed live from the App or CLI ` (fb680da6)
-- App: ` App: a question is answered for the task it was asked on, and shows in time ` (7d7b9e6d)
-- App: ` App: help pictures load in the desktop App; English names; loading kept ` (e287db29)
-- App: ` Docs: a machine's access limit applies to running agents within seconds; web dist ` (f18eda55)
-- App: ` App: after Allow, Full is selectable once the runner says so; older runners say restart ` (2335385c)
-- Runner, CLI: ` Runner: the machine's access limit is read live, every run ` (84d50621)
-- App: ` Remove ellipsis from the set-goal menu label ` (4ee01acc)
-- Hub: ` Preserve original console sender permissions during reassignment ` (c0ffcb0b)
-- Hub: ` Prevent forwarding hidden private tasks through reassignment ` (a2869836)
-- App, Runner, CLI, Hub: ` Add task trees and atomic queued-task reassignment ` (187b7bcc)
-- CLI: ` Preserve fork batch recovery keys on network errors ` (7becf2ad)
-- App, Runner, CLI, Hub: ` Add managed agent session forks and safe retirement ` (6b1c727f)
 
-2 additional production commits are listed in the comparison below.
+- App and CLI: runner start --all and new service installs default to 10 concurrent agent sessions, up from 3; computer owners can change the limit live, and raising it starts waiting tasks without restarting the runner.
+- App: questions from an earlier task that is still open appear in time and can be answered on the task that asked them.
+- Desktop App: Help pictures load, and the “answer on its way” indicator stays visible longer after a run ends while its reply arrives.
+- App: Zhipu GLM, Qwen and Doubao show English names in the English interface; a new workspace without a custom name uses the App's language.
+- App and runner: with a newer runner, a changed computer access limit applies on the next agent turn; older runners require a restart.
+- App: “Set a goal” in the conversation menu no longer has an ellipsis.
+- Hub: task reassignment checks the original sender's access to private recipients and whether the coordinator can see the task.
+- CLI: view a task's delegated work and dependencies as a task tree.
+- CLI: when session copying fails, the error provides the batch key for retrying the same request.
+- CLI and Hub: create managed copies of a bound agent session on its computer.
+- CLI: view unfinished sent tasks on a board, with stale tasks first, and configure coordinator alerts.
+- CLI: view task outcomes and timings for a selected agent or project and time window.
 
 **中文**
 
-简要说明，直接列出提交原标题；正式说明稍后补充。
-- 桌面应用、任务执行器、命令行、Hub：` Runner concurrency: default 10, changed live from the App or CLI ` (fb680da6)
-- 桌面应用：` App: a question is answered for the task it was asked on, and shows in time ` (7d7b9e6d)
-- 桌面应用：` App: help pictures load in the desktop App; English names; loading kept ` (e287db29)
-- 桌面应用：` Docs: a machine's access limit applies to running agents within seconds; web dist ` (f18eda55)
-- 桌面应用：` App: after Allow, Full is selectable once the runner says so; older runners say restart ` (2335385c)
-- 任务执行器、命令行：` Runner: the machine's access limit is read live, every run ` (84d50621)
-- 桌面应用：` Remove ellipsis from the set-goal menu label ` (4ee01acc)
-- Hub：` Preserve original console sender permissions during reassignment ` (c0ffcb0b)
-- Hub：` Prevent forwarding hidden private tasks through reassignment ` (a2869836)
-- 桌面应用、任务执行器、命令行、Hub：` Add task trees and atomic queued-task reassignment ` (187b7bcc)
-- 命令行：` Preserve fork batch recovery keys on network errors ` (7becf2ad)
-- 桌面应用、任务执行器、命令行、Hub：` Add managed agent session forks and safe retirement ` (6b1c727f)
-
-另有 2 条生产提交，见下方完整比较。
-
-https://github.com/myco-ai/myco/compare/a1d7e27440a5abd4415cafc884d9e403d51b4dce...fb680da6831d8d75ec670e9b2186cfa3f72d6d61
+- 桌面应用和命令行：runner start --all 和新安装的后台服务默认可同时运行 10 个 Agent 会话，此前为 3 个；电脑所有者可实时调整上限，提高后等待的任务无需重启执行器即可开始。
+- 桌面应用：较早且仍未结束的任务所提出的问题会按时间显示，并可在发问的任务上作答。
+- 桌面应用：帮助图片可正常显示；执行结束后等待回复送达期间，“正在回复”提示会显示更久。
+- 桌面应用：英文界面中的智谱、通义和豆包显示英文名称；未自定义名称的新工作区会使用应用当前语言命名。
+- 桌面应用和任务执行器：使用新版执行器时，电脑访问权限上限的变更会在下一轮 Agent 执行时生效；旧版执行器仍需重启。
+- 桌面应用：对话菜单中的“设定目标”不再带省略号。
+- Hub：任务改派会核对原发送者对私有接收方的权限，以及协调者是否有权查看该任务。
+- 命令行：可用任务树查看任务派生的工作及其依赖关系。
+- 命令行：复制会话失败时，错误信息会给出批次标识，供重试同一请求。
+- 命令行和 Hub：可在原电脑上创建已绑定 Agent 会话的受管副本。
+- 命令行：可在看板查看尚未完成的已发送任务，过久未活动的任务排在前面，并可设置协调者提醒。
+- 命令行：可按选定的 Agent、项目和时间范围查看任务结果与耗时。
 
 ## v0.23.9
 
