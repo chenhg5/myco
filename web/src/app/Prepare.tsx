@@ -150,8 +150,8 @@ export function Prepare({ hubId, hubName, hubUrl, now, onDone }: {
             <div className="wl-card wl-sessions"><div className="wl-session is-skel"><span className="skel skel-line" style={{ width: "60%" }} /></div></div>
           ) : sessions.length === 0 ? (
             <div className="wl-card wl-none" data-testid="prepare-no-sessions">{L(
-              "这台电脑上还没有 Claude Code 或 Codex 的会话。进去以后，在「添加 agent」里可以新开一个。",
-              "No Claude Code or Codex sessions on this computer yet. Inside, Add agent starts a new one.",
+              "这台电脑上还没有 Claude Code 或 Codex 的会话。进去以后，在「新建会话」里可以新开一个。",
+              "No Claude Code or Codex sessions on this computer yet. Inside, New conversation starts a new one.",
             )}</div>
           ) : (
             <div className="wl-card wl-sessions-card">
@@ -203,7 +203,7 @@ export function Prepare({ hubId, hubName, hubUrl, now, onDone }: {
           {sessions && sessions.length > 0 ? <>{sessionsPart}{clisPart}</> : <>{clisPart}{sessionsPart}</>}
         </div>
         <footer className="wl-foot wl-prep-foot">
-          <span>{L("以后在「添加 agent」里随时能加。", "You can add more any time with Add agent.")}</span>
+          <span>{L("以后在「新建会话」里随时能加。", "You can add more any time with New conversation.")}</span>
           <div className="wl-prep-actions">
             <button type="button" className="app-btn" onClick={() => onDone(joinedSoFar)} disabled={!!busy}>{L("先跳过", "Skip for now")}</button>
             <button type="button" className="app-btn app-btn-primary wl-start" onClick={() => void go()} disabled={!!busy} data-testid="prepare-go">

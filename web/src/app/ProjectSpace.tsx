@@ -584,7 +584,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
         </button>
         </Fragment>
       ))}
-      <button type="button" className="sp-strip-face is-add" onClick={onAddAgent} aria-label={L("添加 agent", "Add an agent")} title={L("添加 agent", "Add an agent")}><Plus /></button>
+      <button type="button" className="sp-strip-face is-add" onClick={onAddAgent} aria-label={L("新建会话", "New conversation")} title={L("新建会话", "New conversation")}><Plus /></button>
       {stripMenu.element}
     </div>
   );
@@ -877,7 +877,7 @@ function HomeView({ hubId, hubName, project, coordinator, peer, rows, now, items
           <p>{project.goal || L("跟协调者说你想做什么，它会把活分给大家。", "Tell the coordinator what you want; it hands the work out.")}</p>
         </div>
         <span className="sp-head-tools">
-          <button type="button" className="app-btn app-btn-plain" onClick={onActivity} title={L("全部动态：成员之间的所有任务", "All activity: every task between the members")} aria-label={L("全部动态", "All activity")}>
+          <button type="button" className="app-btn app-btn-plain" onClick={onActivity} title={L("全部动态：会话之间的所有任务", "All activity: every task between the conversations")} aria-label={L("全部动态", "All activity")}>
             <Activity />
           </button>
           {onAbout && (
@@ -979,10 +979,10 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
           <h2 title={!activity && !loose ? project?.goal || undefined : undefined}>{activity ? L("全部动态", "All activity") : title}</h2>
           <p>
             {activity
-              ? L(E`「${title}」里所有成员之间的任务，留着回头查。`, E`Every task between the members of ${title}, to look back at.`)
+              ? L(E`「${title}」里所有会话之间的任务，留着回头查。`, E`Every task between the conversations in ${title}, to look back at.`)
               : loose
               ? L("直接找你的 agent 聊，不用先建项目。想让几个一起做成一件事时，再建个项目把它们放进去。", "Talk to your agents directly, no project needed. When several should work on one thing, start a project and put them in it.")
-              : project?.goal || L("给一个成员派活，看它们一起干。", "Give a member a task and watch them work together.")}
+              : project?.goal || L("给一个会话派活，看它们一起干。", "Give a conversation a task and watch them work together.")}
           </p>
         </div>
         {!loose && !activity && onAbout && (
@@ -1053,7 +1053,7 @@ function EmptyProject({ loose, onAddAgent, onAddWorkspace, onNewProject }: { loo
         ? L("用这台电脑上的 Claude Code、Codex 会话，或者发一句话给任何 AI，它就会自己加入。不用先建项目。", "Use a Claude Code or Codex session on this computer, or send one sentence to any AI and it joins by itself. No project needed.")
         : L("用这台电脑上的会话，或者发一句话给任何 AI，它就会自己加入。也可以先把一台电脑交给它们用，顺序随你。", "Use a session on this computer, or send one sentence to any AI and it joins by itself. You can also hand them a computer first; any order works.")}</p>
       <div className="sp-empty-actions">
-        <button type="button" className="app-btn app-btn-primary" onClick={onAddAgent}><Plus />{L("添加 agent", "Add an agent")}</button>
+        <button type="button" className="app-btn app-btn-primary" onClick={onAddAgent}><Plus />{L("新建会话", "New conversation")}</button>
         {!loose && onAddWorkspace && <button type="button" className="app-btn" onClick={onAddWorkspace}><Plus />{L("加一个终端", "Add a terminal")}</button>}
       </div>
       {loose && onNewProject && (
@@ -1342,7 +1342,7 @@ function Composer({ hubId, project, agents, onSending, onSent, onCall }: {
                 checked: r.st.agent.name === recipient,
                 onSelect: () => pick(r.st.agent.name),
               })),
-            ])} title={rec ? L(E`只有 ${nodeName(rec.st.agent, rec.hub)} 会收到这条，其他成员看得到但不会动手。点一下换一个`, E`Only ${nodeName(rec.st.agent, rec.hub)} gets this; the others see it but won't act on it. Click to change`) : L("换一个收件人", "Change who gets it")}>
+            ])} title={rec ? L(E`只有 ${nodeName(rec.st.agent, rec.hub)} 会收到这条，其他会话看得到但不会动手。点一下换一个`, E`Only ${nodeName(rec.st.agent, rec.hub)} gets this; the other conversations see it but won't act on it. Click to change`) : L("换一个收件人", "Change who gets it")}>
               <span className="sp-to-label">{L("发给", "To")}</span>
               {rec && <Avatar agent={rec.st.agent} size={16} badge={false} />}
               <span className="sp-to-name">{rec ? nodeName(rec.st.agent, rec.hub) : ""}</span>
@@ -1534,14 +1534,14 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
   };
   if (folded) {
     return (
-      <aside className="sp-side is-folded" aria-label={L("成员", "Members")}>
-        <button type="button" className="sp-side-fold" onClick={() => onFold(false)} title={L("展开成员", "Show members")} aria-label={L("展开成员", "Show members")}>
+      <aside className="sp-side is-folded" aria-label={L("会话", "Conversations")}>
+        <button type="button" className="sp-side-fold" onClick={() => onFold(false)} title={L("展开会话", "Show conversations")} aria-label={L("展开会话", "Show conversations")}>
           <PanelRightOpen />
         </button>
         {/* (folded too: groups, and how they show) */}
         {groups && (groups.canEdit || showGroups) && (
           <button type="button" className="sp-side-fold" data-testid="member-groups-menu-folded" onClick={(e) => styleMenu(e.currentTarget)}
-            title={L("成员分组", "Member groups")} aria-label={L("成员分组", "Member groups")}><MoreHorizontal /></button>
+            title={L("会话分组", "Conversation groups")} aria-label={L("会话分组", "Conversation groups")}><MoreHorizontal /></button>
         )}
         {coordRow && face(coordRow)}
         {inGroupOrder(others, groups).map((g, i) => (
@@ -1550,7 +1550,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
             {g.rows.map(face)}
           </Fragment>
         ))}
-        <button type="button" className="sp-face is-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
+        <button type="button" className="sp-face is-add" onClick={onAddAgent} title={L("新建会话", "New conversation")} aria-label={L("新建会话", "New conversation")}><Plus /></button>
         <span className="sp-face-gap" aria-hidden />
         {workspaces.map(face)}
         <button type="button" className="sp-face is-add" onClick={onAddWorkspace} title={L("加一个终端", "Add a terminal")} aria-label={L("加一个终端", "Add a terminal")}><Plus /></button>
@@ -1607,24 +1607,24 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
     );
   };
   return (
-    <aside className="sp-side" aria-label={L("成员", "Members")}>
+    <aside className="sp-side" aria-label={L("会话", "Conversations")}>
       <div className="sp-side-group">
         <div className="sp-side-title">
-          <span><Users />{L(E`成员 ${agents.length}`, E`Members ${agents.length}`)}</span>
+          <span><Users />{L(E`会话 ${agents.length}`, E`Conversations ${agents.length}`)}</span>
           <span className="sp-side-tools">
-            <button type="button" className="sp-side-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
+            <button type="button" className="sp-side-add" onClick={onAddAgent} title={L("新建会话", "New conversation")} aria-label={L("新建会话", "New conversation")}><Plus /></button>
             {groupsNeedUpgrade && !groups && (
-              <button type="button" className="sp-side-add" data-testid="member-groups-menu" title={L("分组", "Groups")} aria-label={L("成员分组", "Member groups")}
+              <button type="button" className="sp-side-add" data-testid="member-groups-menu" title={L("分组", "Groups")} aria-label={L("会话分组", "Conversation groups")}
                 onClick={(e) => menu.openUnder(e.currentTarget, [
-                  { header: L("成员分组", "Member groups") },
+                  { header: L("会话分组", "Conversation groups") },
                   { label: L("要先把工作区升级到 v0.21.34 或更新", "Upgrade the workspace to v0.21.34 or later first"), disabled: true, onSelect: () => undefined },
                 ])}><MoreHorizontal /></button>
             )}
             {groups && (groups.canEdit || showGroups) && (
               <button type="button" className="sp-side-add" data-testid="member-groups-menu" onClick={(e) => styleMenu(e.currentTarget)}
-                title={L("分组", "Groups")} aria-label={L("成员分组", "Member groups")}><MoreHorizontal /></button>
+                title={L("分组", "Groups")} aria-label={L("会话分组", "Conversation groups")}><MoreHorizontal /></button>
             )}
-            <button type="button" className="sp-side-add" onClick={() => onFold(true)} title={L("收起成员，只留头像", "Fold to faces")} aria-label={L("收起成员", "Fold members")}><PanelRightClose /></button>
+            <button type="button" className="sp-side-add" onClick={() => onFold(true)} title={L("收起会话，只留头像", "Fold to faces")} aria-label={L("收起会话", "Fold conversations")}><PanelRightClose /></button>
           </span>
         </div>
         {showGroups ? (
@@ -1637,7 +1637,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
         {agents.length === 0 && (
           <button type="button" className="sp-member is-add" onClick={onAddAgent}>
             <span className="sp-add-icon"><Plus /></span>
-            <span className="sp-member-text"><span className="sp-member-name">{L("添加 agent", "Add an agent")}</span></span>
+            <span className="sp-member-text"><span className="sp-member-name">{L("新建会话", "New conversation")}</span></span>
           </button>
         )}
       </div>

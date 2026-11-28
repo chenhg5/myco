@@ -238,7 +238,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
 
   const tabs: { key: ProjectTab; label: string; n?: number }[] = [
     { key: "notes", label: L("资料", "Notes") },
-    { key: "members", label: L("成员", "Members"), n: p.members.length },
+    { key: "members", label: L("会话", "Conversations"), n: p.members.length },
     { key: "chats", label: L("对话", "Conversations"), n: threads.length },
   ];
   return (
@@ -285,7 +285,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
         </div>
         <div className="app-list app-project-brief">
           {p.brief ? <FoldText text={p.brief} /> : (
-            <div className="app-empty-note">{L("写下所有成员都该知道的事：仓库、分支和发版规则、怎么测试、注意事项。 agent 用 myco project show / pull 读取。", "Write what every member should know: repository, branch and release rules, how to test, what to watch out for. Agents read it with myco project show / pull.")}</div>
+            <div className="app-empty-note">{L("写下项目里每个会话都该知道的事：仓库、分支和发版规则、怎么测试、注意事项。 agent 用 myco project show / pull 读取。", "Write what every conversation in the project should know: repository, branch and release rules, how to test, what to watch out for. Agents read it with myco project show / pull.")}</div>
           )}
         </div>
       </section>
@@ -299,7 +299,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           </div>
           <div className="app-list app-project-brief">
             {memoryBody(p.memory) ? <FoldText text={memoryBody(p.memory)} /> : (
-              <div className="app-empty-note">{L("成员在干活中学到、大家都该记住的事：定下的决定、约定、你的偏好。成员 agent 会自己记（myco project memory add），每次干这个项目的活都会读到；你也可以在这里添加。", "What members learn and everyone should keep in mind: decisions, conventions, your preferences. Member agents add to it themselves (myco project memory add) and read it whenever they work on the project; you can add here too.")}</div>
+              <div className="app-empty-note">{L("agent 在干活中学到、大家都该记住的事：定下的决定、约定、你的偏好。项目里的 agent 会自己记（myco project memory add），每次干这个项目的活都会读到；你也可以在这里添加。", "What agents learn and everyone should keep in mind: decisions, conventions, your preferences. The project's agents add to it themselves (myco project memory add) and read it whenever they work on the project; you can add here too.")}</div>
             )}
           </div>
         </section>
@@ -323,7 +323,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           )}
           {uploadError !== null && <div className="app-project-upload-error"><ErrorText error={uploadError} /></div>}
           {files.length === 0 && uploading === null && (
-            <div className="app-empty-note">{L("把文件拖到这里，或点「上传」。设计稿、约定、截图都可以（20 MB 以内）；成员 agent 用 myco project file put 上传，用 myco project pull 拉到本地。", "Drop files here, or click Upload: designs, conventions, screenshots (up to 20 MB). Member agents upload with myco project file put and get them with myco project pull.")}</div>
+            <div className="app-empty-note">{L("把文件拖到这里，或点「上传」。设计稿、约定、截图都可以（20 MB 以内）；项目里的 agent 用 myco project file put 上传，用 myco project pull 拉到本地。", "Drop files here, or click Upload: designs, conventions, screenshots (up to 20 MB). The project's agents upload with myco project file put and get them with myco project pull.")}</div>
           )}
           {(allFiles ? files : files.slice(0, LIST_FIRST)).map((d) => {
             const Icon = fileIcon(d);
@@ -365,7 +365,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
       {tab === "members" && (<>
       <section className="app-group">
         <div className="app-group-title">
-          <span className="name">{L(E`成员 ${p.members.length}`, E`Members ${p.members.length}`)}{coordinators > 0 && <span className="app-group-note">{L(E` · ${coordinators} 个协调者`, E` · ${coordinators} coordinating`)}</span>}</span>
+          <span className="name">{L(E`会话 ${p.members.length}`, E`Conversations ${p.members.length}`)}{coordinators > 0 && <span className="app-group-note">{L(E` · ${coordinators} 个协调者`, E` · ${coordinators} coordinating`)}</span>}</span>
           <span className="app-group-actions">
             <button
               type="button"
@@ -378,7 +378,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
                 { label: L("新建一个 agent", "Start a new node"), icon: Plus, onSelect: onNewNode },
               ])}
             >
-              <Plus />{L("添加 agent", "Add nodes")}<ChevronDown className="app-group-action-caret" />
+              <Plus />{L("添加会话", "Add conversations")}<ChevronDown className="app-group-action-caret" />
             </button>
             {addMenu.element}
           </span>
@@ -422,7 +422,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
                   ) : null;
                 })()}
                 {mayAct && (
-                  <button type="button" className="app-btn app-btn-plain app-project-member-more" aria-label={L("成员设置", "Member settings")}
+                  <button type="button" className="app-btn app-btn-plain app-project-member-more" aria-label={L("会话设置", "Conversation settings")}
                     onClick={() => open({ kind: "member", member: m })}><MoreHorizontal /></button>
                 )}
               </div>
@@ -446,7 +446,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
               onClick={() => void run(() => appApi.setProjectCoordinatorAutomations(target.hubId, p.name, !p.coordinator_automations), false)}><span className="app-switch-knob" /></button>
               : <span className="app-label">{p.coordinator_automations ? L("允许", "Allowed") : L("需要批准", "Approval required")}</span>}
           </div>
-          <div className="app-small-note">{L("只能发给本项目的成员 agent，或启动本项目的工作流。任务归项目主人所有，可设起止日期和只跑一次。", "Targets are limited to project agents and workflows. Tasks belong to the project owner, with optional date bounds and a single run.")}</div>
+          <div className="app-small-note">{L("只能发给本项目的 agent，或启动本项目的工作流。任务归项目主人所有，可设起止日期和只跑一次。", "Targets are limited to the project's agents and workflows. Tasks belong to the project owner, with optional date bounds and a single run.")}</div>
         </section>
       )}
       {p.coordinator_invites !== undefined && (
@@ -463,7 +463,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
               onClick={() => void run(() => appApi.setProjectCoordinatorInvites(target.hubId, p.name, !p.coordinator_invites), false)}><span className="app-switch-knob" /></button>
               : <span className="app-label">{p.coordinator_invites ? L("允许", "Allowed") : L("需要批准", "Approval required")}</span>}
           </div>
-          <div className="app-small-note">{L("邀请链接 24 小时内有效，只能加入一个普通 agent。它归项目主人所有，自动加入本项目，不能管理成员或继续邀请。", "Each link lasts 24 hours and admits one ordinary agent. It belongs to the project owner, joins this project automatically, and cannot manage members or invite others.")}</div>
+          <div className="app-small-note">{L("邀请链接 24 小时内有效，只能加入一个普通 agent。它归项目主人所有，自动加入本项目，不能管理项目里的会话或继续邀请。", "Each link lasts 24 hours and admits one ordinary agent. It belongs to the project owner, joins this project automatically, and cannot manage the project's conversations or invite others.")}</div>
         </section>
       )}
       {p.machines && (
@@ -477,7 +477,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
       {tab === "chats" && (<>
       <div className="app-project-progress">
         {recent === null ? <TextSkeleton width={220} /> : threads.length === 0 ? (
-          <span className="muted">{L("还没有这个项目的对话。给成员发个任务，或者让 agent 用 myco message send --project 发。", "No conversations in this project yet. Give a member a task, or have an agent send with myco message send --project.")}</span>
+          <span className="muted">{L("还没有这个项目的对话。给一个会话发个任务，或者让 agent 用 myco message send --project 发。", "No conversations in this project yet. Give a conversation a task, or have an agent send with myco message send --project.")}</span>
         ) : (
           <>
             {(["working", "queued", "held", "failed", "done"] as const).map((st) => (
@@ -555,7 +555,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
         open={dialog?.kind === "delete"}
         onOpenChange={(o) => !o && setDialog(null)}
         title={L(E`删除项目 ${p.title || p.name}`, E`Delete ${p.title || p.name}`)}
-        description={L("项目的成员关系、说明、文档和链接都会删除； agent 本身和它们的对话不受影响。", "Its members, brief, documents and links are deleted; the nodes and their conversations stay.")}
+        description={L("项目和会话的关联、说明、文档和链接都会删除； agent 本身和它们的对话不受影响。", "Which conversations are in it, its brief, documents and links are deleted; the nodes and their conversations stay.")}
         confirmLabel={L("删除", "Delete")}
         busy={busy}
         error={actionError ? <ErrorText error={actionError} /> : undefined}
@@ -616,7 +616,7 @@ function MemoryAddDialog({ open, busy, error, onClose, onSave }: { open: boolean
   useOnOpen(open, () => setText(""));
   return (
     <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("添加到项目记忆", "Add to the memory")}
-      description={L("一两句话：一个决定、一条约定，或你的偏好。所有成员下次干这个项目的活时都会读到。", "A sentence or two: a decision, a convention, or your preference. Every member reads it the next time it works on the project.")}>
+      description={L("一两句话：一个决定、一条约定，或你的偏好。项目里的每个 agent 下次干这个项目的活时都会读到。", "A sentence or two: a decision, a convention, or your preference. Every agent in the project reads it the next time it works on it.")}>
       <textarea className="app-input" rows={3} value={text} onChange={(e) => setText(e.target.value)} disabled={busy} autoFocus
         placeholder={L("例如：汇报用中文，三条以内", "e.g. Report in English, three bullets at most")} />
       <ErrorText error={error} />
@@ -630,7 +630,7 @@ function MemoryEditDialog({ open, memory, busy, error, onClose, onSave }: { open
   useOnOpen(open, () => setBody(memory.body || ""));
   return (
     <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("项目记忆", "Memory")} wide
-      description={L("改掉过时的、合并重复的。成员下次干活时读到的就是这里的内容。", "Remove what is out of date and merge repeats. This is what members read the next time they work.")}>
+      description={L("改掉过时的、合并重复的。agent 下次干活时读到的就是这里的内容。", "Remove what is out of date and merge repeats. This is what agents read the next time they work.")}>
       <textarea className="app-input app-project-editor" rows={16} value={body} onChange={(e) => setBody(e.target.value)} disabled={busy} />
       <ErrorText error={error} />
       <Actions busy={busy} onCancel={onClose} onSave={() => onSave(body)} />
@@ -643,7 +643,7 @@ function BriefDialog({ open, project, busy, error, onClose, onSave }: { open: bo
   useOnOpen(open, () => setBrief(project.brief || ""));
   return (
     <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("项目说明", "Brief")} wide
-      description={L("所有成员都该知道的事（Markdown，16000 字以内），成员每次干这个项目的活都会读到。", "What every member should know (Markdown, up to 16,000 characters); members read it whenever they work on the project.")}>
+      description={L("项目里每个 agent 都该知道的事（Markdown，16000 字以内），agent 每次干这个项目的活都会读到。", "What every agent in the project should know (Markdown, up to 16,000 characters); agents read it whenever they work on the project.")}>
       <textarea className="app-input app-project-editor" rows={16} value={brief} onChange={(e) => setBrief(e.target.value)} disabled={busy}
         placeholder={L("## 仓库\n…\n\n## 规则\n…\n\n## 怎么测试\n…", "## Repository\n…\n\n## Rules\n…\n\n## Testing\n…")} />
       <ErrorText error={error} />
@@ -673,7 +673,7 @@ function AddDialog({ open, nodes, busy, error, onClose, onAdd }: { open: boolean
   const [picked, setPicked] = useState<string[]>([]);
   useOnOpen(open, () => setPicked([]));
   return (
-    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("添加 agent", "Add nodes")}
+    <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("添加会话", "Add conversations")}
       description={L("选你的 agent 加入这个项目（管理员可以选任何 agent）。别人的 agent 由它的主人加入。", "Pick your nodes to add (admins can pick any). Other people add their own.")}>
       {nodes.length === 0
         ? <div className="app-empty-note">{L("没有可以添加的 agent 了。", "No more nodes you can add.")}</div>
@@ -702,11 +702,11 @@ function MemberDialog({ member, project, mayRemove, busy, error, onClose, onSave
         <div className="app-provider-list" role="radiogroup">
           <label className={cn("app-provider-opt", role === "member" && "picked")}>
             <input type="radio" name="role" checked={role === "member"} onChange={() => setRole("member")} disabled={busy} />
-            <span><b>{L("成员", "Member")}</b><small>{L("读项目说明和文档，接活", "Reads the brief and documents, takes work")}</small></span>
+            <span><b>{L("普通", "Ordinary")}</b><small>{L("读项目说明和文档，接活", "Reads the brief and documents, takes work")}</small></span>
           </label>
           <label className={cn("app-provider-opt", role === "coordinator" && "picked")}>
             <input type="radio" name="role" checked={role === "coordinator"} onChange={() => setRole("coordinator")} disabled={busy} />
-            <span><b>{L("协调者", "Coordinator")}</b><small>{L("还能改项目说明、文档、链接，改其他成员的介绍和擅长，加入同一主人的 agent", "Also edits the brief, documents and links, other members' descriptions and skills, and adds nodes of its owner")}</small></span>
+            <span><b>{L("协调者", "Coordinator")}</b><small>{L("还能改项目说明、文档、链接，改其他会话的介绍和擅长，加入同一主人的 agent", "Also edits the brief, documents and links, other conversations' descriptions and skills, and adds nodes of its owner")}</small></span>
           </label>
         </div>
       )}
@@ -849,7 +849,7 @@ function SettingsDialog({ open, project, busy, error, onClose, onVisibility, onA
       <div className="app-provider-list" role="radiogroup">
         <label className={cn("app-provider-opt", project.visibility === "members" && "picked")}>
           <input type="radio" name="pvis" checked={project.visibility === "members"} onChange={() => onVisibility("members")} disabled={busy} />
-          <span><b>{L("参与者可见", "Participants")}</b><small>{L("项目的创建者、成员 agent 的主人和成员 agent 能看到；管理员也能看到", "Its creator, the owners of its member nodes and the nodes themselves; admins too")}</small></span>
+          <span><b>{L("参与者可见", "Participants")}</b><small>{L("项目的创建者、项目里 agent 的主人和这些 agent 能看到；管理员也能看到", "Its creator, the owners of its agents and the agents themselves; admins too")}</small></span>
         </label>
         <label className={cn("app-provider-opt", project.visibility === "team" && "picked")}>
           <input type="radio" name="pvis" checked={project.visibility === "team"} onChange={() => onVisibility("team")} disabled={busy} />

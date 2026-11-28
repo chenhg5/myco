@@ -485,7 +485,7 @@ async function go(page, label, narrow) {
   // members are managed from the chat list's menu.
   if (label === "成员" || label === "Members") {
     await clickVisible(page, page.locator(".sp-nav-chat-sort"));
-    await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: label === "成员" ? "管理成员" : "Manage members" }));
+    await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: label === "成员" ? "所有会话" : "All conversations" }));
   } else {
     const item = label === "电脑" ? page.locator(".sp-nav-pcs-head:visible")
       : label === "聊天" ? page.locator(".sp-nav-chat:visible")
@@ -1928,7 +1928,7 @@ async function runMatrix(browser, size, scheme) {
     });
 
     if (!narrow) await step("项目 · 成员栏收起", async () => {
-      await page.getByRole("button", { name: "收起成员" }).click();
+      await page.getByRole("button", { name: "收起会话" }).click();
       await page.locator(".sp-side.is-folded").waitFor({ timeout: 5_000 });
       const faces = await page.locator(".sp-side.is-folded .sp-face:not(.is-add)").count();
       if (faces < 2) throw new Error(`收起后应只留头像，实际 ${faces} 个`);
@@ -1936,7 +1936,7 @@ async function runMatrix(browser, size, scheme) {
       await shot(page, size, scheme, "project-members-folded");
       await page.reload({ waitUntil: "domcontentloaded" });
       await page.locator(".sp-side.is-folded").waitFor({ timeout: 20_000 });
-      await page.getByRole("button", { name: "展开成员" }).click();
+      await page.getByRole("button", { name: "展开会话" }).click();
       await page.locator(".sp-side:not(.is-folded) .sp-member").first().waitFor({ timeout: 5_000 });
     });
 
@@ -2887,7 +2887,7 @@ async function runMatrix(browser, size, scheme) {
       await menuPick(page, page.locator(".sp-nav-chat-list .sp-nav-person").first(), "取消置顶");
       // + adds an agent to talk to.
       await clickVisible(page, page.locator(".sp-nav-chat-add"));
-      await page.locator(".app-modal", { hasText: "添加 agent" }).waitFor({ timeout: 5_000 });
+      await page.locator(".app-modal", { hasText: "新建会话" }).waitFor({ timeout: 5_000 });
       await closeDialog(page);
       // One click into a chat with one of them (a coordinator's is its
       // project's home).
@@ -8646,7 +8646,7 @@ async function runMatrix(browser, size, scheme) {
       await side.locator(".mg").waitFor({ state: "detached", timeout: 10_000 });
       if ((await side.locator(".sp-member", { hasText: "docs-claude" }).count()) !== 1) throw new Error("删掉分组后成员应回到一列里");
       // Folded to faces, the column still offers groups (its own ⋯).
-      await side.locator(".sp-side-tools button[aria-label='收起成员']").click();
+      await side.locator(".sp-side-tools button[aria-label='收起会话']").click();
       const foldedSide = page.locator(".sp-side.is-folded");
       await clickVisible(page, foldedSide.locator("[data-testid=member-groups-menu-folded]"));
       await page.locator(".conv-menu").getByRole("menuitem", { name: "新建分组" }).waitFor({ timeout: 5_000 });

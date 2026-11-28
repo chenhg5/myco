@@ -1200,7 +1200,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const profileRow = profile ? rows.find((r) => r.hub.id === profile.hubId && r.st.agent.name === profile.name) || null : null;
   const addAgentProject = addAgent && !isLoose(addAgent) ? liveProjects.find((x) => x.hubId === addAgent.hubId && x.p.name === addAgent.name)?.p : undefined;
   const addWsProject = addWorkspace && !isLoose(addWorkspace) ? liveProjects.find((x) => x.hubId === addWorkspace.hubId && x.p.name === addWorkspace.name)?.p : undefined;
-  const title = page === "members" ? L("成员", "Members")
+  const title = page === "members" ? L("所有会话", "All conversations")
     : page === "computers" ? L("电脑", "Computers")
     : page === "usage" ? L("用量", "Usage")
     : page === "automations" ? L("自动化", "Automations")
@@ -1320,7 +1320,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     className={cn("app-nav-item sp-nav", active && "active", projectSort.dragging === x.p.name && "is-dragging")}
                     aria-current={active ? "page" : undefined} onClick={() => openSpace(ref)} data-nav-key={`p:${x.hubId}/${x.p.name}`}
                     onContextMenu={(e) => navMenu.open(e, [
-                      { label: L("添加 agent", "Add an agent"), onSelect: () => { openSpace(ref); setAddAgent(ref); } },
+                      { label: L("新建会话", "New conversation"), onSelect: () => { openSpace(ref); setAddAgent(ref); } },
                       { label: L("加一个终端", "Add a terminal"), onSelect: () => { openSpace(ref); setAddWorkspace(ref); } },
                       { label: L("项目资料", "Project notes"), onSelect: () => { setSpace(ref); setPage("about"); } },
                     ])}
@@ -1328,7 +1328,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                     <span className="app-nav-label">{x.p.title || x.p.name}</span>
                     {dot && (
                       <span className={cn("sp-nav-busy", dot === "stuck" && "is-stuck", dot === "asking" && "is-asking", dot === "open" && "is-open")}
-                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有成员可能卡住", "Someone may be stuck") : dot === "open" ? L("有任务没收尾", "Some tasks were left open") : L("有成员在干活", "Someone is at work")} />
+                        title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("有会话可能卡住", "A conversation may be stuck") : dot === "open" ? L("有任务没收尾", "Some tasks were left open") : L("有会话在跑", "A conversation is running")} />
                     )}
                   </button>
                 );
@@ -1352,14 +1352,14 @@ export default function AppMode({ initialHubs, initialInfo }: {
                   <NavHead key={`${id}/*`} label={L("会话", "Conversations")} className="sp-nav-chat" active={active}
                     title={L("不在项目里的 agent：直接找它们聊", "Agents in no project: talk to them directly")}
                     onOpen={() => { setNavChat(null); openSpace(ref); }} folded={chatFolded} onFold={() => foldChats(!chatFolded)} count={chatRows.length}>
-                    <button type="button" className="app-nav-add sp-nav-chat-sort" aria-label={L("排序和成员", "Order and members")} title={L("排序方式、管理成员", "How to order, manage members")}
+                    <button type="button" className="app-nav-add sp-nav-chat-sort" aria-label={L("排序和所有会话", "Order and all conversations")} title={L("排序方式、所有会话", "How to order, all conversations")}
                       onClick={(e) => navMenu.openUnder(e.currentTarget, [
                         { header: L("排序（置顶的总在最上面）", "Order (pinned ones stay on top)") },
                         ...sorts.map((x) => ({ label: x.label, checked: chatSort === x.v, onSelect: () => pickChatSort(x.v) })),
                         "sep",
-                        { label: L("管理成员", "Manage members"), onSelect: () => { setNavChat(null); setPage("members"); } },
+                        { label: L("所有会话", "All conversations"), onSelect: () => { setNavChat(null); setPage("members"); } },
                       ])}><ArrowUpDown /></button>
-                    <button type="button" className="app-nav-add sp-nav-chat-add" aria-label={L("添加 agent", "Add an agent")} title={L("添加 agent：多一个能聊的", "Add an agent: one more to talk to")}
+                    <button type="button" className="app-nav-add sp-nav-chat-add" aria-label={L("新建会话", "New conversation")} title={L("新建会话：多一个能聊的", "New conversation: one more to talk to")}
                       onClick={() => hub && setAddAgent({ hubId: hub.id, loose: true })}><Plus /></button>
                   </NavHead>
                 );
@@ -1393,7 +1393,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 })}
                 {rows.length > 0 && chatRows.length === 0 && (
                   <button type="button" className="app-nav-item sp-nav muted" onClick={() => hub && setAddAgent({ hubId: hub.id, loose: true })}>
-                    <Plus /><span className="app-nav-label">{L("添加 agent", "Add an agent")}</span>
+                    <Plus /><span className="app-nav-label">{L("新建会话", "New conversation")}</span>
                   </button>
                 )}
               </div>}

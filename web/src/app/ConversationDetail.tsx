@@ -247,11 +247,11 @@ const STARTERS_AGENT: [string, string][] = [
 ];
 const STARTERS_PROJECT: [string, string][] = [
   ["把这个项目要做的事拆成几步，分给大家", "Break this project into steps and hand them out"],
-  ["让每个成员说说自己现在在做什么", "Ask each member what they are working on"],
+  ["让项目里每个 agent 说说自己现在在做什么", "Ask each agent in the project what it is working on"],
   ["定一个这周的目标，排好谁先做什么", "Set a goal for this week and who does what first"],
   ["看看大家的进展，有卡住的就帮一把", "Check everyone's progress and help whoever is stuck"],
   ["整理一份这个项目的现状，发我看", "Write up where this project stands"],
-  ["找出成员之间重复或冲突的工作", "Find work members are duplicating or clashing on"],
+  ["找出 agent 之间重复或冲突的工作", "Find work the agents are duplicating or clashing on"],
 ];
 const STARTERS_OFF = "myco-starters-off";
 const startersOff = () => { try { return localPreferences.getItem(STARTERS_OFF) === "1"; } catch { return false; } };

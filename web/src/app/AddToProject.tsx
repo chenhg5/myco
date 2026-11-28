@@ -326,8 +326,8 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
   const showMembers = !!project && (others().length > 0 || where === "members");
 
   return (
-    <Modal open={open} onOpenChange={(o) => !o && !joining && onClose()} title={L("添加 agent", "Add an agent")}
-      description={L(E`给${place}加一个 AI 同事。先选它在哪。`, E`Bring an AI teammate into ${place}. First, where is it?`)}
+    <Modal open={open} onOpenChange={(o) => !o && !joining && onClose()} title={L("新建会话", "New conversation")}
+      description={L(E`在${place}新建一个会话。先选它在哪台电脑上。`, E`Start a conversation in ${place}. First, which computer is it on?`)}
       className="app-modal-add">
       <div className="app-field">
         <span className="app-field-label">{L("它在哪", "Where it is")}</span>
@@ -1422,7 +1422,7 @@ export function NewProjectDialog({ open, hubs, defaultHubId, onClose, onCreated 
 }) {
   return (
     <Modal open={open} onOpenChange={(o) => !o && onClose()} title={L("新建项目", "New project")} className="np-modal"
-      description={L("一个项目就是一件事，和一起做这件事的 agent。写清楚目标、放上资料，协调者和成员一开始就知道要做什么。", "A project is one thing to get done, and the agents doing it together. A clear goal and its files tell the coordinator and members what to do from the start.")}>
+      description={L("一个项目就是一件事，和一起做这件事的 agent。写清楚目标、放上资料，协调者和项目里的会话一开始就知道要做什么。", "A project is one thing to get done, and the agents doing it together. A clear goal and its files tell the coordinator and the project's conversations what to do from the start.")}>
       <NewProjectForm hubs={hubs} defaultHubId={defaultHubId} onCreated={onCreated} onCancel={onClose} />
     </Modal>
   );
@@ -1511,7 +1511,7 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
         <textarea className="app-input np-goal" rows={3} value={goal} onChange={(e) => setGoal(e.target.value)} maxLength={2000}
           placeholder={L("想做成什么、什么时候、做到什么程度算完成。比如：11 月底前上线新版官网：首页、文档站和下载页，中英双语。", "What should come out of it, by when, and what counts as done. E.g. ship the new website by the end of November: home, docs and downloads, in Chinese and English.")}
           aria-label={L("目标", "Goal")} />
-        <span className="app-small-note">{L("协调者和成员都会看到；以后在「项目资料」里随时能改。", "The coordinator and members all see it; change it any time in Project notes.")}</span>
+        <span className="app-small-note">{L("项目里的会话都会看到；以后在「项目资料」里随时能改。", "Every conversation in the project sees it; change it any time in Project notes.")}</span>
       </label>
       <div className="app-field">
         <span className="app-field-label">{L("项目资料", "Files")}<small className="np-optional">{L("选填", "optional")}</small></span>
@@ -1522,7 +1522,7 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
           data-testid="new-project-drop">
           <Upload />
           <span><b>{L("把文件拖到这里，或点一下选择", "Drop files here, or click to choose")}</b>
-            <small>{L("需求文档、设计稿、约定、截图都可以，每个 20 MB 以内；成员 agent 能读到。", "Specs, designs, conventions, screenshots: up to 20 MB each; member agents can read them.")}</small></span>
+            <small>{L("需求文档、设计稿、约定、截图都可以，每个 20 MB 以内；项目里的会话都能读到。", "Specs, designs, conventions, screenshots: up to 20 MB each; the project's conversations can read them.")}</small></span>
         </div>
         <input ref={fileInput} type="file" multiple hidden onChange={(e) => { addFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
         {files.length > 0 && (

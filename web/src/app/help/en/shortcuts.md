@@ -12,7 +12,7 @@ These work anywhere in the App.
 
 | What | Mac | Windows |
 | --- | --- | --- |
-| Search: chats, members, projects and messages | ⌘K | Ctrl+K |
+| Search: conversations, projects and messages | ⌘K | Ctrl+K |
 | Back / forward | ⌘[ / ⌘] | Ctrl+[ / Ctrl+] |
 | Switch agents (as ⌘Tab does) | ⌃Tab / ⌥Tab | Ctrl+Tab / Ctrl+\` |
 | Previous / next conversation | ⌥↑ / ⌥↓ | Alt+↑ / Alt+↓ |
@@ -30,7 +30,7 @@ These work anywhere in the App.
 
 A few notes:
 
-- **Search** brings up a box near the top of the screen that finds members, projects and computers in every workspace, and messages in your own chats. ↑↓ to pick, Enter to open. With nothing typed, the first group is the chats you opened recently, so ⌘K then Enter takes you back to the last one.
+- **Search** brings up a box near the top of the screen that finds conversations, projects and computers in every workspace, and messages in your own chats. ↑↓ to pick, Enter to open. With nothing typed, the first group is the chats you opened recently, so ⌘K then Enter takes you back to the last one.
 - **Back / forward** go to where you were, as ‹ › at the top do; a mouse's side buttons work too.
 - **Switch agents**: keep holding ⌃, press Tab or ← → to pick (⇧Tab goes back), let go to open. On a Mac ⌃← → switch desktops, so hold ⌥ to use the arrows. In a browser, use \` instead of Tab.
 - **Previous / next conversation** follow the sidebar's order, projects and chats alike.
@@ -82,7 +82,7 @@ In a terminal it is Control on a Mac too, not Command. For more on terminals, se
 
 Searching Settings works in Chinese or English, such as "字号" or "proxy"; Esc first clears the search box, and a second Esc closes Settings.
 
-![⌘K finds members, projects, computers and messages](shot:search-anything)
+![⌘K finds conversations, projects, computers and messages](shot:search-anything)
 
 ## Mac only
 

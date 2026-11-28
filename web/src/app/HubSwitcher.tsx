@@ -192,8 +192,8 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
   const sub = selected
     ? selected.ok
       ? L(
-        (count === undefined ? E`已连上` : E`已连上 · ${count} 个成员`),
-        (count === undefined ? E`Connected` : (count === 1 ? E`Connected · ${count} node` : E`Connected · ${count} nodes`)),
+        (count === undefined ? E`已连上` : E`已连上 · ${count} 个会话`),
+        (count === undefined ? E`Connected` : (count === 1 ? E`Connected · ${count} conversation` : E`Connected · ${count} conversations`)),
       )
       : L("连不上", "Unreachable")
     : L(E`${hubs.length} 个工作区 · ${connected} 个已连上`, (hubs.length === 1 ? E`${hubs.length} workspace · ${connected} connected` : E`${hubs.length} workspaces · ${connected} connected`));

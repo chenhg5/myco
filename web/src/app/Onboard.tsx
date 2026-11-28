@@ -128,8 +128,8 @@ export function IntroCard({ id, title, text, action }: {
 export const INTROS = {
   projects: () => ({
     title: L("项目：几个 agent 一起做成一件事", "Projects: a few agents getting one thing done"),
-    text: L("在这里对协调者说要做什么，它会拆成几步、分给成员；右边能看到每个成员在做什么，点一个就能单独和它聊。",
-      "Tell the coordinator here what you want done: it breaks it down and hands it to the members. On the right is what each is doing; click one to talk to it alone."),
+    text: L("在这里对协调者说要做什么，它会拆成几步、分给项目里的会话；右边能看到每个会话在做什么，点一个就能单独和它聊。",
+      "Tell the coordinator here what you want done: it breaks it down and hands it to the project's conversations. On the right is what each is doing; click one to talk to it alone."),
   }),
   automations: () => ({
     title: L("自动化：让 agent 到点自己干活", "Automations: agents at work on their own"),

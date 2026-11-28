@@ -124,7 +124,7 @@ function DailyChart({ from, to, totals, total }: { from: string; to: string; tot
       </div>
       {!peak && <div className="usage-empty" role="status">
         <b>{L("这段时间还没有用量记录", "No usage recorded for this period")}</b>
-        <span>{L("成员升级到新版 myco 后，CLI 上报的用量会显示在这里。", "Usage appears after members upgrade myco and their CLI reports it.")}</span>
+        <span>{L("agent 所在电脑升级到新版 myco 后，CLI 上报的用量会显示在这里。", "Usage appears after the computers running agents upgrade myco and their CLI reports it.")}</span>
       </div>}
     </div>
   </section>;
@@ -177,12 +177,12 @@ export function UsagePage({ hubId, projects, rows, onOpenAgent }: {
     { label: L("总 token", "Total tokens"), value: compactUsage(t.total), hint: exact(t.total), sub: L(E`日均 ${compactUsage(t.total / nDays)}`, E`${compactUsage(t.total / nDays)} a day`) },
     { label: L("输出 token", "Output tokens"), value: compactUsage(t.output), hint: exact(t.output), sub: t.total ? L(E`占总量 ${percent(t.output, t.total)}`, E`${percent(t.output, t.total)} of the total`) : "" },
     { label: L("调用次数", "Calls"), value: compactUsage(t.calls), hint: exact(t.calls), sub: L(E`日均 ${compactUsage(t.calls / nDays)}`, E`${compactUsage(t.calls / nDays)} a day`) },
-    { label: L("已上报费用", "Reported cost"), value: money(t.cost), hint: costNote(), sub: unreported ? L(E`${unreported} 个成员没有上报费用`, (unreported === 1 ? E`${unreported} member reported no cost` : E`${unreported} members reported no cost`)) : t.cost ? L("都已上报", "All reported") : "" },
+    { label: L("已上报费用", "Reported cost"), value: money(t.cost), hint: costNote(), sub: unreported ? L(E`${unreported} 个会话没有上报费用`, (unreported === 1 ? E`${unreported} conversation reported no cost` : E`${unreported} conversations reported no cost`)) : t.cost ? L("都已上报", "All reported") : "" },
   ];
   const open = (name: string) => onOpenAgent(name);
   return <div className="pc au usage-page">
     {menu.element}
-    <PageHero title={L("用量", "Usage")} subtitle={L("看看工作区的 token 用在哪里，哪些成员用得最多。", "See where workspace tokens go and which members use the most.")} />
+    <PageHero title={L("用量", "Usage")} subtitle={L("看看工作区的 token 用在哪里，哪些会话用得最多。", "See where workspace tokens go and which conversations use the most.")} />
     <div className="usage-filters">
       <div className="wf-chips usage-range" role="group" aria-label={L("时间范围", "Date range")}>
         {[7, 30, 90].map((n) => <button key={n} type="button" className={cn("wf-chip", days === n && "is-on")} aria-pressed={days === n} onClick={() => {
@@ -210,13 +210,13 @@ export function UsagePage({ hubId, projects, rows, onOpenAgent }: {
         </dl>
         <DailyChart {...range} totals={summary.days} total={t} />
         <section aria-labelledby="usage-members-title">
-          <div className="ph-section"><h2 id="usage-members-title">{L("按成员", "By member")}{!!summary.agents.length && <span className="ph-count">{summary.agents.length}</span>}</h2></div>
+          <div className="ph-section"><h2 id="usage-members-title">{L("按会话", "By conversation")}{!!summary.agents.length && <span className="ph-count">{summary.agents.length}</span>}</h2></div>
           <div className="usage-card">
-            {!summary.agents.length ? <div className="app-empty-note">{L("这段时间没有成员用过。", "No member used any tokens in this period.")}</div>
+            {!summary.agents.length ? <div className="app-empty-note">{L("这段时间没有会话用过。", "No conversation used any tokens in this period.")}</div>
             : <div className="usage-table-wrap"><table className="usage-table usage-agents">
-              <caption className="app-sr-only">{L("按成员统计的用量", "Usage by member")}</caption>
+              <caption className="app-sr-only">{L("按会话统计的用量", "Usage by conversation")}</caption>
               <thead><tr>
-                <th>{L("成员", "Member")}</th>
+                <th>{L("会话", "Conversation")}</th>
                 <th className="usage-share-col">{L("占比", "Share")}</th>
                 <th className="usage-numeric">{L("总 token", "Total")}</th>
                 <th className="usage-numeric">{L("输出", "Output")}</th>
@@ -257,7 +257,7 @@ export function UsagePage({ hubId, projects, rows, onOpenAgent }: {
               {!summary.projects.length ? <div className="app-empty-note">{L("这段时间没有项目用过。", "No project used any tokens in this period.")}</div>
               : <table className="usage-table usage-projects">
                 <caption className="app-sr-only">{L("按项目统计的用量", "Usage by project")}</caption>
-                <thead><tr><th>{L("项目", "Project")}</th><th className="usage-share-col">{L("占比", "Share")}</th><th className="usage-numeric">{L("总 token", "Total")}</th><th className="usage-secondary usage-numeric">{L("成员", "Members")}</th></tr></thead>
+                <thead><tr><th>{L("项目", "Project")}</th><th className="usage-share-col">{L("占比", "Share")}</th><th className="usage-numeric">{L("总 token", "Total")}</th><th className="usage-secondary usage-numeric">{L("会话", "Conversations")}</th></tr></thead>
                 <tbody>{summary.projects.map(([name, s]) => <tr key={name}>
                   <th scope="row"><span className={cn("usage-name", !name && "is-quiet")}>{name ? projectNames.get(name) || name : L("不属于项目", "No project")}</span></th>
                   <td className="usage-share-col"><ShareBar value={s.total} total={t.total} /></td>

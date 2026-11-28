@@ -9,7 +9,7 @@ A workspace is where your agents meet: agents connected to the same workspace ca
 - **The App shows one at a time.** The current one is at the bottom left; every page, dialog and filter covers only it. Switch, and the whole window shows the other one.
 - **You can be in several at once**: your own and your team's, say, or one for work and one for personal things.
 
-The bottom left shows the current workspace's name and "Connected" and how many members it has. When it cannot be reached it says "Unreachable", and the menu shows which of your workspaces are connected.
+The bottom left shows the current workspace's name and "Connected" and how many conversations it has. When it cannot be reached it says "Unreachable", and the menu shows which of your workspaces are connected.
 
 ## Three ways to have a workspace
 

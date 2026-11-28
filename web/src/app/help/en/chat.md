@@ -1,12 +1,12 @@
 # Chatting with agents
 
-Chatting with an agent is like messaging a colleague: say what you want done, it does it, and you can watch every step. This page covers sending messages and files, stepping in while it works, reading what it did, and the small tools in a chat.
+Chatting with an agent is like sending any message: say what you want done, it does it, and you can watch every step. This page covers sending messages and files, stepping in while it works, reading what it did, and the small tools in a chat.
 
 Keys are written for the Mac below; on Windows, ⌘ is Ctrl and ⌥ is Alt.
 
 ## Opening a chat
 
-Click an agent under Conversations in the sidebar and your chat with it opens on the right. For an agent in a project, click it in the project's members column.
+Click an agent under Conversations in the sidebar and your chat with it opens on the right. For an agent in a project, click it in the project's conversations column.
 
 A new chat is empty: it asks what the agent should do, with a few examples below ("Show me around this project: what it does and how to run it", "Review my uncommitted changes for problems"…). A click puts one in the box to edit before sending; nothing is sent by itself. Click "Don't show again" if you would rather not see them.
 
@@ -130,7 +130,7 @@ Hover a message and click the bin beside its time. It disappears from your view 
 
 ## Focus mode
 
-To keep your eyes on one chat, choose ⋯ › Focus mode at the top right of the chat, or press ⌘⇧F (Ctrl+Shift+F on Windows). The window goes full screen and the sidebar, the top bar, the members and the other panes hide, leaving this chat in the middle. ⌃Tab and ⌥↑ / ⌥↓ still move to other chats, which show the same way. Esc, ⌘⇧F again, or Leave focus at the top right brings everything back.
+To keep your eyes on one chat, choose ⋯ › Focus mode at the top right of the chat, or press ⌘⇧F (Ctrl+Shift+F on Windows). The window goes full screen and the sidebar, the top bar, the conversations column and the other panes hide, leaving this chat in the middle. ⌃Tab and ⌥↑ / ⌥↓ still move to other chats, which show the same way. Esc, ⌘⇧F again, or Leave focus at the top right brings everything back.
 
 ![Focus mode: this chat alone, everything else hidden](shot:focus-mode)
 
