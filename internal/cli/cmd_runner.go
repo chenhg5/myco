@@ -100,10 +100,12 @@ notes are never auto-answered. Logs go to stderr.`,
 			go processes.Run(healthCtx)
 			shared := runnerShared{
 				processes: processes,
+				activity:  &runner.Activity{},
 				once:      e.in.Bool("once"), busyWindow: e.in.Duration("busy-window"), busyRetry: e.in.Duration("busy-retry"),
 				scope: runner.SessionScope(e.in.String("session-scope")), rebind: e.in.Bool("rebind"), registry: harnesses,
 				trace: e.in.String("trace"), locks: runner.NewSessionLocks(filepath.Join(config.Dir(e.defaultPath), "locks")),
 			}
+
 			e.watchVersions(log)
 			// The agent CLIs it wakes read the skill of this version (a runner
 			// restarted by myco upgrade puts the new one in place).
@@ -121,6 +123,10 @@ notes are never auto-answered. Logs go to stderr.`,
 				r, err := e.buildRunner(e.cfgPath, e.cfg, shared, e.overrides(), log)
 				if err != nil {
 					return err
+				}
+				if !shared.once {
+					stopIdle := e.startIdleWatcher(shared.activity, log)
+					defer stopIdle()
 				}
 				return r.Run(e.in.Ctx)
 			}
@@ -144,6 +150,7 @@ notes are never auto-answered. Logs go to stderr.`,
 
 // runnerShared holds settings common to every agent a process serves.
 type runnerShared struct {
+	activity    *runner.Activity
 	forkWorkers *forkWorkers
 	processes   *processwatch.Manager
 	once        bool
@@ -190,6 +197,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 // startup only bounds the initial Hub handshake. Runtime reporters and inbox
 // polling retain the service context after startup succeeds.
 func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *config.Config, sh runnerShared, ov runnerOverrides, log *slog.Logger) (*runner.Runner, error) {
+	sh.activity.Pending(runner.SlotOwner(cfg.Hub, cfg.Agent), runner.PendingCount(runnerStatePath(e.defaultPath, cfg.Agent)))
 	startupStart := time.Now()
 	startupStamp := func(stage string) {
 		log.Info("runner startup latency", "agent", cfg.Agent, "stage", stage, "elapsed_ms", time.Since(startupStart).Milliseconds(), "observed_at_ms", time.Now().UnixMilli())
@@ -430,6 +438,7 @@ func (e *env) buildRunnerContext(startup context.Context, cfgPath string, cfg *c
 	}
 	return runner.New(c, h, sessions, runner.DefaultPrompt{Owner: me.Owner}, runner.Options{
 		AuthorizeRun: authorizeCopy,
+		Activity:     sh.activity,
 		Processes:    sh.processes, ProcessWorkspace: cfg.Hub, ProcessMember: me.OwnerID,
 		Self: me.Name, Timeout: timeout, PollWait: pollWait, Workdir: workdir, Once: sh.once, Scope: sh.scope,
 		BusyRetry: sh.busyRetry, BusyWindow: sh.busyWindow, SlotPool: slots, OnSlots: rep.Slots, Trace: sh.trace, SessionLocks: sh.locks,
@@ -554,6 +563,10 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 				log.Info("skipping agent without a local runner harness", "profile", p.Path, "harness", p.Config.Harness)
 				continue
 			}
+			startupDone, canStart := sh.activity.Work(e.in.Ctx)
+			if !canStart {
+				return len(profiles)
+			}
 			started[p.Path] = true // includes a pending handshake; no duplicate scans
 			slots := starts[p.Config.Hub]
 			if slots == nil {
@@ -563,6 +576,9 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				var startupOnce sync.Once
+				finishStartup := func() { startupOnce.Do(startupDone) }
+				defer finishStartup()
 				workerCtx, stopWorker := context.WithCancel(e.in.Ctx)
 				workerDone := make(chan struct{})
 				defer func() { stopWorker(); close(workerDone) }()
@@ -581,6 +597,7 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 				ctx, cancel := context.WithTimeout(workerCtx, runnerStartupTimeout)
 				r, err := workerEnv.buildRunnerContext(ctx, p.Path, p.Config, sh, runnerOverrides{}, log)
 				cancel()
+				finishStartup()
 				<-slots
 				mu.Lock()
 				if err != nil {
@@ -636,6 +653,8 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 	}
 	n := scan()
 	if !sh.once {
+		stopIdle := e.startIdleWatcher(sh.activity, log)
+		defer stopIdle()
 		// Chat-app bots configured here (myco im connect) run with the
 		// agents, so connecting one needs no other service.
 		go e.serveBridges(e.in.Ctx, log)

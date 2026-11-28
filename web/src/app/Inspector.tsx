@@ -19,11 +19,11 @@ import { NodePicker } from "@/app/NodePicker";
 import { summarize } from "@/app/summary";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
-import { L, lang, locale } from "@/lib/i18n";
+import { L, locale, E } from "@/lib/i18n";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { Avatar } from "@/app/persona";
 import { ResumeRow } from "@/app/ResumeRow";
-import { ChatAppsRow } from "@/app/ChatApps";
+import { ChatAppsPanel } from "@/app/ChatApps";
 import { RunRows } from "@/app/RunSettings";
 import { fetchMachineInfo, cachedMachineInfo } from "@/app/machineInfoCache";
 import { machineTellsInfo } from "@/app/hubVersion";
@@ -103,25 +103,25 @@ function historyLines(e: AuditEntry): string[] {
         const groups: Record<string, string[]> = { "+": [], "−": [], "~": [] };
         for (const tok of text.split(" ").filter(Boolean)) (groups[tok[0]] ?? groups["~"]).push(tok.slice(1));
         text = [
-          groups["+"].length ? L(`新增 ${groups["+"].join("、")}`, `added ${groups["+"].join(", ")}`) : "",
-          groups["−"].length ? L(`去掉 ${groups["−"].join("、")}`, `removed ${groups["−"].join(", ")}`) : "",
-          groups["~"].length ? L(`修改 ${groups["~"].join("、")}`, `edited ${groups["~"].join(", ")}`) : "",
+          groups["+"].length ? L(E`新增 ${groups["+"].join("、")}`, E`added ${groups["+"].join(", ")}`) : "",
+          groups["−"].length ? L(E`去掉 ${groups["−"].join("、")}`, E`removed ${groups["−"].join(", ")}`) : "",
+          groups["~"].length ? L(E`修改 ${groups["~"].join("、")}`, E`edited ${groups["~"].join(", ")}`) : "",
         ].filter(Boolean).join(L("；", "; "));
       }
       return `${FIELD_LABEL[key]()}：${text}`;
     });
   }
   switch (e.action) {
-    case "agent.visibility": return [L(`可见范围改为「${e.detail === "private" ? "仅自己" : "团队可见"}」`, `Visibility set to ${e.detail === "private" ? "only its owner" : "everyone on the hub"}`)];
-    case "agent.owner": return [L(`转交：${e.detail || ""}`, `Given: ${e.detail || ""}`)];
+    case "agent.visibility": return [L((e.detail === "private" ? E`可见范围改为「仅自己」` : E`可见范围改为「团队可见」`), (e.detail === "private" ? E`Visibility set to only its owner` : E`Visibility set to everyone on the hub`))];
+    case "agent.owner": return [L(E`转交：${e.detail || ""}`, E`Given: ${e.detail || ""}`)];
     case "agent.update": {
       try {
         const d = JSON.parse(e.detail || "") as { added?: string[]; removed?: string[] };
         if (Array.isArray(d.added) && Array.isArray(d.removed)) return [
-          L(`允许谁派任务：新增 ${d.added.join(", ") || "无"}；移除 ${d.removed.join(", ") || "无"}`, `Who can give tasks: added ${d.added.join(", ") || "none"}; removed ${d.removed.join(", ") || "none"}`),
+          L(E`允许谁派任务：新增 ${d.added.join(", ") || L("无", "none")}；移除 ${d.removed.join(", ") || L("无", "none")}`, E`Who can give tasks: added ${d.added.join(", ") || L("无", "none")}; removed ${d.removed.join(", ") || L("无", "none")}`),
         ];
       } catch { /* Older Hubs store a human-readable list. */ }
-      return [e.detail?.startsWith("allow_from: ") ? L(`允许谁派任务：${e.detail.slice(12)}`, `Who can give tasks: ${e.detail.slice(12)}`) : (e.detail || L("修改", "Changed"))];
+      return [e.detail?.startsWith("allow_from: ") ? L(E`允许谁派任务：${e.detail.slice(12)}`, E`Who can give tasks: ${e.detail.slice(12)}`) : (e.detail || L("修改", "Changed"))];
     }
     case "agent.coordinator": return [e.detail === "on" ? L("设为协调者", "Made a coordinator") : L("不再是协调者", "No longer a coordinator")];
     case "agent.kick": return [L("踢下线", "Disconnected")];
@@ -162,7 +162,7 @@ function HistoryRows({ row, now, stamp }: { row: AgentRow; now: number; stamp: s
       ))}
       {entries.length > 5 && (
         <button type="button" className="app-history-more" onClick={() => setAll((v) => !v)}>
-          {all ? L("收起", "Show less") : L(`显示全部 ${entries.length} 条`, `Show all ${entries.length}`)}
+          {all ? L("收起", "Show less") : L(E`显示全部 ${entries.length} 条`, E`Show all ${entries.length}`)}
         </button>
       )}
     </>
@@ -193,7 +193,7 @@ function PeerRows({ row, now, onPeer }: {
           <span className="meta">
             {stOf(p.agent) && <Avatar agent={stOf(p.agent)!.agent} size={18} badge={false} />}
             <span className="who">{nameOf(p.agent)}</span>
-            <span className="count">{L(`${p.messages} 条消息`, `${p.messages} message${p.messages === 1 ? "" : "s"}`)}</span>
+            <span className="count">{L(E`${p.messages} 条消息`, (p.messages === 1 ? E`${p.messages} message` : E`${p.messages} messages`))}</span>
             {p.last && <span className="time">{timeAgo(p.last.created_at, now)}</span>}
           </span>
           {p.last && <span className="body"><span className="app-peer-dir">{p.last.from === name ? L("发出", "Sent") : L("收到", "Got")}</span>{summarize(p.last)}</span>}
@@ -281,7 +281,7 @@ function LabelsEditor({ row, onRefresh, readOnly }: { row: AgentRow; onRefresh: 
             {draftTags.map((t) => (
               <span key={t} className="app-label editable">
                 #{t}
-                <button type="button" aria-label={L(`去掉标签 ${t}`, `Remove tag ${t}`)} onClick={() => setDraftTags(draftTags.filter((x) => x !== t))}>×</button>
+                <button type="button" aria-label={L(E`去掉标签 ${t}`, E`Remove tag ${t}`)} onClick={() => setDraftTags(draftTags.filter((x) => x !== t))}>×</button>
               </span>
             ))}
             <input
@@ -478,15 +478,15 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
       )}
       {remote && refBehind && refProvider && !pending && (
         <span className="app-kv-help" data-testid="provider-behind">
-          {L(`「${refProvider.name}」的 key 已更新，它还在用旧的 · `, `“${refProvider.name}” has a new key; it still has the old one · `)}
+          {L(E`「${refProvider.name}」的 key 已更新，它还在用旧的 · `, E`“${refProvider.name}” has a new key; it still has the old one · `)}
           <button type="button" className="app-kv-link" disabled={busy} onClick={() => void useMine(refProvider.id)}>{L("推送", "Push")}</button>
         </span>
       )}
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
         description={remote
-          ? L(`它在另一台电脑上：它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型），由它那台电脑上的 runner 照着改。只影响这个 agent，密钥只存在它那台电脑上。`, `It runs on another computer: which provider (endpoint, key and model) its ${codex ? "Codex" : "Claude Code"} uses; the runner there applies it. Only this agent is affected; keys stay on that computer.`)
-          : L(`后台唤醒这个 agent 时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`, `Which provider (endpoint, key and model) this agent's ${codex ? "Codex" : "Claude Code"} uses when it is woken in the background. Only this agent is affected; keys stay on this computer.`)}>
+          ? L((codex ? E`它在另一台电脑上：它的 Codex 用哪个服务商（地址、密钥和模型），由它那台电脑上的 runner 照着改。只影响这个 agent，密钥只存在它那台电脑上。` : E`它在另一台电脑上：它的 Claude Code 用哪个服务商（地址、密钥和模型），由它那台电脑上的 runner 照着改。只影响这个 agent，密钥只存在它那台电脑上。`), (codex ? E`It runs on another computer: which provider (endpoint, key and model) its Codex uses; the runner there applies it. Only this agent is affected; keys stay on that computer.` : E`It runs on another computer: which provider (endpoint, key and model) its Claude Code uses; the runner there applies it. Only this agent is affected; keys stay on that computer.`))
+          : L((codex ? E`后台唤醒这个 agent 时，它的 Codex 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。` : E`后台唤醒这个 agent 时，它的 Claude Code 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`), (codex ? E`Which provider (endpoint, key and model) this agent's Codex uses when it is woken in the background. Only this agent is affected; keys stay on this computer.` : E`Which provider (endpoint, key and model) this agent's Claude Code uses when it is woken in the background. Only this agent is affected; keys stay on this computer.`))}>
         <div className="app-provider-list" role="radiogroup" data-testid="provider-options">
           <label className={cn("app-provider-opt", choice === "" && "picked")}>
             <input type="radio" name="provider" checked={choice === ""} onChange={() => setChoice("")} />
@@ -494,10 +494,10 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
               <b>{remote ? L("跟随它那台电脑", "Follow its computer") : L("跟随这台电脑", "Follow this computer")}</b>
               <small>
                 {following
-                  ? L(`现在走的是 ${following}`, `Now going through ${following}`)
-                  : current ? L(`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, `Now “${current.name}”; changes when you switch in cc-switch`)
-                  : remote ? L(`用它那台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, `Uses ${codex ? "Codex" : "Claude Code"}'s own settings on its computer`)
-                  : L(`用这台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, `Uses ${codex ? "Codex" : "Claude Code"}'s own settings on this computer`)}
+                  ? L(E`现在走的是 ${following}`, E`Now going through ${following}`)
+                  : current ? L(E`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, E`Now “${current.name}”; changes when you switch in cc-switch`)
+                  : remote ? L((codex ? E`用它那台电脑上 Codex 自己的设置` : E`用它那台电脑上 Claude Code 自己的设置`), (codex ? E`Uses Codex's own settings on its computer` : E`Uses Claude Code's own settings on its computer`))
+                  : L((codex ? E`用这台电脑上 Codex 自己的设置` : E`用这台电脑上 Claude Code 自己的设置`), (codex ? E`Uses Codex's own settings on this computer` : E`Uses Claude Code's own settings on this computer`))}
               </small>
             </span>
           </label>
@@ -654,8 +654,8 @@ function visibilityLabel(v?: string) {
 // that open session receive by itself.
 export function InUseCard() {
   const ask = L(
-    `请在后台一直运行 \`${WAIT_CMD}\`，结束后马上再启动一次，收到消息时用 myco inbox pull 读取并处理。`,
-    `Keep \`${WAIT_CMD}\` running as a background command, start it again whenever it exits, and when it reports messages read them with myco inbox pull and handle them.`,
+    E`请在后台一直运行 \`${WAIT_CMD}\`，结束后马上再启动一次，收到消息时用 myco inbox pull 读取并处理。`,
+    E`Keep \`${WAIT_CMD}\` running as a background command, start it again whenever it exits, and when it reports messages read them with myco inbox pull and handle them.`,
   );
   return (
     <section className="app-offline app-inuse">
@@ -743,7 +743,7 @@ export function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: numbe
         <div className="app-offline-head">
           <span className="dot offline" />
           <b>{L("离线", "Offline")}</b>
-          {seen && <span>{L(`· 最后一次连接工作区是 ${seen}`, `· Last connected to the Hub ${seen}`)}</span>}
+          {seen && <span>{L(E`· 最后一次连接工作区是 ${seen}`, E`· Last connected to the Hub ${seen}`)}</span>}
         </div>
         <p>
           {L("这个 agent 只在会话里接收消息：它的会话运行时挂着 myco inbox wait。会话关掉后它就离线，发给它的任务会先排队，等它再挂上 inbox wait 才会收到。", "This node receives only inside its session: while that session runs, myco inbox wait is attached to it. When the session closes it goes offline and tasks wait in a queue until inbox wait is attached again.")}
@@ -761,7 +761,7 @@ export function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: numbe
       <div className="app-offline-head">
         <span className="dot offline" />
         <b>{L("离线", "Offline")}</b>
-        {seen && <span>{L(`· 最后一次连接工作区是 ${seen}`, `· Last connected to the Hub ${seen}`)}</span>}
+        {seen && <span>{L(E`· 最后一次连接工作区是 ${seen}`, E`· Last connected to the Hub ${seen}`)}</span>}
       </div>
       {!isCloud(ag) && <p className="app-offline-why" data-offline-why={offlineWhy(ag.runtime, machine?.os)}>{offlineWhyText(offlineWhy(ag.runtime, machine?.os))}</p>}
       <p>
@@ -782,7 +782,7 @@ export function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: numbe
       ) : (
         <>
           <p>
-            {machine ? (lang() === "zh" ? <>它在「{machine.name}」上。</> : <>It runs on “{machine.name}”. </>) : null}
+            {machine ? L(E`它在「${machine.name}」上。`, E`It runs on “${machine.name}”. `) : null}
             {L("在那台电脑的终端里运行下面这条命令（启动 myco 后台；已经在运行就重启它）。电脑关机或睡眠时，开机后会自动上线。", "Run this command in a terminal on that machine (it starts the runner, or restarts it if it's already running). If the machine is off or asleep, the node comes back online once it wakes.")}
           </p>
           <div className="app-command">
@@ -805,14 +805,14 @@ function AliasChip({ alias, busy, onRemove }: {
   onRemove?: () => void;
 }) {
   const { copied, copy } = useCopy(alias);
-  const copyLabel = L(`复制别名 ${alias}`, `Copy alias ${alias}`);
+  const copyLabel = L(E`复制别名 ${alias}`, E`Copy alias ${alias}`);
   return (
     <span className="app-label editable alias">
       <button type="button" className="copy" onClick={() => void copy()} disabled={busy} title={copyLabel} aria-label={copyLabel}>
         {copied ? L("已复制", "Copied") : "@" + alias}
       </button>
       {onRemove && (
-        <button type="button" aria-label={L(`删除别名 ${alias}`, `Remove alias ${alias}`)} onClick={onRemove} disabled={busy}>×</button>
+        <button type="button" aria-label={L(E`删除别名 ${alias}`, E`Remove alias ${alias}`)} onClick={onRemove} disabled={busy}>×</button>
       )}
     </span>
   );
@@ -981,12 +981,13 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   }, [row?.hub.id, ag?.machine_id, ag?.runtime?.cli, toolAsk]);
 
   const [more, setMore] = useState(openDetails);
-  type DetailTab = "settings" | "skills" | "records" | "identity";
+  type DetailTab = "settings" | "skills" | "records" | "channels" | "identity";
   const [dtab, setDtab] = useState<DetailTab>("settings");
   const detailTabs: { key: DetailTab; label: string }[] = [
     { key: "settings", label: L("设置", "Settings") },
     { key: "skills", label: L("能力", "Skills") },
     { key: "records", label: L("记录", "Records") },
+    { key: "channels", label: L("渠道", "Channels") },
     { key: "identity", label: L("身份", "Identity") },
   ];
   useEffect(() => { if (openDetails) setMore(true); }, [openDetails, row?.hub.id, ag?.name]);
@@ -1170,7 +1171,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   );
   const row_owner = (
     <>
-      {ag.invited_by && <div className="app-kv" data-testid="agent-invited-by"><span className="app-kv-label">{L("邀请来源", "Invitation")}</span><span className="app-kv-value">{L(`由 ${ag.invited_by} 邀请`, `Invited by ${ag.invited_by}`)}</span></div>}
+      {ag.invited_by && <div className="app-kv" data-testid="agent-invited-by"><span className="app-kv-label">{L("邀请来源", "Invitation")}</span><span className="app-kv-value">{L(E`由 ${ag.invited_by} 邀请`, E`Invited by ${ag.invited_by}`)}</span></div>}
               {ag.owner && (
                 <div className="app-kv">
                   <span className="app-kv-label">{L("主人", "Owner")}</span>
@@ -1345,8 +1346,8 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                 <div className="app-goal-now" data-testid="agent-goal">
                   <span>{row.st.goal.state === "paused" ? L("目标（已暂停）", "Goal (paused)") : L("当前目标", "Current goal")}</span>
                   <b>{row.st.goal.objective}</b>
-                  <small>{[L(`第 ${row.st.goal.round}${row.st.goal.max_rounds ? `/${row.st.goal.max_rounds}` : ""} 轮`, `round ${row.st.goal.round}${row.st.goal.max_rounds ? ` of ${row.st.goal.max_rounds}` : ""}`),
-                    row.st.goal.next_wake_at ? L(`下次唤醒 ${new Date(row.st.goal.next_wake_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}`, `next ${new Date(row.st.goal.next_wake_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}`) : ""].filter(Boolean).join(" · ")}</small>
+                  <small>{[L((row.st.goal.max_rounds ? E`第 ${row.st.goal.round}/${row.st.goal.max_rounds} 轮` : E`第 ${row.st.goal.round} 轮`), (row.st.goal.max_rounds ? E`round ${row.st.goal.round} of ${row.st.goal.max_rounds}` : E`round ${row.st.goal.round}`)),
+                    row.st.goal.next_wake_at ? L(E`下次唤醒 ${new Date(row.st.goal.next_wake_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}`, E`next ${new Date(row.st.goal.next_wake_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}`) : ""].filter(Boolean).join(" · ")}</small>
                 </div>
               )}
               {current.length === 0 && <div className="app-empty-note">{row.st.queued + row.st.in_progress + row.st.held > 0
@@ -1450,7 +1451,6 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               <AliasRow row={row} mayManage={mayManage} onRefresh={onRefresh} />
               <div className="app-kv"><span className="app-kv-label">{L("谁能给它派活", "Who can send it tasks")}</span><span className="app-kv-value">{ag.allow_from.length && !ag.allow_from.includes("*") ? ag.allow_from.join(", ") : L("任何 agent", "Any node")}</span></div>
               <ResumeRow row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
-              <ChatAppsRow row={row} mayManage={mayManage} />
             </div>
           </section>
           <section className="app-group">
@@ -1471,7 +1471,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             <div className="app-group-title"><span className="name">{embedded ? L("管理", "Manage") : L("操作", "Actions")}</span></div>
             <div className="app-list">
               {!mayManage && (
-                <div className="app-empty-note">{L(`这是 ${ag.owner || L("别人", "someone else")} 的 agent，只有 ${ag.owner || L("他", "they")} 或管理员能修改。`, `This node belongs to ${ag.owner || "someone else"}; only they or an admin can change it.`)}</div>
+                <div className="app-empty-note">{L(E`这是 ${ag.owner || L("别人", "someone else")} 的 agent，只有 ${ag.owner || L("他", "they")} 或管理员能修改。`, E`This node belongs to ${ag.owner || L("别人", "someone else")}; only they or an admin can change it.`)}</div>
               )}
               {!embedded && (
                 <button type="button" className="app-action-row" onClick={() => openAction("profile")} disabled={!mayManage}>
@@ -1480,7 +1480,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               )}
               <button type="button" className="app-action-row" onClick={() => openAction("allow")} disabled={!mayManage}>
                 <UserCheck />{L("允许谁派任务", "Who can give tasks")}
-                <span className="app-action-value">{ag.allow_from.length && !ag.allow_from.includes("*") ? L(`${ag.allow_from.length} 个`, `${ag.allow_from.length}`) : L("任何 agent", "Anyone")}</span>
+                <span className="app-action-value">{ag.allow_from.length && !ag.allow_from.includes("*") ? L(E`${ag.allow_from.length} 个`, E`${ag.allow_from.length}`) : L("任何 agent", "Anyone")}</span>
                 <span className="app-chev">›</span>
               </button>
               {forkable && (
@@ -1507,6 +1507,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           </section>
         </>
       );
+  // 渠道 only for an agent you may manage (another one opened after it
+  // shows its settings instead).
+  const channels = mayManage && kind === "agent";
+  const tab: DetailTab = dtab === "channels" && !channels ? "settings" : dtab;
   // Open work it holds (left open, waiting on someone, queued): above the
   // fold, where it can be closed or stopped.
   const openWork = (row.st.current || []).length > 0;
@@ -1523,17 +1527,18 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               reads one subject at a time: how it runs and whose it is, what
               it is good at, what it did, and what it is. */}
           <div className="wf-tabs ms-tabs" role="tablist" aria-label={L("看什么", "View")} data-testid="ms-tabs">
-            {detailTabs.map((t) => (
-              <button key={t.key} type="button" role="tab" aria-selected={dtab === t.key} className={cn("wf-tab", dtab === t.key && "is-on")}
+            {detailTabs.filter((t) => t.key !== "channels" || channels).map((t) => (
+              <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={cn("wf-tab", tab === t.key && "is-on")}
                 onClick={() => setDtab(t.key)} data-tab={t.key}>
                 {t.label}
               </button>
             ))}
           </div>
-          {dtab === "settings" && <>{sec_run}{sec_labels}</>}
-          {dtab === "skills" && (kind === "human" ? <div className="app-empty-note">{L("人没有擅长和工具。", "People have no skills or tools here.")}</div> : sec_about)}
-          {dtab === "records" && <>{sec_peers}{sec_history}</>}
-          {dtab === "identity" && sec_identity}
+          {tab === "settings" && <>{sec_run}{sec_labels}</>}
+          {tab === "skills" && (kind === "human" ? <div className="app-empty-note">{L("人没有擅长和工具。", "People have no skills or tools here.")}</div> : sec_about)}
+          {tab === "records" && <>{sec_peers}{sec_history}</>}
+          {tab === "channels" && <ChatAppsPanel row={row} mayManage={mayManage} />}
+          {tab === "identity" && sec_identity}
         </div>
       )}
       <HandoverHistory row={row} now={now} />
@@ -1545,7 +1550,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
     <>
       {embedded ? sections : (<>
       <div className="app-inspector-backdrop" onClick={onClose} />
-      <aside className="app-inspector" role="dialog" aria-label={L(`${nodeName(ag, row.hub)} 详情`, `${nodeName(ag, row.hub)} details`)}>
+      <aside className="app-inspector" role="dialog" aria-label={L(E`${nodeName(ag, row.hub)} 详情`, E`${nodeName(ag, row.hub)} details`)}>
         <div className="app-inspector-head">
           <span className="app-row-icon"><Icon /></span>
           <div className="titles">
@@ -1570,6 +1575,12 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           {sec_peers}
           {sec_history}
           {sec_identity}
+          {channels && (
+            <section className="app-group">
+              <div className="app-group-title"><span className="name">{L("渠道", "Channels")}</span></div>
+              <ChatAppsPanel row={row} mayManage={mayManage} />
+            </section>
+          )}
           <HandoverHistory row={row} now={now} />
           {sec_actions}
         </div>
@@ -1584,7 +1595,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
       >
         {copied ? (
           <>
-            <div className="app-success"><Check />{L(`已复制为 ${copied}`, `Copied as ${copied}`)}</div>
+            <div className="app-success"><Check />{L(E`已复制为 ${copied}`, E`Copied as ${copied}`)}</div>
             <div className="app-modal-actions"><button type="button" className="app-btn app-btn-primary" onClick={closeAction}>{L("完成", "Done")}</button></div>
           </>
         ) : (
@@ -1662,7 +1673,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             <input type="radio" name="visibility" checked={visChoice === "private"} onChange={() => setVisChoice("private")} disabled={busy} />
             <span>
               <b>{L("仅自己", "Only its owner")}</b>
-              <small>{L(`只有 ${ag.owner || "主人"} 和 ${ag.owner || "主人"} 自己的 agent 能找到它、给它派活；别人的回复照常能收到。`, `Only ${ag.owner || "its owner"} and their own agents can find it and give it tasks; replies from others still arrive.`)}</small>
+              <small>{L(E`只有 ${ag.owner || L("主人", "its owner")} 和 ${ag.owner || L("主人", "its owner")} 自己的 agent 能找到它、给它派活；别人的回复照常能收到。`, E`Only ${ag.owner || L("主人", "its owner")} and their own agents can find it and give it tasks; replies from others still arrive.`)}</small>
             </span>
           </label>
         </div>
@@ -1742,7 +1753,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           const n = allowFrom.filter((x) => x !== "*" && !isNobody(x)).length;
           return (
             <div className={cn("allow-now", n > 0 && "is-limited")} data-testid="allow-now">
-              {anyNode ? L("现在：任何 agent 都可以给它派任务", "Now: any agent can give it tasks") : n === 0 ? L("现在：没有 agent 可以给它派任务", "Now: no agent can give it tasks") : L(`现在：只有选中的 ${n} 个可以`, `Now: only the ${n} selected`)}
+              {anyNode ? L("现在：任何 agent 都可以给它派任务", "Now: any agent can give it tasks") : n === 0 ? L("现在：没有 agent 可以给它派任务", "Now: no agent can give it tasks") : L(E`现在：只有选中的 ${n} 个可以`, E`Now: only the ${n} selected`)}
             </div>
           );
         })()}
@@ -1783,7 +1794,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
         onOpenChange={(o) => !o && closeAction()}
         title={L("删除这个 agent？", "Delete this agent?")}
         subject={who}
-        description={L(`它会从「${row.hub.name}」里删掉，令牌随之作废，要回来得重新接入。`, `It is removed from ${row.hub.name} and its token stops working; it has to join again to come back.`)}
+        description={L(E`它会从「${row.hub.name}」里删掉，令牌随之作废，要回来得重新接入。`, E`It is removed from ${row.hub.name} and its token stops working; it has to join again to come back.`)}
         consequences={L("和它的聊天记录会留着。", "Your chats with it are kept.")}
         confirmLabel={L("删除", "Delete")}
         busy={busy}

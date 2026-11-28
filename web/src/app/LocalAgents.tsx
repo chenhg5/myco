@@ -6,7 +6,7 @@ import { CopyButton } from "@/app/copy";
 import { ErrorText } from "@/app/dialogs";
 import { useContextMenu } from "@/app/ContextMenu";
 import { recall, remember } from "@/lib/memo";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** What a terminal was opened for, per CLI, and whether it could be. */
@@ -21,7 +21,7 @@ function iconOf(cli: string) {
 
 function stateText(a: LocalAgent): string {
   switch (a.state) {
-    case "ready": return a.version ? L(`可以用了 · ${a.version}`, `Ready · ${a.version}`) : L("可以用了", "Ready");
+    case "ready": return a.version ? L(E`可以用了 · ${a.version}`, E`Ready · ${a.version}`) : L("可以用了", "Ready");
     case "signed_out": return L("装好了，还没登录", "Installed, not signed in");
     case "unknown": return L("看不出是否登录，能用就不用管。需要时可以去登录。", "Sign-in status is unknown. If it works, no action is needed. Sign in only if needed.");
     default: return a.needs === "npm"
@@ -159,7 +159,7 @@ export function LocalAgentLines({ only, onReady, hideReady }: { only?: string[];
       )}
       {more.length > 0 && !hideReady && (
         <div className="app-small-note la-more" data-testid="more-agents">
-          {L(`还支持 ${more.map((a) => a.name).join("、")}：装好后会出现在这里。`, `Also supported: ${more.map((a) => a.name).join(", ")}; once installed they show here.`)}
+          {L(E`还支持 ${more.map((a) => a.name).join("、")}：装好后会出现在这里。`, E`Also supported: ${more.map((a) => a.name).join(", ")}; once installed they show here.`)}
         </div>
       )}
       {menu.element}

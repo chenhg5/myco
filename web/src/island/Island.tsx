@@ -5,7 +5,7 @@ import type { Agent } from "@/api";
 import { Mushroom } from "@/app/Working";
 import { Avatar } from "@/app/persona";
 import { agentKind, stuckCounts } from "@/app/nodes";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 import "@/app/app.css";
 import "@/app/space.css";
@@ -213,7 +213,7 @@ export function Island() {
             {count > 0 && (NW > 0 ? (
               <b>{count}</b>
             ) : (
-              <span className="isl-line">{count === 1 && first ? first.status : L(`${count} 个在干活`, `${count} at work`)}</span>
+              <span className="isl-line">{count === 1 && first ? first.status : L(E`${count} 个在干活`, E`${count} at work`)}</span>
             ))}
           </span>
         </div>
@@ -237,7 +237,7 @@ export function Island() {
             </button>
           ))}
           {busy.length > MAX_ROWS && (
-            <div className="isl-more">{L(`还有 ${busy.length - MAX_ROWS} 个在干活`, `${busy.length - MAX_ROWS} more at work`)}</div>
+            <div className="isl-more">{L(E`还有 ${busy.length - MAX_ROWS} 个在干活`, E`${busy.length - MAX_ROWS} more at work`)}</div>
           )}
         </div>
       </div>

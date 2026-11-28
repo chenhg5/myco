@@ -5,7 +5,7 @@ import { Check, Download, Eye, FileText, Loader2 } from "lucide-react";
 import { appApi } from "@/appapi";
 import type { Attachment } from "@/api";
 import { bytes } from "@/app/attach";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { FilePreview, isText, useVersion, type Version } from "@/app/preview";
 import { Lightbox } from "@/app/lightbox";
@@ -45,7 +45,7 @@ export function MessageAttachments({ hubId, items }: { hubId: string; items: Att
               const box = knownSize(key);
               return (
                 <button key={a.file_id} type="button" className="conv-attach is-image" onClick={() => setOpen(i)}
-                  title={L(`${a.name} · 点一下看大图`, `${a.name} · click to enlarge`)}
+                  title={L(E`${a.name} · 点一下看大图`, E`${a.name} · click to enlarge`)}
                   style={box ? { width: box[0], aspectRatio: `${box[0]} / ${box[1]}` } : undefined}>
                   <img src={appApi.attachmentUrl(hubId, a.file_id)} alt={a.name} loading="lazy" draggable={false}
                     onLoad={(e) => { const r = e.currentTarget.getBoundingClientRect(); noteSize(key, Math.round(r.width), Math.round(r.height)); }}
@@ -81,7 +81,7 @@ export function FileRow({ hubId, a }: { hubId: string; a: Attachment }) {
         <button type="button" className="conv-attach" onClick={() => setReading(true)} title={L("打开看看", "Open to read")}>
           <FileText />
           <span className="conv-attach-name">{a.name}</span>
-          {version && version.n > 1 && <span className="conv-attach-version">{L(`第 ${version.n} 版`, `v${version.n}`)}</span>}
+          {version && version.n > 1 && <span className="conv-attach-version">{L(E`第 ${version.n} 版`, E`v${version.n}`)}</span>}
           <span className="conv-attach-size">{bytes(a.size)}</span>
           <Eye className="conv-attach-go" />
         </button>
@@ -116,7 +116,7 @@ function SaveRow({ hubId, a, version }: { hubId: string; a: Attachment; version?
       title={state === "error" ? error : L("存到「下载」文件夹", "Save to Downloads")}>
       <FileText />
       <span className="conv-attach-name">{a.name}</span>
-      {version && version.n > 1 && <span className="conv-attach-version">{L(`第 ${version.n} 版`, `v${version.n}`)}</span>}
+      {version && version.n > 1 && <span className="conv-attach-version">{L(E`第 ${version.n} 版`, E`v${version.n}`)}</span>}
       <span className="conv-attach-size">
         {state === "saving" ? <Loader2 className="att-spin" />
           : state === "saved" ? <><Check />{L("已存到「下载」", "Saved to Downloads")}</>

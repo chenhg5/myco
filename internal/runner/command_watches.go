@@ -135,6 +135,11 @@ func (r *Runner) runCommandWatches(ctx context.Context) {
 }
 
 func (r *Runner) commandWatchCheck(ctx context.Context, hub commandWatchHub, w api.Watch) {
+	done, ok := r.opts.Activity.Work(ctx)
+	if !ok {
+		return
+	}
+	defer done()
 	claimCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	claimed, err := hub.ClaimWatch(claimCtx, w.ID, r.opts.CommandRunnerID)
 	cancel()

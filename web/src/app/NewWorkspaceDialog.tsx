@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { suggestWorkspaceName } from "@/app/localHubs";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /** Starts another workspace on this computer (a name, then the same path as
  *  the first one: start, join, switch), or, with server, adds one to the
@@ -46,7 +46,7 @@ export function NewWorkspaceDialog({ open, onOpenChange, taken, onStart, server 
     <Modal
       open={open}
       onOpenChange={(o) => { if (!o) close(); }}
-      title={server ? L(`在 ${server} 上新建工作区`, `New workspace on ${server}`) : L("在这台电脑上新建工作区", "New workspace on this computer")}
+      title={server ? L(E`在 ${server} 上新建工作区`, E`New workspace on ${server}`) : L("在这台电脑上新建工作区", "New workspace on this computer")}
       description={server
         ? L("在同一台服务器上再开一个工作区：成员、agent、项目、消息都和现在的分开，地址、证书都不用另配。建好后你就是它的主人，自动切换过去。", "Adds a workspace on the same server: its members, agents, projects and messages are kept apart from this one, on the same address. You own it; the app switches to it.")
         : L("在这台电脑上再起一个工作区，自动加入并切换过去。它和已有的工作区互不影响。", "Starts another workspace on this computer, adds it to the app and switches to it. It keeps its nodes apart from your other workspaces.")}
@@ -63,7 +63,7 @@ export function NewWorkspaceDialog({ open, onOpenChange, taken, onStart, server 
             autoFocus
             required
           />
-          <span className="app-small-note">{L(`内部名：${name}（只能用小写字母、数字和横线，之后也能在设置里改名）`, `Internal name: ${name} (lowercase letters, digits and dashes; you can rename the workspace later in Settings)`)}</span>
+          <span className="app-small-note">{L(E`内部名：${name}（只能用小写字母、数字和横线，之后也能在设置里改名）`, E`Internal name: ${name} (lowercase letters, digits and dashes; you can rename the workspace later in Settings)`)}</span>
         </label>
         <ErrorText error={error} />
         <div className="app-modal-actions">

@@ -10,7 +10,7 @@ import { ConfirmDialog, ErrorText } from "@/app/dialogs";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { quotaHasNumbers, quotaLiveWindows, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaTight, quotaWindowLabel, quotaWindowText } from "@/app/quota";
 import { cn, timeAgo } from "@/lib/utils";
-import { L, lang } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /** The models a node may be told to use when its computer does not say
  *  (Claude Code's aliases; Codex on runners before v0.21.1, which do not
@@ -111,7 +111,7 @@ function SourceValue({ value, source, sourceLabel }: { value?: string; source?: 
     <>
       {value || "—"}
       {value && label && (
-        <span className="app-kv-note">{lang() === "zh" ? <>（{label}）</> : <> ({label})</>}</span>
+        <span className="app-kv-note">{L(E`（${label}）`, E` (${label})`)}</span>
       )}
     </>
   );
@@ -210,8 +210,8 @@ export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
           {/* (how to allow more: LocalShellAccess under it, "Allow" on this
               computer, or where to change it on another) */}
           {rt?.max_access && cap !== "full" && <div>{L(
-            `这台电脑最多允许「${accessLabel(cap)}」。`,
-            `This computer allows at most ${accessLabel(cap)}.`,
+            E`这台电脑最多允许「${accessLabel(cap)}」。`,
+            E`This computer allows at most ${accessLabel(cap)}.`,
           )}</div>}
           {accessEditable && cap !== "full" && <LocalShellAccess machine={machineOfRow(row)} hub={row.hub} what="full" onlyLocal onChange={onRefresh}
             agent={{ name: nodeName(ag, row.hub), live: !!rt?.features?.includes("live_max_access") }} />}
@@ -329,7 +329,7 @@ export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
           {editable && rt?.effort && (
             <span className="app-kv-help">
               {L("现在用的：", "In use: ")}{effortLabel(rt.effort)}
-              {rt?.effort && modelSourceLabel(rt.effort_source) ? L(`（${modelSourceLabel(rt.effort_source)}）`, ` (${modelSourceLabel(rt.effort_source)})`) : ""}
+              {rt?.effort && modelSourceLabel(rt.effort_source) ? L(E`（${modelSourceLabel(rt.effort_source)}）`, E` (${modelSourceLabel(rt.effort_source)})`) : ""}
             </span>
           )}
         </div>
@@ -387,8 +387,8 @@ function ModelsSource({ row, now, mayRefresh, onRefresh }: { row: AgentRow; now:
   return (
     <span className="app-kv-help" data-testid="run-models-source">
       {from === "provider"
-        ? L(`模型列表从 ${where} 读取`, `Models as ${where} lists them`) + (at ? ` · ${timeAgo(at, now)}` : "")
-        : L(`内置列表：还没能从 ${where} 读取`, `Built-in list: ${where} could not be asked yet`)}
+        ? L(E`模型列表从 ${where} 读取`, E`Models as ${where} lists them`) + (at ? ` · ${timeAgo(at, now)}` : "")
+        : L(E`内置列表：还没能从 ${where} 读取`, E`Built-in list: ${where} could not be asked yet`)}
       {canRefresh && (
         <>
           {" · "}
@@ -461,9 +461,9 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
   const efforts = effortChoices(cli, rt?.models, setModel || rt?.model, rt?.effort, setEffort);
   const pending = editable && ((setModel && setModel !== rt?.model) || (setEffort && setEffort !== rt?.effort));
   const title = editable
-    ? L(`模型和推理强度：${label}（点一下切换，下次唤醒时生效）`, `Model and effort: ${label} (click to switch; from its next run)`)
+    ? L(E`模型和推理强度：${label}（点一下切换，下次唤醒时生效）`, E`Model and effort: ${label} (click to switch; from its next run)`)
     : unknown ? L("它还没说自己用的哪个模型", "It has not said which model it runs on")
-      : L(`模型和推理强度：${label}（它自己的会话决定）`, `Model and effort: ${label} (its own session decides)`);
+      : L(E`模型和推理强度：${label}（它自己的会话决定）`, E`Model and effort: ${label} (its own session decides)`);
   return (
     <span className="run-pill-wrap">
       <button type="button" className={cn("run-pill", editable && "is-editable", pending && "is-pending", unknown && "is-unknown")} title={title} aria-label={title}
@@ -564,8 +564,8 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
   const label = shown === "full" ? L("完全权限", "Full access") : shown === "readonly" ? L("只读", "Read-only") : shown === "workspace" ? L("工作区权限", "Workspace access") : L("默认权限", "Default access");
   const inUse = rt.access ? accessLabel(rt.access as RuntimeAccess) : cliDefault;
   const title = editable
-    ? L(`权限：${label}（点一下切换，下次唤醒时生效）`, `Access: ${label} (click to switch; from its next run)`)
-    : L(`权限：${label}`, `Access: ${label}`);
+    ? L(E`权限：${label}（点一下切换，下次唤醒时生效）`, E`Access: ${label} (click to switch; from its next run)`)
+    : L(E`权限：${label}`, E`Access: ${label}`);
   const save = async (access: RuntimeAccess | "") => {
     setBusy(true); setError(null);
     try {
@@ -628,7 +628,7 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
                 </button>}
                 {cap !== "full" && (
                   <div className="run-pill-note">
-                    {L(`那台电脑最多允许「${accessLabel(cap)}」。`, `That computer allows at most ${accessLabel(cap)}. `)}
+                    {L(E`那台电脑最多允许「${accessLabel(cap)}」。`, E`That computer allows at most ${accessLabel(cap)}. `)}
                     <LocalShellAccess machine={machineOfRow(row)} hub={row.hub} what="full" onlyLocal onChange={onRefresh}
                       agent={{ name: nodeName(ag, row.hub), live: !!rt.features?.includes("live_max_access") }} />
                   </div>
@@ -694,7 +694,7 @@ function QuotaRows({ quota, row, now }: { quota: NonNullable<Runtime["quota"]>; 
         <>
           <button type="button" className="app-quota-more" aria-expanded={more} onClick={() => setMore((v) => !v)}>
             <ChevronRight aria-hidden className={cn(more && "is-open")} />
-            {L(`按模型的 ${scoped.length} 个窗口`, `${scoped.length} per-model windows`)}
+            {L(E`按模型的 ${scoped.length} 个窗口`, E`${scoped.length} per-model windows`)}
           </button>
           {more && scoped.map(one)}
         </>

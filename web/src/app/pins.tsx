@@ -9,7 +9,7 @@ import { isPicture } from "@/app/attachments";
 import { Lightbox } from "@/app/lightbox";
 import { openPage, pageTargetOf } from "@/app/pages";
 import { copyText } from "@/app/copy";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
@@ -154,7 +154,7 @@ export function PinBar({ hubId, withWhom, a, pins, setPins, onJump, adding, onAd
               const by = p.added_by.startsWith("@") ? L("你", "you") : p.added_by;
               return (
                 <button key={p.id} type="button" className={cn("pin-chip", `is-${p.kind}`)} draggable
-                  title={`${p.title}${p.kind === "link" && p.target ? `\n${p.target}` : ""}\n${L(`${by} 置顶`, `Pinned by ${by}`)}`}
+                  title={`${p.title}${p.kind === "link" && p.target ? `\n${p.target}` : ""}\n${L(E`${by} 置顶`, E`Pinned by ${by}`)}`}
                   onClick={() => open(p)}
                   onContextMenu={(e) => { e.preventDefault(); menu.open(e, itemsFor(p)); }}
                   onDragStart={(e) => { dragging.current = p.id; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.title); }}

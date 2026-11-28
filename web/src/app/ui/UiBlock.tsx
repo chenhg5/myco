@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Check, CircleDashed, Loader2, Minus, X } from "lucide-react";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { appApi } from "@/appapi";
 import { copyText } from "@/app/copy";
@@ -247,9 +247,9 @@ function Element({ el, ctx, depth }: { el: UiElement; ctx: Ctx; depth: number })
       return (
         <div className={cn("ui-tests", failed > 0 ? "tone-danger" : "tone-success")}>
           <div className="ui-tests-sum">
-            <span className="is-pass"><Check />{L(`${num(p.passed) ?? 0} 通过`, `${num(p.passed) ?? 0} passed`)}</span>
-            <span className={cn(failed > 0 && "is-fail")}><X />{L(`${failed} 失败`, `${failed} failed`)}</span>
-            {num(p.skipped) !== null && <span><Minus />{L(`${num(p.skipped)} 跳过`, `${num(p.skipped)} skipped`)}</span>}
+            <span className="is-pass"><Check />{L(E`${num(p.passed) ?? 0} 通过`, E`${num(p.passed) ?? 0} passed`)}</span>
+            <span className={cn(failed > 0 && "is-fail")}><X />{L(E`${failed} 失败`, E`${failed} failed`)}</span>
+            {num(p.skipped) !== null && <span><Minus />{L(E`${num(p.skipped)} 跳过`, E`${num(p.skipped)} skipped`)}</span>}
             {str(p.duration) && <span className="ui-muted">{str(p.duration)}</span>}
           </div>
           {items.length > 0 && (
@@ -268,7 +268,7 @@ function Element({ el, ctx, depth }: { el: UiElement; ctx: Ctx; depth: number })
     case "Button":
       return <UiButton p={p} />;
     default:
-      return <span className="ui-unknown">{L(`（这里有一个 App 不认识的部分：${el.type}）`, `(a part this App does not know: ${el.type})`)}</span>;
+      return <span className="ui-unknown">{L(E`（这里有一个 App 不认识的部分：${el.type}）`, E`(a part this App does not know: ${el.type})`)}</span>;
   }
 }
 
@@ -282,7 +282,7 @@ function UiTabs({ el, ctx, depth }: { el: UiElement; ctx: Ctx; depth: number }) 
       <div className="seg seg-sm" role="tablist">
         {kids.map((c, j) => (
           <button key={c} type="button" role="tab" aria-selected={j === i} className={cn("seg-btn", j === i && "active")} onClick={() => setAt(j)}>
-            {str(ctx.spec.elements[c].props.label) || L(`第 ${j + 1} 页`, `Tab ${j + 1}`)}
+            {str(ctx.spec.elements[c].props.label) || L(E`第 ${j + 1} 页`, E`Tab ${j + 1}`)}
           </button>
         ))}
       </div>
@@ -311,7 +311,7 @@ function UiButton({ p }: { p: Record<string, unknown> }) {
   }
   // reply: the words go to your input box, for you to send (or change).
   return (
-    <button type="button" className={cls} title={L(`放进输入框：${value}`, `Put in the input box: ${value}`)}
+    <button type="button" className={cls} title={L(E`放进输入框：${value}`, E`Put in the input box: ${value}`)}
       onClick={(e) => e.currentTarget.dispatchEvent(new CustomEvent(UI_REPLY, { bubbles: true, detail: { text: value } }))}>
       {label}
     </button>
@@ -401,7 +401,7 @@ export function UiBlock({ src, files }: { src: string; files?: InlineFiles }) {
   if ("error" in parsed) {
     return (
       <div className="ui-broken">
-        <div className="ui-muted">{L(`这块界面画不出来（${parsed.error}），下面是它的原文：`, `This part could not be drawn (${parsed.error}); here is its source:`)}</div>
+        <div className="ui-muted">{L(E`这块界面画不出来（${parsed.error}），下面是它的原文：`, E`This part could not be drawn (${parsed.error}); here is its source:`)}</div>
         <Markdown text={fence(src, "json")} />
       </div>
     );

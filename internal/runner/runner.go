@@ -105,6 +105,8 @@ type Options struct {
 	// Slots, if set, is shared by several runners in one process to cap the
 	// number of harness processes running at once.
 	Slots chan struct{}
+	// Activity is shared across all profiles for idle-only service restarts.
+	Activity *Activity
 	// SlotPool replaces Slots with workspace-fair admission for runner --all.
 	SlotPool *SlotPool
 	OnSlots  func(*api.RunnerSlots)
@@ -234,10 +236,12 @@ func New(hub Hub, h harness.Harness, sessions SessionStore, prompt PromptBuilder
 		log.Warn("session scope 'agent' processes one message at a time; ignoring concurrency", "requested", opts.Concurrency)
 		opts.Concurrency = 1
 	}
-	return &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log,
+	r := &Runner{hub: hub, harness: h, sessions: sessions, prompt: prompt, opts: opts, log: log,
 		lastSuccess: ReadSuccess(opts.StatePath), ownRunEnd: loadState(opts.StatePath), pending: loadPending(opts.StatePath), busyStreak: map[string]int{},
 		tasks: map[string]*activeTask{}, pendingSteers: map[string][]api.Message{}, stopEvery: stopCheckEvery,
 		finishRetryMin: time.Second, finishTimeout: 3 * time.Minute, idleCheck: 15 * time.Second}
+	opts.Activity.Pending(SlotOwner(opts.HubURL, opts.Self), len(r.pending))
+	return r
 }
 
 func loadState(path string) map[string]time.Time {
@@ -362,7 +366,10 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 		}()
 	}
-	r.recoverPending(ctx)
+	if done, ok := r.opts.Activity.Work(ctx); ok {
+		r.recoverPending(ctx)
+		done()
+	}
 	keptCtx, stopKept := context.WithCancel(ctx)
 	defer stopKept()
 	commandDone := make(chan struct{})
@@ -376,7 +383,10 @@ func (r *Runner) Run(ctx context.Context) error {
 			case <-keptCtx.Done():
 				return
 			case <-t.C:
-				r.retryUndelivered(keptCtx)
+				if done, ok := r.opts.Activity.Work(keptCtx); ok {
+					r.retryUndelivered(keptCtx)
+					done()
+				}
 			}
 		}
 	}()
@@ -426,7 +436,13 @@ func (r *Runner) Run(ctx context.Context) error {
 			wait = 0
 		}
 		pullStart := time.Now()
-		msgs, err := r.hub.Pull(ctx, free, wait)
+		pollCtx, finishPoll, ok := r.opts.Activity.Poll(ctx)
+		if !ok {
+			return nil
+		}
+		msgs, err := r.hub.Pull(pollCtx, free, wait)
+		interruptedPoll := pollCtx.Err() != nil
+		finishPoll(len(msgs))
 		for _, m := range msgs {
 			r.log.Info("run latency", "message_id", m.ID, "stage", "pull_received", "pull_wait_ms", time.Since(pullStart).Milliseconds(), "observed_at_ms", time.Now().UnixMilli())
 		}
@@ -435,6 +451,9 @@ func (r *Runner) Run(ctx context.Context) error {
 			<-slots
 		}
 		if err != nil {
+			if interruptedPoll && ctx.Err() == nil {
+				continue
+			}
 			if ctx.Err() != nil {
 				return nil
 			}
@@ -461,7 +480,8 @@ func (r *Runner) Run(ctx context.Context) error {
 			go func(m api.Message) {
 				defer wg.Done()
 				defer func() { <-slots }()
-				r.Handle(ctx, m)
+				defer r.opts.Activity.Done()
+				r.handle(ctx, m)
 			}(m)
 		}
 		if r.opts.Once {
@@ -473,6 +493,15 @@ func (r *Runner) Run(ctx context.Context) error {
 
 // Handle processes one pulled message end to end.
 func (r *Runner) Handle(ctx context.Context, m api.Message) {
+	done, ok := r.opts.Activity.Work(ctx)
+	if !ok {
+		return
+	}
+	defer done()
+	r.handle(ctx, m)
+}
+
+func (r *Runner) handle(ctx context.Context, m api.Message) {
 	if ctx.Err() != nil {
 		return
 	}

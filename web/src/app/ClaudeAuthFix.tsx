@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { KeyRound, LogIn, Terminal } from "lucide-react";
 import { appApi, type ClaudeAuth } from "@/appapi";
 import { ErrorText } from "@/app/dialogs";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /** Claude could not sign in when an agent started (expired account sign-in, no key). */
 export function isClaudeAuthError(e: unknown): boolean {
@@ -55,7 +55,7 @@ export function ClaudeAuthFix({ onRetry }: { onRetry: () => void }) {
         <div className="ca-title">{L("Claude 登录不上", "Claude could not sign in")}</div>
         <div className="ca-text">
           {auth?.using
-            ? L(`这台电脑启动的 agent 现在用「${auth.using_name || auth.using}」，它没能登录。换一种试试：`, `Agents started here use “${auth.using_name || auth.using}”, which could not sign in. Try another way:`)
+            ? L(E`这台电脑启动的 agent 现在用「${auth.using_name || auth.using}」，它没能登录。换一种试试：`, E`Agents started here use “${auth.using_name || auth.using}”, which could not sign in. Try another way:`)
             : ways > 0
               ? L("这台电脑启动的 agent 用的是 Claude 账号登录，它过期了。你在终端里用的是另一种方式，选一个沿用：", "Agents started here use the Claude account sign-in, which has expired. Your terminal uses another way; pick one to use:")
               : L("这台电脑启动的 agent 用的是 Claude 账号登录，它过期了。重新登录一次就好：", "Agents started here use the Claude account sign-in, which has expired. Sign in again:")}
@@ -64,7 +64,7 @@ export function ClaudeAuthFix({ onRetry }: { onRetry: () => void }) {
           {auth?.cc_switch.map((p) => (
             <button key={p.ref} type="button" className="app-btn app-btn-small" disabled={!!busy} onClick={() => void use(p.ref)}>
               {busy === p.ref ? <span className="app-spinner" /> : null}
-              {L(`用 cc-switch 的「${p.name}」`, `cc-switch: ${p.name}`)}{p.host ? <span className="ca-host">{p.host}</span> : null}{p.current ? <span className="ca-host">{L("终端正在用", "in use")}</span> : null}
+              {L(E`用 cc-switch 的「${p.name}」`, E`cc-switch: ${p.name}`)}{p.host ? <span className="ca-host">{p.host}</span> : null}{p.current ? <span className="ca-host">{L("终端正在用", "in use")}</span> : null}
             </button>
           ))}
           {!!auth?.shell?.length && (

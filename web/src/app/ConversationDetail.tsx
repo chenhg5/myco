@@ -28,7 +28,7 @@ import { ErrorText, Modal } from "@/app/dialogs";
 import { recall, remember as rememberMemo } from "@/lib/memo";
 import { useCopy } from "@/app/copy";
 import { cn, timeAgo } from "@/lib/utils";
-import { L, locale } from "@/lib/i18n";
+import { L, locale, E } from "@/lib/i18n";
 import { Busy } from "@/app/Skeleton";
 import { Avatar, whereOf, isWorkspace } from "@/app/persona";
 import { AttachButton, AttachList, dropFiles, pastedFiles, useAttachments } from "@/app/attach";
@@ -129,7 +129,7 @@ function ProgressFold({ items }: { items: Message[] }) {
     <div className={cn("conv-steps", open && "is-open")}>
       <button type="button" className="conv-steps-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         <ChevronRight className="conv-steps-chev" />
-        {L(`${items.length} 条进展`, items.length === 1 ? "1 progress update" : `${items.length} progress updates`)}
+        {L(E`${items.length} 条进展`, items.length === 1 ? "1 progress update" : E`${items.length} progress updates`)}
       </button>
       {open && (
         <ul className="conv-steps-list">
@@ -303,12 +303,12 @@ function SuperagentIntro({ agent }: { agent?: Agent }) {
   return (
     <div className="conv-empty sa-intro" data-testid="superagent-intro">
       {agent && <Avatar agent={agent} size={64} badge={false} />}
-      <h3>{L(`${SHROOM}，你在这个工作区的 superagent`, `${SHROOM}, your superagent in this workspace`)}</h3>
+      <h3>{L(E`${SHROOM}，你在这个工作区的 superagent`, E`${SHROOM}, your superagent in this workspace`)}</h3>
       <p>{L("它替你打理整个工作区，你只要说要什么。", "It looks after the whole workspace for you: just say what you want.")}</p>
       <ul className="sa-intro-list">
         {items.map(([z, e]) => <li key={z}>{L(z, e)}</li>)}
       </ul>
-      <p className="sa-intro-foot">{L(`它总是以自己的名义说话，不会冒充你。${mac ? "在哪儿都可以按 ⌘⇧Space 叫它。" : ""}`, `It always speaks as itself, never as you.${mac ? " Press ⌘⇧Space anywhere to call it." : ""}`)}</p>
+      <p className="sa-intro-foot">{L((mac ? E`它总是以自己的名义说话，不会冒充你。在哪儿都可以按 ⌘⇧Space 叫它。` : E`它总是以自己的名义说话，不会冒充你。`), (mac ? E`It always speaks as itself, never as you. Press ⌘⇧Space anywhere to call it.` : E`It always speaks as itself, never as you.`))}</p>
     </div>
   );
 }
@@ -359,9 +359,9 @@ function failureWords(err: string): { short: string; long: string } {
     };
   }
   if (/lease expired|timed out|timeout/i.test(err)) {
-    return { short: L("超时了", "Timed out"), long: L(`超时了：${err}`, `Timed out: ${err}`) };
+    return { short: L("超时了", "Timed out"), long: L(E`超时了：${err}`, E`Timed out: ${err}`) };
   }
-  return { short: L("失败了", "Failed"), long: L(`失败了：${err}`, `Failed: ${err}`) };
+  return { short: L("失败了", "Failed"), long: L(E`失败了：${err}`, E`Failed: ${err}`) };
 }
 
 /** What each run's trace last said (runActivity), across chats while the
@@ -1059,10 +1059,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
   const stuckLine = (m: Message): string => {
     const quiet = quietFor(seenNow(now, seenAt), activeAt(m));
     return row?.st.state === "offline"
-      ? L(`${quiet}没有动静，它也不在线：这条任务没收尾`, `No activity for ${quiet} and it is offline: this task was left open`)
+      ? L(E`${quiet}没有动静，它也不在线：这条任务没收尾`, E`No activity for ${quiet} and it is offline: this task was left open`)
       : L(
-        `${quiet}没有动静：可能做完了没收尾，也可能卡住了`,
-        `No activity for ${quiet}: it may be done but left open, or stuck`,
+        E`${quiet}没有动静：可能做完了没收尾，也可能卡住了`,
+        E`No activity for ${quiet}: it may be done but left open, or stuck`,
       );
   };
   // Every task of yours still open in this conversation, not only the newest:
@@ -1268,7 +1268,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
     pinMenu.openUnder(el, [
       { label: L("置顶这条消息", "Pin this message"), onSelect: asMessage },
       "sep",
-      ...files.map((f) => ({ label: L(`置顶文件「${f.name}」`, `Pin the file “${f.name}”`), onSelect: () => one(() => pinThing(target.hubId, { with: target.agent, ...(target.peer ? { a: target.peer } : {}), kind: "file", file: f, title: f.name })) })),
+      ...files.map((f) => ({ label: L(E`置顶文件「${f.name}」`, E`Pin the file “${f.name}”`), onSelect: () => one(() => pinThing(target.hubId, { with: target.agent, ...(target.peer ? { a: target.peer } : {}), kind: "file", file: f, title: f.name })) })),
     ]);
   };
   // A page's card (in a message or a progress update): right-click pins
@@ -2060,7 +2060,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       dropLocal(item.local.id);
       const ids = item.local.attachments || [];
       writeDraft(filesOnly(item.body, ids.length) ? "" : item.body);
-      att.restore(ids.map((id, i) => ({ id, name: L(`附件 ${i + 1}`, `File ${i + 1}`) })));
+      att.restore(ids.map((id, i) => ({ id, name: L(E`附件 ${i + 1}`, E`File ${i + 1}`) })));
       inputRef.current?.focus();
       return;
     }
@@ -2383,8 +2383,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {decided.ok && !decided.failed ? <Check /> : <X />}
             <span>
               {decided.ok
-                ? L(`${who}同意了：${decided.what}`, `${who} approved: ${decided.what}`)
-                : L(`${who}没有同意：${decided.what}`, `${who} declined: ${decided.what}`)}
+                ? L(E`${who}同意了：${decided.what}`, E`${who} approved: ${decided.what}`)
+                : L(E`${who}没有同意：${decided.what}`, E`${who} declined: ${decided.what}`)}
               {decided.failed && <span className="conv-decision-fail">{L("，但没做成", ", but it did not go through")}</span>}
             </span>
           </div>
@@ -2400,7 +2400,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         return (
           <div className="conv-event" key={m.id} data-msg={m.id}>
             <AlertTriangle />
-            <span>{failed ? L(`这条任务没完成：${m.body.slice(failed[0].length)}`, `This task was not done: ${m.body.slice(failed[0].length)}`) : m.body}</span>
+            <span>{failed ? L(E`这条任务没完成：${m.body.slice(failed[0].length)}`, E`This task was not done: ${m.body.slice(failed[0].length)}`) : m.body}</span>
             <span className="conv-event-time">{clockTime(m.created_at)}</span>
           </div>
         );
@@ -2446,7 +2446,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           {bySystem ? null
             : fromOther ? <div className="conv-msg-name">{nameOf(m.from)}</div>
             : alsoSet.size > 0 && isMe(m.from, row?.hub) ? (showName ? <div className="conv-msg-name">{L("你", "You")}</div> : null)
-            : toOther ? <div className="conv-msg-name">{L(`回复 ${nameOf(m.to)}`, `To ${nameOf(m.to)}`)}</div>
+            : toOther ? <div className="conv-msg-name">{L(E`回复 ${nameOf(m.to)}`, E`To ${nameOf(m.to)}`)}</div>
             : showName && <div className="conv-msg-name">{nameOf(m.from)}</div>}
           {steps && steps.length > 0 && <ProgressFold items={steps} />}
           <div className="conv-bubble">
@@ -2696,7 +2696,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               says so. */}
           <p>
             <span className="conv-head-what">{headWhat}</span>
-            {row?.hub.stale && <><span className="conv-head-what"> · </span><span className="app-stale" title={row.hub.stale.error || undefined}>{L(`连不上 · 显示的是 ${timeAgo(row.hub.stale.at, now)}的内容`, `Can't reach it · showing ${timeAgo(row.hub.stale.at, now)}`)}</span></>}
+            {row?.hub.stale && <><span className="conv-head-what"> · </span><span className="app-stale" title={row.hub.stale.error || undefined}>{L(E`连不上 · 显示的是 ${timeAgo(row.hub.stale.at, now)}的内容`, E`Can't reach it · showing ${timeAgo(row.hub.stale.at, now)}`)}</span></>}
           </p>
         </div>
         {/* No running state here (已完成, 在干活…): the foot of the chat
@@ -2730,7 +2730,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             )}
             {!termMode && (
               <button type="button" className={cn("app-btn app-btn-plain conv-head-find", headActions && "sp-pane-btn", searching && "is-on")} onClick={() => setSearching((v) => !v)}
-                title={L(`在这段对话里找（${mod}F）`, `Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
+                title={L(E`在这段对话里找（${mod}F）`, E`Find in this chat (${mod}F)`)} aria-label={L("在这段对话里找", "Find in this chat")}>
                 <Search />
               </button>
             )}
@@ -2769,8 +2769,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             <span className="dot pending" aria-hidden />
             <span className="shell-stuck-text">
               {L(
-                `这台电脑上有 ${shellStuck.length} 条命令可能卡住（来自 ${shellFrom.join("、")}）`,
-                `${shellStuck.length} command${shellStuck.length === 1 ? "" : "s"} on this computer may be stuck (from ${shellFrom.join(", ")})`,
+                E`这台电脑上有 ${shellStuck.length} 条命令可能卡住（来自 ${shellFrom.join("、")}）`,
+                (shellStuck.length === 1 ? E`${shellStuck.length} command on this computer may be stuck (from ${shellFrom.join(", ")})` : E`${shellStuck.length} commands on this computer may be stuck (from ${shellFrom.join(", ")})`),
               )}
             </span>
             <button type="button" className="shell-stuck-toggle" aria-expanded={moreStuck} onClick={() => setMoreStuck((v) => !v)}>
@@ -2791,7 +2791,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 return (
                   <li key={m.id} className="shell-stuck-row">
                     <span className="shell-stuck-cmd" title={m.body}>{cmd || nameOf(m.from)}</span>
-                    <span className="shell-stuck-meta">{nameOf(m.from)} · {L(`${quiet}没有动静`, `quiet for ${quiet}`)}</span>
+                    <span className="shell-stuck-meta">{nameOf(m.from)} · {L(E`${quiet}没有动静`, E`quiet for ${quiet}`)}</span>
                     {canStopShell && (
                       <button type="button" className="conv-steer-btn" onClick={() => void stopOnShell(m)}>
                         {L("停止", "Stop")}
@@ -2824,7 +2824,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
       )}
       {away && (() => {
         const fresh = (visible || []).filter((m) => !isMe(m.from, row?.hub) && m.type !== "progress" && (firstSeen.get(m.id) ?? 0) > awaySince.current).length;
-        const label = fresh ? L(`${fresh} 条新消息`, `${fresh} new`) : L("回到底部", "Back to the bottom");
+        const label = fresh ? L(E`${fresh} 条新消息`, E`${fresh} new`) : L("回到底部", "Back to the bottom");
         return (
           <button type="button" className={cn("conv-to-bottom", fresh > 0 && "has-new")} onClick={toBottom} title={L("回到底部", "Back to the bottom")} aria-label={label}>
             <ArrowDown />{fresh > 0 && <span>{label}</span>}
@@ -2895,7 +2895,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               <div className="term-foot">
                 {openTask
                   ? <button type="button" className="term-foot-stop" onClick={() => void stop(openTask)}>{L("正在执行 · Ctrl+C 停止", "Running · Ctrl+C to stop")}</button>
-                  : <span>{L(`在 ${agentName} 上执行`, `Runs on ${agentName}`)}</span>}
+                  : <span>{L(E`在 ${agentName} 上执行`, E`Runs on ${agentName}`)}</span>}
                 <span>{L("回车执行 · Shift+Enter 换行 · ↑↓ 历史命令", "Enter to run · Shift+Enter for a new line · ↑↓ history")}</span>
               </div>
               <ErrorText error={sendError || stopError} />
@@ -2962,7 +2962,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
         <div className="conv-observe">
           <span>{L("这是它们之间的对话，你只能看。", "This is a record of nodes working together. You can only view it.")}</span>
           <button type="button" className="app-btn" onClick={() => onNewConversation(target.hubId, target.agent)}>
-            {L(`给 ${agentName} 发任务`, `Give ${agentName} a task`)}
+            {L(E`给 ${agentName} 发任务`, E`Give ${agentName} a task`)}
           </button>
         </div>
       ) : (
@@ -2994,11 +2994,11 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             <span className="conv-busy-text">
               {elsewhereStale > 0
                 ? elsewhereStale === elsewhere.length
-                  ? L(`它有 ${elsewhere.length} 条别处来的任务好一阵没有动静`, `It has ${elsewhere.length} open task${elsewhere.length > 1 ? "s" : ""} from elsewhere with no activity for a while`)
-                  : L(`它还有 ${elsewhere.length} 条别处来的任务没做完，其中 ${elsewhereStale} 条好一阵没有动静`, `It has ${elsewhere.length} more open tasks from elsewhere, ${elsewhereStale} with no activity for a while`)
-                : L(`它还有 ${elsewhere.length} 条别处来的任务没做完`, `It has ${elsewhere.length} more open task${elsewhere.length > 1 ? "s" : ""} from elsewhere`)}
-              {askingOthers.length > 0 && L(`，其中 ${askingOthers.length} 条在等 ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join("、")} 回答它的问题`,
-                `; ${askingOthers.length} wait${askingOthers.length > 1 ? "" : "s"} on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question`)}
+                  ? L(E`它有 ${elsewhere.length} 条别处来的任务好一阵没有动静`, (elsewhere.length > 1 ? E`It has ${elsewhere.length} open tasks from elsewhere with no activity for a while` : E`It has ${elsewhere.length} open task from elsewhere with no activity for a while`))
+                  : L(E`它还有 ${elsewhere.length} 条别处来的任务没做完，其中 ${elsewhereStale} 条好一阵没有动静`, E`It has ${elsewhere.length} more open tasks from elsewhere, ${elsewhereStale} with no activity for a while`)
+                : L(E`它还有 ${elsewhere.length} 条别处来的任务没做完`, (elsewhere.length > 1 ? E`It has ${elsewhere.length} more open tasks from elsewhere` : E`It has ${elsewhere.length} more open task from elsewhere`))}
+              {askingOthers.length > 0 && L(E`，其中 ${askingOthers.length} 条在等 ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join("、")} 回答它的问题`,
+                (askingOthers.length > 1 ? E`; ${askingOthers.length} wait on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question` : E`; ${askingOthers.length} waits on ${[...new Set(askingOthers.map((m) => whoIs(m.from)))].join(", ")} to answer its question`))}
               {L("。", ".")}
             </span>
             <button type="button" className="conv-steer-btn" onClick={() => setElsewhereOpen(true)} data-testid="open-elsewhere-handle">
@@ -3007,7 +3007,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
           </div>
         )}
         {elsewhereOpen && (
-          <Modal open onOpenChange={(o) => !o && setElsewhereOpen(false)} wide title={L(`${agentName} 手上别处来的任务`, `${agentName}'s open work from elsewhere`)}
+          <Modal open onOpenChange={(o) => !o && setElsewhereOpen(false)} wide title={L(E`${agentName} 手上别处来的任务`, E`${agentName}'s open work from elsewhere`)}
             description={L("别的成员或 agent 交给它、还没做完的任务。可以催一下，做完了就标记完成，不用再做就停掉。", "Tasks other members or agents gave it that are not done yet. Ask where one stands, mark it done, or stop it.")}>
             <div className="app-list conv-elsewhere" data-testid="elsewhere-list">
               {elsewhere.filter((m) => !settled.has(m.id)).length === 0 && <div className="app-empty-note">{L("都处理完了。", "All settled.")}</div>}
@@ -3019,8 +3019,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                     <div className="app-msg is-static">
                       <span className="meta">
                         <span className={cn("app-msg-status", m.status, quiet && "is-stuck")}>{m.status === "held" && m.asking
-                          ? L(`在等 ${whoIs(m.from)} 回答`, `Waiting on ${whoIs(m.from)} to answer`) : quiet ? L("好一阵没动静", "Quiet for a while") : m.status === "held" ? L("暂挂", "On hold") : L("在做", "In progress")}</span>
-                        <span className="who">{L(`${whoIs(m.from)} 交来`, `from ${whoIs(m.from)}`)}</span>
+                          ? L(E`在等 ${whoIs(m.from)} 回答`, E`Waiting on ${whoIs(m.from)} to answer`) : quiet ? L("好一阵没动静", "Quiet for a while") : m.status === "held" ? L("暂挂", "On hold") : L("在做", "In progress")}</span>
+                        <span className="who">{L(E`${whoIs(m.from)} 交来`, E`from ${whoIs(m.from)}`)}</span>
                         <span className="time">{timeAgo(m.active_at || m.updated_at, now)}</span>
                       </span>
                       <span className="body">{m.body}</span>
@@ -3093,7 +3093,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
               <b>{L("网络不太好", "Poor connection")}</b>
               {now - seenAt < 60_000
                 ? L("这里的消息有一会儿没更新了，", "This chat hasn't updated for a little while; ")
-                : L(`这里的消息 ${quietFor(now, seenAt)}没更新了，`, `this chat hasn't updated for ${quietFor(now, seenAt)}; `)}
+                : L(E`这里的消息 ${quietFor(now, seenAt)}没更新了，`, E`this chat hasn't updated for ${quietFor(now, seenAt)}; `)}
               {L("agent 那边可能还在继续。正在自动重试。", "the agent may well be at work. Retrying by itself.")}
             </span>
             <button type="button" className="app-btn app-btn-small" disabled={repolling}
@@ -3121,10 +3121,10 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             placeholder={busy
               ? L("会话正开在别处，暂时不能发；可以「复制一份来对话」", "The session is open elsewhere, so you can't send now; you can talk to a copy")
               : supplementing && openTask?.asking
-                ? L(`回答 ${agentName} 的问题…`, `Answer ${agentName}'s question…`)
+                ? L(E`回答 ${agentName} 的问题…`, E`Answer ${agentName}'s question…`)
               : supplementing
-                ? L(`补充给 ${agentName}…（${mod}↩ 排到下一条）`, `Add to ${agentName}… (${mod}↩ queues the next one)`)
-                : (suggestion && fitOneLine(suggestion, inputRef.current)) || L(`发给 ${agentName}…`, `Message ${agentName}…`)}
+                ? L(E`补充给 ${agentName}…（${mod}↩ 排到下一条）`, E`Add to ${agentName}… (${mod}↩ queues the next one)`)
+                : (suggestion && fitOneLine(suggestion, inputRef.current)) || L(E`发给 ${agentName}…`, E`Message ${agentName}…`)}
             rows={1}
             aria-label={L("消息", "Message")}
           />
@@ -3142,7 +3142,7 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
             {/* Only what is not obvious: while it works, Enter adds to the
                 task and ⌘↩ queues the next one. */}
             <span className="conv-compose-hint">
-              {supplementing ? L(`Enter 补充 · ${mod}↩ 排到下一条`, `Enter to add · ${mod}↩ to queue`)
+              {supplementing ? L(E`Enter 补充 · ${mod}↩ 排到下一条`, E`Enter to add · ${mod}↩ to queue`)
                 : suggestion && !draft ? <><kbd className="conv-kbd">Tab</kbd>{L(" 填入建议", " to use the suggestion")}</> : ""}
             </span>
             {/* Speaking instead of typing, beside Send (as in Codex and Claude). */}
@@ -3164,8 +3164,8 @@ export function ConversationDetail({ target, rows, now, onBack, onNewConversatio
                 type="button"
                 className="conv-send is-call"
                 onClick={(e) => { e.stopPropagation(); callHim(); }}
-                title={voiceCall ? L(`挂断和 ${voiceCall.agentName} 的通话，改和 ${agentName} 语音聊天`, `Hang up on ${voiceCall.agentName} and voice chat with ${agentName}`)
-                  : L(`和 ${agentName} 语音聊天`, `Voice chat with ${agentName}`)}
+                title={voiceCall ? L(E`挂断和 ${voiceCall.agentName} 的通话，改和 ${agentName} 语音聊天`, E`Hang up on ${voiceCall.agentName} and voice chat with ${agentName}`)
+                  : L(E`和 ${agentName} 语音聊天`, E`Voice chat with ${agentName}`)}
                 aria-label={L("语音聊天", "Voice chat")}
                 disabled={busy}
               >
@@ -3234,8 +3234,8 @@ export function decisionOf(body: string): { who: string; ok: boolean; what: stri
   const [, who, verb, raw, rest] = m;
   const task = /^(create|update|delete) scheduled task "(.+)" in project (.+)$/.exec(raw.trim());
   const what = task
-    ? L(`${task[1] === "create" ? "创建" : task[1] === "delete" ? "删除" : "修改"}项目「${task[3]}」的定时任务「${task[2]}」`,
-      `${task[1] === "create" ? "create" : task[1] === "delete" ? "delete" : "change"} “${task[2]}” in project “${task[3]}”`)
+    ? L((task[1] === "create" ? E`创建项目「${task[3]}」的定时任务「${task[2]}」` : (task[1] === "delete" ? E`删除项目「${task[3]}」的定时任务「${task[2]}」` : E`修改项目「${task[3]}」的定时任务「${task[2]}」`)),
+      (task[1] === "create" ? E`create “${task[2]}” in project “${task[3]}”` : (task[1] === "delete" ? E`delete “${task[2]}” in project “${task[3]}”` : E`change “${task[2]}” in project “${task[3]}”`)))
     : raw.trim();
   return { who, ok: verb === "同意了", what, failed: /^但没做成/.test(rest.trim()) };
 }

@@ -12,6 +12,7 @@ import (
 
 	. "github.com/myco-ai/myco/internal/cli/cmdkit"
 	"github.com/myco-ai/myco/internal/config"
+	"github.com/myco-ai/myco/internal/runnerupdate"
 	"github.com/myco-ai/myco/internal/service"
 )
 
@@ -166,6 +167,8 @@ claude/codex (e.g. under nvm); re-run install after changing it. Re-running is s
 
 	restart := &Command{
 		Name:     "restart",
+		Mutating: true,
+		Flags:    []Flag{{Name: "idle-request", Kind: String, Help: "Internal: idle restart request receipt"}, {Name: "idle-instance", Kind: String, Help: "Internal: runner instance that paused claims"}},
 		Summary:  "Restart the background runner (e.g. after upgrading myco)",
 		Examples: []string{"myco runner service restart"},
 		Run: handler(func(e *env) error {
@@ -173,7 +176,36 @@ claude/codex (e.g. under nvm); re-run install after changing it. Re-running is s
 			if err != nil {
 				return err
 			}
+			if e.in.Bool("dry-run") {
+				return e.dryRun(map[string]any{"action": "restart_runner"})
+			}
+			if e.in.String("idle-request") != "" {
+				st, err := m.Status()
+				if err != nil {
+					return err
+				}
+				if err := e.verifyIdleRestart(st); err != nil {
+					return err
+				}
+			}
 			e.announceRunnerRestart()
+			if e.in.String("idle-request") != "" {
+				st, err := m.Status()
+				if err != nil {
+					return err
+				}
+				if err := e.verifyIdleRestart(st); err != nil {
+					return err
+				}
+			}
+
+			if e.in.String("idle-request") != "" {
+				attempt := runnerupdate.Runtime{RequestID: e.in.String("idle-request"), Instance: e.in.String("idle-instance"), State: "service_call", At: time.Now().UTC()}
+				if err := runnerupdate.Write(config.Dir(e.defaultPath), "attempt", attempt); err != nil {
+					return err
+				}
+			}
+
 			if err := m.Restart(); err != nil {
 				return errorf("service_failed", ExitError, "is it installed? myco runner service status", "%v", err)
 			}
@@ -298,4 +330,17 @@ func printStatus(w io.Writer, st service.Status) {
 		state = "installed, not running"
 	}
 	fmt.Fprintf(w, "status: %s [%s%s]\n", state, st.Manager, map[bool]string{true: ", " + st.Detail, false: ""}[st.Detail != ""])
+}
+
+func (e *env) verifyIdleRestart(st service.Status) error {
+	var rt runnerupdate.Runtime
+	err := runnerupdate.Read(config.Dir(e.defaultPath), "runtime", &rt)
+	if err != nil || !validIdleHandoff(rt, st, e.in.String("idle-request"), e.in.String("idle-instance"), time.Now()) {
+		return errorf("invalid_state", ExitConflict, "request another restart when idle", "idle restart handoff is stale or belongs to another runner")
+	}
+	return nil
+}
+
+func validIdleHandoff(rt runnerupdate.Runtime, st service.Status, request, instance string, now time.Time) bool {
+	return runnerupdate.Fresh(&rt, now) && rt.State == "restarting" && rt.RequestID == request && rt.Instance == instance && st.Running && st.PID > 0 && rt.PID == st.PID
 }

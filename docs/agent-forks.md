@@ -17,8 +17,8 @@ return the same reservations. Use `--name-prefix` to choose a shorter naming pre
 
 The source needs a session ID, working directory and machine binding. A copy cannot create
 more copies, and a copy cannot be used as another fork's source. Without `--force`, the
-source's quota status must be `ok`, its runner slot report must be fresh, and enough slots
-must be free. Pending and live managed copies reserve capacity conservatively. `--force`
+source's quota must read `ok` and no older than an hour (the same rule the Hub and App use),
+its runner slot report must be fresh, and enough slots must be free. Pending and live managed copies reserve capacity conservatively. `--force`
 overrides only these resource checks, never permissions, runner support or directory policy.
 Private source visibility and sender restrictions are preserved. The source identity and
 permissions are checked again before a copy first reads its inherited context.

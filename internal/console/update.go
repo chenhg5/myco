@@ -261,7 +261,7 @@ func (b *Backend) postUpdate(w http.ResponseWriter, r *http.Request) {
 		// The myco CLI on this computer goes along; it runs on after the
 		// app quits (a runner keeps running until it is restarted).
 		if b.Local != nil {
-			b.Local.upgradeCLIDetached()
+			_ = b.Local.upgradeCLIDetached(latest)
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"installed": latest, "relaunching": true})
 		// Let the answer reach the page before the app quits (on Windows
@@ -288,7 +288,7 @@ func (b *Backend) postUpdate(w http.ResponseWriter, r *http.Request) {
 	// The myco CLI on this computer goes along, as on Windows (its
 	// services pick it up when they next restart).
 	if b.Local != nil {
-		b.Local.upgradeCLIDetached()
+		_ = b.Local.upgradeCLIDetached(latest)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"installed": latest, "relaunching": true})
 	// Let the answer reach the page before the app quits.

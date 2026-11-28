@@ -22,7 +22,7 @@ import { askable, cachedMachineInfo, fetchMachineInfo, forgetMachineInfo } from 
 import { PublicAccessDialog } from "@/app/SettingsPage";
 import { localWorkspaceOf } from "@/app/localHubs";
 import type { RuntimeAccess } from "@/api";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { bytes, cn, timeAgo } from "@/lib/utils";
 import { ModelSource } from "@/app/ModelProviders";
 import { isSuperagent } from "@/app/superagentMark";
@@ -74,12 +74,12 @@ export async function addToProject(hubId: string, project: Project | undefined, 
 export function joinSentence(link: JoinLink, project?: string): string {
   if (link.agent_guide) {
     const command = project ? `curl -fsSL ${link.join_url}/${project} | bash` : link.command;
-    return L(`加入 myco：在终端运行 ${command} ，再照它最后的输出做完。`, `Join myco: run ${command} in a terminal, then do what its last lines say.`);
+    return L(E`加入 myco：在终端运行 ${command} ，再照它最后的输出做完。`, E`Join myco: run ${command} in a terminal, then do what its last lines say.`);
   }
   const into = project ? ` --project ${project}` : "";
   return L(
-    `加入 myco：在终端运行 ${link.command} ，然后在你这个会话里运行 myco join${into} --display-name "你的分工" --description "一句话说你负责什么"（把引号里的换成你自己的：分工用 2 到 6 个字，比如 后端工程师、审查员、运维）。之后照 myco join 输出里 receive 的说明接收消息：会话开着时，在后台一直运行 myco inbox wait，收到消息用 myco inbox pull 读取并处理。`,
-    `Join myco: run ${link.command} in a terminal, then in this session run myco join${into} --display-name "your role" --description "one line on what you do" (fill in your own: a short role such as Backend engineer, Reviewer or Ops). Then receive messages as its "receive" output says: while the session is open keep myco inbox wait running in the background, and read what it reports with myco inbox pull.`,
+    E`加入 myco：在终端运行 ${link.command} ，然后在你这个会话里运行 myco join${into} --display-name "你的分工" --description "一句话说你负责什么"（把引号里的换成你自己的：分工用 2 到 6 个字，比如 后端工程师、审查员、运维）。之后照 myco join 输出里 receive 的说明接收消息：会话开着时，在后台一直运行 myco inbox wait，收到消息用 myco inbox pull 读取并处理。`,
+    E`Join myco: run ${link.command} in a terminal, then in this session run myco join${into} --display-name "your role" --description "one line on what you do" (fill in your own: a short role such as Backend engineer, Reviewer or Ops). Then receive messages as its "receive" output says: while the session is open keep myco inbox wait running in the background, and read what it reports with myco inbox pull.`,
   );
 }
 
@@ -315,7 +315,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
     }
   };
   const rowOf = (n: string) => rows.find((r) => r.hub.id === hubId && r.st.agent.name === n);
-  const place = project ? L(`「${project.title || project.name}」`, `“${project.title || project.name}”`) : L("这个工作区", "this workspace");
+  const place = project ? L(E`「${project.title || project.name}」`, E`“${project.title || project.name}”`) : L("这个工作区", "this workspace");
   const q = query.trim().toLowerCase();
   const list = (sessions || []).filter((s) => !q || [s.title, s.workdir, s.cli].some((x) => (x || "").toLowerCase().includes(q)));
   const free = list.filter((s) => !s.joined);
@@ -327,7 +327,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
 
   return (
     <Modal open={open} onOpenChange={(o) => !o && !joining && onClose()} title={L("添加 agent", "Add an agent")}
-      description={L(`给${place}加一个 AI 同事。先选它在哪。`, `Bring an AI teammate into ${place}. First, where is it?`)}
+      description={L(E`给${place}加一个 AI 同事。先选它在哪。`, E`Bring an AI teammate into ${place}. First, where is it?`)}
       className="app-modal-add">
       <div className="app-field">
         <span className="app-field-label">{L("它在哪", "Where it is")}</span>
@@ -383,7 +383,7 @@ export function AddAgentDialog({ open, hub, project, projects = [], rows, start,
                     <Avatar agent={a} size={30} state={r.st.state} />
                     <span className="add-local-main">
                       <span className="add-local-name">{nodeName(a, r.hub)}</span>
-                      <span className="add-local-sub">{inWhich.length ? L(`在「${inWhich.join("」「")}」`, `In ${inWhich.join(", ")}`) : L("还没进项目", "Not in a project")}{a.description ? ` · ${a.description}` : ""}</span>
+                      <span className="add-local-sub">{inWhich.length ? L(E`在「${inWhich.join("」「")}」`, E`In ${inWhich.join(", ")}`) : L("还没进项目", "Not in a project")}{a.description ? ` · ${a.description}` : ""}</span>
                     </span>
                     <button type="button" className="app-btn app-btn-small" disabled={!!joining} onClick={() => void addMember(a.name)}>
                       {joining === a.name ? L("正在加…", "Adding…") : L("加进来", "Add")}
@@ -541,7 +541,7 @@ function ByProgram({ count, open, children }: { count: number; open: boolean; ch
   if (count === 0) return null;
   return (
     <details className="add-auto" open={open || undefined} data-testid="by-program">
-      <summary>{L(`还有 ${count} 个是程序开的会话（myco、脚本、claude -p、codex exec），一般不用加`, `${count} more were started by a program (myco, scripts, claude -p, codex exec); seldom worth adding`)}<ChevronDown /></summary>
+      <summary>{L(E`还有 ${count} 个是程序开的会话（myco、脚本、claude -p、codex exec），一般不用加`, E`${count} more were started by a program (myco, scripts, claude -p, codex exec); seldom worth adding`)}<ChevronDown /></summary>
       {children}
     </details>
   );
@@ -559,13 +559,13 @@ function RemoteSessions({ hubId, machine, state, joining, joinError, onJoin, onR
 }) {
   const [query, setQuery] = useState("");
   if (!machine.online) {
-    return <div className="add-pane"><div className="app-empty-note">{L(`「${machine.name}」现在不在线：它开机、myco 在运行时，这里会列出它上面的会话。`, `“${machine.name}” is away: once it is on and myco runs there, its sessions show here.`)}</div></div>;
+    return <div className="add-pane"><div className="app-empty-note">{L(E`「${machine.name}」现在不在线：它开机、myco 在运行时，这里会列出它上面的会话。`, E`“${machine.name}” is away: once it is on and myco runs there, its sessions show here.`)}</div></div>;
   }
   if (!machine.can_spawn || !machineTellsInfo(machine.myco_version)) {
     return <div className="add-pane"><ComputerFix hubId={hubId} machine={machine} here={false} /></div>;
   }
   if (!state || state.loading) {
-    return <div className="add-pane"><div className="add-waiting"><Mushroom /><span>{L(`正在问「${machine.name}」上有哪些会话…`, `Asking “${machine.name}” for its sessions…`)}</span></div></div>;
+    return <div className="add-pane"><div className="add-waiting"><Mushroom /><span>{L(E`正在问「${machine.name}」上有哪些会话…`, E`Asking “${machine.name}” for its sessions…`)}</span></div></div>;
   }
   if (state.error || !state.info) {
     return (state.error as { code?: string })?.code === "too_old"
@@ -580,7 +580,7 @@ function RemoteSessions({ hubId, machine, state, joining, joinError, onJoin, onR
   return (
     <div className="add-pane" data-testid="remote-sessions">
       {info.sessions.length === 0 ? (
-        <div className="app-empty-note">{L(`「${machine.name}」上最近没有 Claude Code 或 Codex 会话。可以「新开一个」。`, `No recent Claude Code or Codex sessions on “${machine.name}”. Start a new one.`)}</div>
+        <div className="app-empty-note">{L(E`「${machine.name}」上最近没有 Claude Code 或 Codex 会话。可以「新开一个」。`, E`No recent Claude Code or Codex sessions on “${machine.name}”. Start a new one.`)}</div>
       ) : (
         <>
           {info.sessions.length > 6 && (
@@ -592,9 +592,9 @@ function RemoteSessions({ hubId, machine, state, joining, joinError, onJoin, onR
               const ok = insideDirs(s.workdir, info);
               return (
                 <SessionRow key={`${s.cli}:${s.session_id}`} index={i} cli={s.cli} title={s.title} workdir={s.workdir} at={s.last_active}
-                  sub={ok ? undefined : L(`${folderOf(s.workdir)} 不在那台电脑允许的文件夹里`, `${folderOf(s.workdir)} is outside the folders that computer allows`)}
+                  sub={ok ? undefined : L(E`${folderOf(s.workdir)} 不在那台电脑允许的文件夹里`, E`${folderOf(s.workdir)} is outside the folders that computer allows`)}
                   action={<button type="button" className="app-btn app-btn-small" disabled={!!joining || !ok} onClick={() => onJoin(s)}
-                    title={ok ? undefined : L(`允许的文件夹：${info.dirs.join("、")}`, `Allowed: ${info.dirs.join(", ")}`)}>
+                    title={ok ? undefined : L(E`允许的文件夹：${info.dirs.join("、")}`, E`Allowed: ${info.dirs.join(", ")}`)}>
                     {joining === s.session_id ? L("正在加入…", "Joining…") : L("加入", "Add")}
                   </button>} />
               );
@@ -609,7 +609,7 @@ function RemoteSessions({ hubId, machine, state, joining, joinError, onJoin, onR
               );
             })()}
             {taken.map((s, i) => (
-              <SessionRow key={`${s.cli}:${s.session_id}`} index={free.length + i} cli={s.cli} title={s.title} workdir={s.workdir} taken sub={L(`已经加入了：${s.joined}`, `Already joined: ${s.joined}`)} />
+              <SessionRow key={`${s.cli}:${s.session_id}`} index={free.length + i} cli={s.cli} title={s.title} workdir={s.workdir} taken sub={L(E`已经加入了：${s.joined}`, E`Already joined: ${s.joined}`)} />
             ))}
             {list.length === 0 && <div className="app-empty-note">{L("没找到。", "Nothing matches.")}</div>}
           </div>
@@ -687,8 +687,8 @@ function OpenElsewhere({ open, onClose, hubUrl, onRelink }: { open: boolean; onC
   let port = "";
   try { port = new URL(hubUrl).port; } catch { /* default */ }
   const cmd = `myco hub up --tunnel ${tunnel}`;
-  const ask = L(`帮我把这台电脑上的 myco 工作区开放到公网：运行 ${cmd}${port && port !== "7780" ? `（它在 ${port} 端口）` : ""}，完成后告诉我它给出的公网地址。`,
-    `Open the myco workspace on this computer to the internet: run ${cmd}${port && port !== "7780" ? ` (it is on port ${port})` : ""}, then tell me the public address it prints.`);
+  const ask = L((port && port !== "7780" ? E`帮我把这台电脑上的 myco 工作区开放到公网：运行 ${cmd}（它在 ${port} 端口），完成后告诉我它给出的公网地址。` : E`帮我把这台电脑上的 myco 工作区开放到公网：运行 ${cmd}，完成后告诉我它给出的公网地址。`),
+    (port && port !== "7780" ? E`Open the myco workspace on this computer to the internet: run ${cmd} (it is on port ${port}), then tell me the public address it prints.` : E`Open the myco workspace on this computer to the internet: run ${cmd}, then tell me the public address it prints.`));
   return (
     <Modal open={open} onOpenChange={(o) => !o && onClose()} title={L("把工作区开放到公网", "Open the workspace to the internet")} className="reach-dialog"
       description={L("这个工作区跑在另一台电脑上，开放要在那台电脑上做。开放以后，哪里的电脑都能连上它。", "This workspace runs on another computer, so it is opened there. Then computers anywhere can connect.")}>
@@ -817,8 +817,8 @@ function ConnectComputer({ open, hub, machines, local, onConnected }: {
 /** What to tell an agent on another computer so it connects that computer. */
 function connectPrompt(command: string, workspace: string): string {
   return L(
-    `帮我把这台电脑连进 myco 工作区「${workspace}」：在终端运行 ${command} ，看到连上了再告诉我（最后提示的 myco join 那一步不用做）。这条命令等同凭据，不要发到别处。`,
-    `Connect this computer to the myco workspace "${workspace}": run ${command} in a terminal and tell me once it is connected (skip the myco join step it suggests at the end). The command is a credential: do not post it anywhere else.`,
+    E`帮我把这台电脑连进 myco 工作区「${workspace}」：在终端运行 ${command} ，看到连上了再告诉我（最后提示的 myco join 那一步不用做）。这条命令等同凭据，不要发到别处。`,
+    E`Connect this computer to the myco workspace "${workspace}": run ${command} in a terminal and tell me once it is connected (skip the myco join step it suggests at the end). The command is a credential: do not post it anywhere else.`,
   );
 }
 
@@ -940,7 +940,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
   };
 
   if (!machine.online) {
-    return <div className="add-pane"><div className="app-empty-note">{L(`「${machine.name}」现在不在线，开不了新会话。`, `“${machine.name}” is away, so it cannot start a session now.`)}</div></div>;
+    return <div className="add-pane"><div className="app-empty-note">{L(E`「${machine.name}」现在不在线，开不了新会话。`, E`“${machine.name}” is away, so it cannot start a session now.`)}</div></div>;
   }
   if (!machine.can_spawn) {
     return <div className="add-pane"><ComputerFix hubId={hubId} machine={machine} here={here} /></div>;
@@ -962,7 +962,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
           })}
           {!allClis && hiddenClis > 0 && (
             <button type="button" className="ws-computer ws-computer-more" onClick={() => setAllClis(true)} disabled={!!busy} data-testid="new-agent-more-ais">
-              {L(`更多 · ${hiddenClis}`, `More · ${hiddenClis}`)}<ChevronDown />
+              {L(E`更多 · ${hiddenClis}`, E`More · ${hiddenClis}`)}<ChevronDown />
             </button>
           )}
         </div>
@@ -972,8 +972,8 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
           <Info />
           <div>
             <div>{ai.state === "missing"
-              ? L(`「${machine.name}」上还没装 ${ai.name}。在那台电脑上运行：`, `${ai.name} is not installed on “${machine.name}”. Run this there:`)
-              : L(`「${machine.name}」上的 ${ai.name} 还没登录。在那台电脑上运行：`, `${ai.name} is not signed in on “${machine.name}”. Run this there:`)}</div>
+              ? L(E`「${machine.name}」上还没装 ${ai.name}。在那台电脑上运行：`, E`${ai.name} is not installed on “${machine.name}”. Run this there:`)
+              : L(E`「${machine.name}」上的 ${ai.name} 还没登录。在那台电脑上运行：`, E`${ai.name} is not signed in on “${machine.name}”. Run this there:`)}</div>
             {(ai.state === "missing" ? ai.install : ai.login) && (
               <div className="app-command"><code>{ai.state === "missing" ? ai.install : ai.login}</code><CopyButton value={(ai.state === "missing" ? ai.install : ai.login) || ""} /></div>
             )}
@@ -989,18 +989,18 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
       <label className="app-field">
         <span className="app-field-label">{autoDir ? L("在哪个文件夹干活（可以不填）", "Which folder it works in (optional)") : L("在哪个文件夹干活", "Which folder it works in")}</span>
         <input className="app-input mono" value={dir} onChange={(e) => setDir(e.target.value)} disabled={!!busy} required={!autoDir}
-          placeholder={autoDir ? L(`不填就新建 ${autoFolder(role, cli, base)}`, `Empty: a new ${autoFolder(role, cli, base)}`) : L("比如 ~/code/我的项目", "e.g. ~/code/my-project")} />
+          placeholder={autoDir ? L(E`不填就新建 ${autoFolder(role, cli, base)}`, E`Empty: a new ${autoFolder(role, cli, base)}`) : L("比如 ~/code/我的项目", "e.g. ~/code/my-project")} />
         {askingNow && waitedLong && (
-          <span className="app-field-hint" data-testid="asking-slow">{L(`「${machine.name}」还没说允许在哪些文件夹开工；可以先开：不填文件夹会建在它允许的地方，开的时候它会再查一遍。`, `“${machine.name}” has not said which folders it allows yet; you can start anyway: with no folder, one is made where it allows, and it checks again when starting.`)}</span>
+          <span className="app-field-hint" data-testid="asking-slow">{L(E`「${machine.name}」还没说允许在哪些文件夹开工；可以先开：不填文件夹会建在它允许的地方，开的时候它会再查一遍。`, E`“${machine.name}” has not said which folders it allows yet; you can start anyway: with no folder, one is made where it allows, and it checks again when starting.`)}</span>
         )}
         {asking && (
-          <span className="app-field-hint" data-testid="asking-dirs">{L(`正在问「${machine.name}」允许在哪些文件夹开工…`, `Asking “${machine.name}” which folders it allows…`)}</span>
+          <span className="app-field-hint" data-testid="asking-dirs">{L(E`正在问「${machine.name}」允许在哪些文件夹开工…`, E`Asking “${machine.name}” which folders it allows…`)}</span>
         )}
         {info && limited && (
           <span className={cn("app-field-hint", outside && "is-bad")} data-testid="allowed-dirs">{outside
-            ? <>{L(`这个文件夹不在「${machine.name}」允许的范围里。允许的：${info.dirs.join("、")}`, `That folder is outside what “${machine.name}” allows. Allowed: ${info.dirs.join(", ")}`)}
+            ? <>{L(E`这个文件夹不在「${machine.name}」允许的范围里。允许的：${info.dirs.join("、")}`, E`That folder is outside what “${machine.name}” allows. Allowed: ${info.dirs.join(", ")}`)}
               {hub && <AllowFolder hubId={hubId} hub={hub} machine={machine} dir={dir.trim()} onAllowed={setAllowed} />}</>
-            : <span className="add-dirs-line" title={info.dirs.join("\n")}>{L(`只允许在这里开工：${info.dirs.join("、")}`, `Only in: ${info.dirs.join(", ")}`)}</span>}</span>
+            : <span className="add-dirs-line" title={info.dirs.join("\n")}>{L(E`只允许在这里开工：${info.dirs.join("、")}`, E`Only in: ${info.dirs.join(", ")}`)}</span>}</span>
         )}
       </label>
       {/* Folders used before: four, the rest a click away. */}
@@ -1009,7 +1009,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
           <span className="add-recent-label">{L("用过的", "Used before")}</span>
           {(allFolders ? folders : folders.slice(0, 4)).map((d) => <button key={d} type="button" className={cn("app-convpick-folder mono", d === dir.trim() && "active")} onClick={() => setDir(d)} disabled={!!busy} title={d}>{shortDir(d)}</button>)}
           {!allFolders && folders.length > 4 && (
-            <button type="button" className="app-convpick-folder add-recent-more" onClick={() => setAllFolders(true)} disabled={!!busy}>{L(`还有 ${folders.length - 4} 个`, `${folders.length - 4} more`)}</button>
+            <button type="button" className="app-convpick-folder add-recent-more" onClick={() => setAllFolders(true)} disabled={!!busy}>{L(E`还有 ${folders.length - 4} 个`, E`${folders.length - 4} more`)}</button>
           )}
         </div>
       )}
@@ -1041,7 +1041,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
               ))}
             </div>
             <span className={cn("app-field-hint", tooHigh && "is-bad")}>{tooHigh
-              ? L(`「${machine.name}」最多允许「${info?.max_access === "readonly" ? "只读" : "这个文件夹"}」。要放开，在那台电脑的 ~/.myco/machine.yaml 里设置 spawn.max_access。`, `“${machine.name}” allows at most ${info?.max_access}. To allow more, set spawn.max_access in ~/.myco/machine.yaml there.`)
+              ? L((info?.max_access === "readonly" ? E`「${machine.name}」最多允许「只读」。要放开，在那台电脑的 ~/.myco/machine.yaml 里设置 spawn.max_access。` : E`「${machine.name}」最多允许「这个文件夹」。要放开，在那台电脑的 ~/.myco/machine.yaml 里设置 spawn.max_access。`), E`“${machine.name}” allows at most ${info?.max_access}. To allow more, set spawn.max_access in ~/.myco/machine.yaml there.`)
               : access === "full"
                 ? L("没有沙箱：能读写那台电脑上的任何文件、跑任何命令。", "No sandbox: it may read and write any file and run any command there.")
                 : access === "readonly"
@@ -1106,13 +1106,13 @@ function joinedWhere(s: LocalSession): string[] {
     if (!ws) {
       try { const u = new URL(j.hub); ws = u.host + u.pathname.replace(/\/$/, ""); } catch { ws = j.hub; }
     }
-    return L(`${ws} 的 ${j.agent}`, `${j.agent} in ${ws}`);
+    return L(E`${ws} 的 ${j.agent}`, E`${j.agent} in ${ws}`);
   });
 }
 
 function joinedLine(s: LocalSession): string {
   const where = joinedWhere(s);
-  return where.length ? L(`已经加入了：${where.join("、")}`, `Already joined: ${where.join(", ")}`) : L("已经加入了", "Already joined");
+  return where.length ? L(E`已经加入了：${where.join("、")}`, E`Already joined: ${where.join(", ")}`) : L("已经加入了", "Already joined");
 }
 
 function folderOf(dir: string): string {
@@ -1302,7 +1302,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
           {arrived ? (
             <div className="ws-command-done" data-testid="computer-arrived">
               <Check />
-              <span>{L(`加好了：${nodeName(arrived.st.agent, arrived.hub)}`, `Added: ${nodeName(arrived.st.agent, arrived.hub)}`)}
+              <span>{L(E`加好了：${nodeName(arrived.st.agent, arrived.hub)}`, E`Added: ${nodeName(arrived.st.agent, arrived.hub)}`)}
                 {arrived.st.agent.binding.workdir && <span className="mono"> · {arrived.st.agent.binding.workdir}</span>}
                 {project ? L("。项目里的 agent 现在就能在这里跑命令。", ". The project's agents can run commands there now.") : L("。在侧栏「终端」里，点开就能看着。", ". It is under Terminals in the sidebar; open it to watch.")}</span>
             </div>
@@ -1312,7 +1312,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
           <div className="ws-who">
             {project
               ? users.length > 0
-                ? L(`项目里的 ${users.length} 个 agent 都能在那里跑命令，之后加入的也能。`, `The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands there, and so can those who join later.`)
+                ? L(E`项目里的 ${users.length} 个 agent 都能在那里跑命令，之后加入的也能。`, (users.length > 1 ? E`The project's ${users.length} agents can run commands there, and so can those who join later.` : E`The project's ${users.length} agent can run commands there, and so can those who join later.`))
                 : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")
               : L("先不给 agent 用。把它加进项目后，项目里的 agent 就能在那里跑命令。", "No agent may use it yet: put it in a project and the project's agents can.")}
             {" "}{L("运行命令就是那台电脑同意了：agent 能用你的身份在这个文件夹里跑命令。", "Running it is that computer's consent: agents can run commands in that folder as you.")}
@@ -1390,7 +1390,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
           {!project
             ? L("先不给 agent 用。把它加进项目后，项目里的 agent 就能在这里跑命令。", "No agent may use it yet: put it in a project and the project's agents can.")
             : users.length > 0
-              ? L(`项目里的 ${users.length} 个 agent 都能在这里跑命令，之后加入的也能。`, `The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands here, and so can those who join later.`)
+              ? L(E`项目里的 ${users.length} 个 agent 都能在这里跑命令，之后加入的也能。`, (users.length > 1 ? E`The project's ${users.length} agents can run commands here, and so can those who join later.` : E`The project's ${users.length} agent can run commands here, and so can those who join later.`))
               : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")}
         </div>
         {machine && <LocalShellAccess machine={machine} hub={ov} what="shell" shell={shell} />}
@@ -1455,7 +1455,7 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
   const upload = async (target: { hubId: string; name: string }, list: File[]) => {
     const failed: File[] = [];
     for (let i = 0; i < list.length; i++) {
-      setBusy(L(`正在上传资料 ${i + 1}/${list.length}…`, `Uploading files ${i + 1}/${list.length}…`));
+      setBusy(L(E`正在上传资料 ${i + 1}/${list.length}…`, E`Uploading files ${i + 1}/${list.length}…`));
       try { await appApi.uploadProjectFile(target.hubId, target.name, list[i]); } catch (err) { failed.push(list[i]); setError(err); }
     }
     return failed;
@@ -1489,7 +1489,7 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
   if (made) {
     return (
       <div className="np np-made" data-testid="new-project-partial">
-        <p className="np-made-text">{L(`项目建好了，但有 ${made.failed.length} 个资料没传上去：`, `The project is made, but ${made.failed.length} file(s) did not go up:`)}</p>
+        <p className="np-made-text">{L(E`项目建好了，但有 ${made.failed.length} 个资料没传上去：`, E`The project is made, but ${made.failed.length} file(s) did not go up:`)}</p>
         <ul className="np-files">{made.failed.map((f) => <li key={f.name} className="np-file"><FileText /><span>{f.name}</span><small>{bytes(f.size)}</small></li>)}</ul>
         <ErrorText error={error} />
         <div className="app-modal-actions">
@@ -1532,7 +1532,7 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
                 <FileText />
                 <span>{f.name}</span>
                 <small>{f.size > MAX_PROJECT_FILE ? L("超过 20 MB", "Over 20 MB") : bytes(f.size)}</small>
-                <button type="button" className="np-file-x" onClick={() => setFiles((fs) => fs.filter((x) => x !== f))} aria-label={L(`去掉 ${f.name}`, `Remove ${f.name}`)} disabled={!!busy}><X /></button>
+                <button type="button" className="np-file-x" onClick={() => setFiles((fs) => fs.filter((x) => x !== f))} aria-label={L(E`去掉 ${f.name}`, E`Remove ${f.name}`)} disabled={!!busy}><X /></button>
               </li>
             ))}
           </ul>
@@ -1551,7 +1551,7 @@ export function NewProjectForm({ hubs, defaultHubId, onCreated, onCancel, big }:
         {tooBig.length > 0 && <span className="app-modal-hint">{L("有文件超过 20 MB，去掉它再建", "A file is over 20 MB: remove it first")}</span>}
         {onCancel && <button type="button" className="app-btn" onClick={onCancel} disabled={!!busy}>{big ? L("先不建", "Not now") : L("取消", "Cancel")}</button>}
         <button type="submit" className="app-btn app-btn-primary" disabled={!title.trim() || !!busy || tooBig.length > 0}>
-          {busy || (files.length ? L(`建好，并上传 ${files.length} 个资料`, `Create, with ${files.length} file(s)`) : L("建好了", "Create"))}
+          {busy || (files.length ? L(E`建好，并上传 ${files.length} 个资料`, E`Create, with ${files.length} file(s)`) : L("建好了", "Create"))}
         </button>
       </div>
     </form>

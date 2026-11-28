@@ -9,7 +9,7 @@ const stub = {
     b.onResolve({ filter: /^@\/(lib\/(i18n|utils)|api)$/ }, (a) => ({ path: a.path, namespace: "stub" }));
     b.onLoad({ filter: /.*/, namespace: "stub" }, (a) => ({
       contents: a.path.endsWith("i18n")
-        ? "export const L = (zh) => zh;"
+        ? "export const L = (zh) => zh; export const E = (parts, ...values) => parts.map((p, i) => (i ? String(values[i-1]) : '') + p).join(''); export const locale = () => 'zh-CN';"
         : a.path.endsWith("utils")
           ? 'export const timeAgo = () => "2 小时前"; export const cn = (...x) => x.filter(Boolean).join(" ");'
           : "export {};",

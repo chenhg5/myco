@@ -39,8 +39,8 @@ func Main(args []string) int {
 	return Run(ctx, args, os.Stdin, os.Stdout, os.Stderr, os.Getenv, isTerminal(os.Stdout))
 }
 
-// Run executes args with explicit IO (used by tests).
-func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string, tty bool) int {
+// runCLI executes args with explicit IO after optional receipt capture.
+func runCLI(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, getenv func(string) string, tty bool) int {
 	if len(args) == 1 && args[0] == "--version" {
 		fmt.Fprintln(stdout, Version)
 		return ExitOK

@@ -743,6 +743,14 @@ export interface AppUpdate {
   error?: string;
 }
 
+export interface LocalUpgrade {
+ cli?: { id?: string; state: "running" | "succeeded" | "failed"; target?: string; at: string; result?: unknown; error?: string };
+ installed?: string;
+ runner?: { pid: number; version: string; instance: string; at: string; request_id?: string; state?: string; error?: string };
+ restart?: { id: string; target: string; requested_at: string; deadline: string };
+ pending: boolean; expired: boolean; unsupported: boolean; error?: string;
+}
+
 /** GET /app/cache/stats: the saved page data. */
 export interface CacheStats { enabled: boolean; entries: number; bytes: number }
 
@@ -773,11 +781,14 @@ export const appApi = {
   proxy: () => request<ProxySetting>("GET", "app/proxy"),
   putProxy: (p: ProxyInput) => request<ProxySetting>("PUT", "app/proxy", p),
   testProxy: (p: ProxyInput & { url?: string }) => request<{ ok: boolean; ms?: number; reason?: string; error?: string }>("POST", "app/proxy/test", p),
-  translate: (text: string, to: "zh" | "en") => request<{ text: string; provider: string }>("POST", "app/translate", { text, to }),
+  translate: (text: string, to: import("@/lib/i18n").Lang) => request<{ text: string; provider: string }>("POST", "app/translate", { text, to }),
   translateConfig: () => request<TranslateConfig>("GET", "app/translate/config"),
   putTranslateConfig: (c: { provider: string; base_url?: string; model?: string; key?: string; clear_key?: boolean }) =>
     request<TranslateConfig>("PUT", "app/translate/config", c),
-  update: () => request<AppUpdate>("GET", "app/update"),
+  localUpgrade: (signal?: AbortSignal) => request<LocalUpgrade>("GET", "app/local/upgrade", undefined, signal),
+ retryLocalUpgrade: () => request<LocalUpgrade>("POST", "app/local/upgrade"),
+ restartLocalWhenIdle: () => request<LocalUpgrade>("POST", "app/local/upgrade/restart"),
+ update: () => request<AppUpdate>("GET", "app/update"),
   /** Downloads and installs the latest app, then the app reopens itself. */
   installUpdate: () => request<{ installed: string; relaunching: boolean }>("POST", "app/update"),
   hubs: () => request<Hub[]>("GET", "app/hubs"),
@@ -1375,7 +1386,7 @@ export const appApi = {
   noticePrefs: (hubId: string) => request<NoticePrefs>("GET", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`),
   setNoticePrefs: (hubId: string, p: NoticePrefs) => request<NoticePrefs>("PUT", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`, p),
   /** The language these pages show, for what the desktop app draws itself (its tray menu). */
-  putUILang: (lang: "zh" | "en") => request<{ lang: string }>("PUT", "app/ui-lang", { lang }),
+  putUILang: (lang: import("@/lib/i18n").Lang) => request<{ lang: string }>("PUT", "app/ui-lang", { lang }),
   // Workspaces of a hub's server (hubs from v0.19.9 serve several at /w/<name>)
   workspaces: (hubId: string) =>
     request<WorkspaceState>("GET", `app/hubs/${enc(hubId)}/workspaces`),

@@ -1,3 +1,4 @@
+import { LanguageSelect } from "@/app/LanguageSelect";
 import { useState } from "react";
 import { ArrowRight, Check, ChevronRight, Monitor, Moon, Sun } from "lucide-react";
 import type { Agent } from "@/api";
@@ -24,7 +25,7 @@ export function Welcome({ onStartLocal, onConnect, langChoice, onLang, theme, on
   onStartLocal: () => Promise<void>;
   onConnect: () => void;
   langChoice?: LangChoice;
-  onLang?: (c: LangChoice) => void;
+  onLang?: (c: LangChoice) => void | Promise<void>;
   theme?: ThemeMode;
   onTheme?: (m: ThemeMode) => void;
 }) {
@@ -98,11 +99,7 @@ export function Welcome({ onStartLocal, onConnect, langChoice, onLang, theme, on
               </div>
             )}
             {onLang && (
-              <div className="seg seg-sm wl-lang" role="tablist" aria-label="语言 / Language">
-                {([["system", L("跟随系统", "System")], ["zh", "中文"], ["en", "English"]] as [LangChoice, string][]).map(([c, label]) => (
-                  <button key={c} type="button" role="tab" aria-selected={langChoice === c} className={cn("seg-btn", langChoice === c && "active")} onClick={() => onLang(c)}>{label}</button>
-                ))}
-              </div>
+              <LanguageSelect value={langChoice || "system"} onChange={onLang} className="wl-lang" />
             )}
           </div>
         </footer>

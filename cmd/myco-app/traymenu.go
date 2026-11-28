@@ -36,7 +36,7 @@ type trayMenu struct {
 	// the newer release, if any.
 	checked time.Time
 	latest  string
-	zh      trayText
+	zh      trayLocale
 	h       http.Handler
 	mu      sync.Mutex
 	waking  bool
@@ -46,7 +46,7 @@ type trayMenu struct {
 func newTrayMenu(app *application.App, h http.Handler, show, quit func()) *trayMenu {
 	zh := trayText(systemPrefersChinese())
 	if l := readUILang(h); l != "" {
-		zh = trayText(l == "zh")
+		zh = trayLanguage(l)
 	}
 	t := &trayMenu{menu: app.NewMenu(), zh: zh, h: h}
 	t.summary = t.menu.Add(zh.s("正在读取…", "Loading…")).SetEnabled(false)
@@ -64,18 +64,18 @@ func newTrayMenu(app *application.App, h http.Handler, show, quit func()) *trayM
 	t.menu.AddSeparator()
 	t.quit = t.menu.Add(zh.s("退出 myco", "Quit myco")).OnClick(func(*application.Context) { quit() })
 	// The pages' language changed: the menu follows at once.
-	uiLangHook = func(l string) { t.setLang(l == "zh") }
+	uiLangHook = func(l string) { t.setLang(l) }
 	return t
 }
 
-// setLang redraws the menu in Chinese (zh) or English.
-func (t *trayMenu) setLang(zh bool) {
+// setLang redraws the menu in the selected interface language.
+func (t *trayMenu) setLang(language string) {
 	t.mu.Lock()
-	if t.zh == trayText(zh) {
+	if t.zh == trayLanguage(language) {
 		t.mu.Unlock()
 		return
 	}
-	t.zh = trayText(zh)
+	t.zh = trayLanguage(language)
 	t.open.SetLabel(t.zh.s("打开 myco", "Open myco"))
 	t.quit.SetLabel(t.zh.s("退出 myco", "Quit myco"))
 	if !t.waking {
@@ -123,7 +123,7 @@ func (t *trayMenu) wakeNodes() {
 	t.mu.Unlock()
 }
 
-func (t *trayMenu) zhNow() trayText {
+func (t *trayMenu) zhNow() trayLocale {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.zh
@@ -135,8 +135,8 @@ const trayUpdateEvery = 6 * time.Hour
 // refresh reads the status (and, now and then, the latest release) and
 // updates the menu.
 func (t *trayMenu) refresh() {
-	if l := readUILang(t.h); l != "" && trayText(l == "zh") != t.zhNow() {
-		t.setLang(l == "zh") // (it refreshes)
+	if l := readUILang(t.h); l != "" && trayLanguage(l) != t.zhNow() {
+		t.setLang(l) // (it refreshes)
 		return
 	}
 	st := readTrayStatus(t.h)

@@ -6,7 +6,9 @@ on:
     # Release snapshots contain only VERSION/CHANGELOG atop a source already
     # checked by release-source.py; avoid duplicating every OS/UI job while
     # the publishing workflow needs those same runners.
-    branches-ignore: ["release/v*"]
+    # wip/** branches are agents' backups of unfinished work: no full CI
+    # there (main's push CI checks the result), so releases get the runners.
+    branches-ignore: ["release/v*", "wip/**"]
   pull_request:
   # Read-only qualification for a frozen source; never builds a release/tag.
   workflow_dispatch:
@@ -364,6 +366,8 @@ jobs:
             web/ui-smoke/timings.json
             web/ui-smoke/*workflow-catalog-*.png
             web/ui-smoke/*member-account*.png
+            web/ui-smoke/*settings-idle-restart*.png
+            web/ui-smoke/*runner-idle-update-*.png
           retention-days: 7
           if-no-files-found: ignore
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -1866,6 +1866,20 @@ requests return 400, oversized metadata/images 413, a competing writer 503 and
 profile I/O failures 500. Failed saves preserve previously committed metadata.
 No local filesystem paths, image payloads or preference values are logged.
 
+### Local App interface language
+
+`GET /app/ui-lang` returns `{lang}` (empty before the web interface has selected a
+language). `PUT /app/ui-lang` accepts `{lang}` with `zh`, `zh-Hant`, `en`, `ja`, `ko`,
+`es` or `pt-BR`, saves the resolved language, and updates native menu/notification
+labels. Unknown IDs return `400 invalid_argument`. The `myco-lang` local preference
+stores the person's choice, including `system`; the web interface resolves System
+before calling this route. No Hub/runner protocol changes are needed. Older desktop
+backends can reject newer IDs without preventing the web interface from rendering.
+
+The existing optional `POST /app/translate` accepts `{text, to}` with the same seven
+resolved IDs and returns `{text, provider}`. It requires the configured translation
+service's key; interface localization itself never calls it. See [Interface languages](i18n.md).
+
 ### Runtime account identity
 
 `Runtime.account` is an optional email identity hint reported by newer runners
@@ -2081,3 +2095,31 @@ IDs), `workdir?`, `repository?`, `branch?`, `now?`, `created_at`, and `error?`.
 Creator identity IDs are private storage metadata, never an editable permission field.
 Copies retain source visibility and sender restrictions. Only the initial context-copy turn
 requires the source's original identity, session and permissions still to match.
+
+
+### App-local CLI upgrade receipts and idle restarts
+
+These routes are local App endpoints under its existing origin/session protection;
+they do not change the Hub schema. Contract: `internal/api/local_upgrade.go`.
+
+| Route | Result |
+| --- | --- |
+| `GET /app/local/upgrade` | `LocalUpgradeStatus`: persisted `cli` receipt (`running`, `succeeded`, `failed`, JSON `result` or `error`), `installed` CLI version, fresh `runner` runtime, optional `restart`, `pending`, `expired`, `unsupported`, and optional error |
+| `POST /app/local/upgrade` | 202 with status; retries detached CLI upgrade with `--restart-when-idle` and a separate result file per attempt |
+| `POST /app/local/upgrade/restart` | 202 with status; requests another six-hour idle window; does not perform an immediate service restart |
+
+The runner owns admission across all local profiles, including undelivered results
+and command watches. Poll responses reserve messages before dropping their poll
+lease. Existing work is never canceled for idle requests. Service handoff checks
+request, instance and managed service PID; stale helpers cannot restart a replacement
+runner. A failed handoff or unchanged version requires explicit retry. Missing/stale
+runtime remains unknown; the installed file does not prove a new runner is running.
+Older slot reports and configured local machines’ workspace reports supply version
+display with `unsupported: true`, never restart
+permission. Receipts are private and omit credential-bearing download URLs.
+
+If a service restart may have been submitted but its result is unknown, runner
+state is `restart_unknown`: new claims remain paused and automatic retries stop.
+The App keeps the error and a manual-check action; it never reopens claims while
+a delayed service stop could still interrupt them. CLI receipts capture setup
+errors before the upgrade handler too. Each result file is bounded to 64 KiB.

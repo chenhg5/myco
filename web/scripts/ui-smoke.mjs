@@ -39,6 +39,9 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+execFileSync(process.execPath,[fileURLToPath(new URL("./i18n.test.mjs",import.meta.url))],{stdio:"inherit"});
+execFileSync(process.execPath,[fileURLToPath(new URL("./i18n-catalog.mjs",import.meta.url)),"--check"],{stdio:"inherit"});
+
 const pageRouteScript = ts.transpileModule(await readFile(appsPath("templates", "src", "_lib", "page-route.ts"),"utf8"),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^export /gm,"") + "\nwindow.__routeModule={subscribeAppRoute};";
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // UI_SMOKE_OUT: where screenshots and the built App go (default web/ui-smoke;
@@ -256,6 +259,7 @@ function reportProblems() {
 
 const intentionalPublicNotReady = new WeakSet();
 const intentionalPageOriginBusy = new WeakSet();
+const intentionalUpgradeAckLoss = new WeakSet();
 // Pages whose app library is made to fail on purpose (出错 · 显示请求编号).
 const intentionalTemplatesFail = new WeakSet();
 
@@ -287,6 +291,8 @@ function watchPage(page, size, scheme) {
     // This fixture deliberately keeps the saved page origin occupied.
     if (intentionalTemplatesFail.has(page) && msg.text().includes("500") && /\/app\/hubs\/[^/]+\/templates:/.test(where)) return;
     if (intentionalPageOriginBusy.has(page) && msg.text().includes("503") && /\/app\/hubs\/[^/]+\/pages\/pg_release\/open:/.test(where)) return;
+    // The receipt test records success before deliberately losing the POST acknowledgement.
+    if (intentionalUpgradeAckLoss.has(page) && msg.text().includes("503") && /\/app\/local\/upgrade:\d/.test(where)) return;
     addProblem(r, "console", msg.text(), where);
   });
   page.on("pageerror", (err) => {
@@ -468,10 +474,10 @@ async function go(page, label, narrow) {
     if (narrow) await sidebar(page, false);
     return;
   }
-  if (label === "设置") {
+  if (label === "设置" || label === "Settings") {
     // Settings sit in the workspace menu at the bottom of the sidebar.
     await clickVisible(page, page.locator(".sp-switch .app-hub-trigger"));
-    await clickVisible(page, page.locator(".app-hub-menu-item", { hasText: "设置" }));
+    await clickVisible(page, page.locator(".app-hub-menu-item", { hasText: label }));
     await page.locator("[data-testid=settings-dialog]").waitFor({ timeout: 10_000 });
     return;
   }
@@ -625,6 +631,112 @@ async function runMatrix(browser, size, scheme) {
     await page.locator(".app-shell").waitFor();
     await page.locator(".sp-home, .sp-group, .sp-first").first().waitFor({ timeout: 20_000 });
     await settle(page);
+
+    await step("七种语言 · 首次使用和连接", async () => {
+      const languages=["zh","zh-Hant","en","ja","ko","es","pt-BR"];
+      const names={zh:"在这台电脑上开始","zh-Hant":"在這臺電腦上開始",en:"Start on this computer"};
+      for(const language of languages) {
+        const preview=await browser.newContext({viewport:size,colorScheme:scheme,deviceScaleFactor:Number(process.env.UI_SMOKE_SCALE)||1});
+        const check=await preview.newPage();const errors=[];
+        check.on("pageerror",error=>errors.push(error.stack||String(error)));
+        await preview.route("**/app/hubs",route=>route.fulfill({status:200,contentType:"application/json",body:"[]"}));
+        await preview.addInitScript(({scheme})=>localStorage.setItem("myco-theme",scheme),{scheme});
+        try {
+          await check.goto(`${r.base}/?lang=${language}`);await check.getByTestId("welcome").waitFor();
+          const catalog=language==="zh"||language==="en"?null:JSON.parse(await readFile(path.join(WEB,"../internal/uilocale/catalogs",`${language}.json`),"utf8"));
+          const start=names[language]||catalog["Start on this computer"];
+          // Traditional spellings are catalog-authored, not inferred from glyph rules.
+          const wanted=language==="zh-Hant"?catalog["在这台电脑上开始"]:start;
+          if(await check.locator(".wl-start").innerText()!==wanted)throw new Error(`Welcome action is not localized: ${language}`);
+          if(await check.getByTestId("language-select").locator("option").count()!==8)throw new Error("Missing language options on Welcome");
+          await settle(check);
+          await shot(check,size,scheme,`welcome-language-${language}`);
+          await clickVisible(check,check.locator(".wl-way").first());await check.locator(".app-modal").waitFor();
+          const input=check.locator(".app-modal input").first();
+          const example="https://example.com/c/myco_console_demo";
+          await input.fill(example);if(await input.inputValue()!==example)throw new Error("Connection input was translated");
+          await check.keyboard.press("Escape");
+          if(await check.evaluate(w=>document.documentElement.scrollWidth>w+1,size.width))throw new Error(`Welcome overflow in ${language}`);
+          if(errors.length)throw new Error(errors.join("\n"));
+        } finally {await preview.close();}
+      }
+    });
+
+    await step("设置 · 七种语言核心流程", async () => {
+      const preview = await browser.newContext({ viewport: size, colorScheme: scheme, locale: "ja-JP", deviceScaleFactor: Number(process.env.UI_SMOKE_SCALE) || 1 });
+      const check = await preview.newPage();
+      const errors = [], nativeLanguages = [], outbound = [];
+      const durable = {"myco-lang":"zh", "myco-theme":scheme};
+      check.on("pageerror", error => errors.push(error.stack || String(error)));
+      check.on("request", request => { if (!request.url().startsWith(r.base) && !request.url().startsWith("data:")) outbound.push(request.url()); });
+      await preview.route(/\/app\/preferences(?:\/import)?$/, async route => {
+        if (route.request().method() !== "GET") Object.assign(durable,route.request().postDataJSON().values);
+        await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({version:1,values:durable})});
+      });
+      await preview.route("**/app/ui-lang", async route => {
+        if(route.request().method()==="PUT") nativeLanguages.push(route.request().postDataJSON().lang);
+        await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({lang:nativeLanguages.at(-1)||""})});
+      });
+      const saved = async language => {
+        const deadline=Date.now()+5000;
+        while(durable["myco-lang"]!==language) {
+          if(Date.now()>deadline)throw new Error(`Language preference not saved: ${language}`);
+          await check.waitForTimeout(20);
+        }
+      };
+      const expected = {zh:"外观", "zh-Hant":"外觀", en:"Appearance", ja:"外観", ko:"모양", es:"Apariencia", "pt-BR":"Aparência"};
+      try {
+        await check.goto(r.base); await check.locator(".app-shell").waitFor();
+        await go(check,"官网改版",narrow);
+        const original = await check.locator(".conv-detail .md").first().innerText();
+        for (const language of ["zh-Hant","en","ja","ko","es","pt-BR","zh"]) {
+          // Start from Chinese navigation, then retain the open settings section.
+          await go(check,"设置",narrow);
+          await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
+          const picker=check.getByTestId("language-select");
+          if(await picker.locator("option").count()!==8) throw new Error("Expected System plus seven languages");
+          await picker.selectOption(language);
+          await check.waitForFunction(l=>document.documentElement.lang===l, language==="zh"?"zh-CN":language);
+          await check.locator(".app-settings-tab.active").filter({hasText:expected[language]}).waitFor();
+          if(await check.getByTestId("language-select").inputValue()!==language) throw new Error("The selected language was not retained");
+          await check.waitForFunction(l=>localStorage.getItem("myco-lang")===l,language);
+          const overflow=await check.evaluate(w=>document.documentElement.scrollWidth>w+1,size.width);
+          if(overflow) throw new Error(`Horizontal overflow in ${language}`);
+          await saved(language);
+          await shot(check,size,scheme,`language-${language}`);
+          await closeSettings(check);
+          if(await check.locator(".conv-detail .md").first().innerText()!==original) throw new Error("Language selection changed the original message");
+          await check.reload();await check.locator(".app-shell").waitFor();
+          if(await check.locator("html").getAttribute("lang")!==(language==="zh"?"zh-CN":language))throw new Error("Language was lost after reload");
+          // Reset only this isolated profile before the next scenario.
+          durable["myco-lang"]="zh";
+          await check.reload();await check.locator(".app-shell").waitFor();
+        }
+        let failPack = true;
+        await check.route(/\/assets\/ko-[^/]+\.json$/, async route => {
+          if(failPack) await route.fulfill({status:503,body:"unavailable"}); else await route.continue();
+        });
+        await go(check,"设置",narrow);
+        await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
+        await check.getByTestId("language-select").selectOption("ko");
+        await check.getByTestId("language-error").waitFor();
+        if(await check.locator("html").getAttribute("lang")!=="zh-CN")throw new Error("Failed pack replaced a working language");
+        failPack=false;
+        await clickVisible(check,check.getByTestId("language-retry"));
+        await check.waitForFunction(()=>document.documentElement.lang==="ko");
+        await saved("ko");
+        durable["myco-lang"]="zh";
+        await check.reload();await check.locator(".app-shell").waitFor();
+        await go(check,"设置",narrow);
+        await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
+        await check.getByTestId("language-select").selectOption("system");
+        await check.waitForFunction(()=>document.documentElement.lang==="ja");
+        if(await check.getByTestId("language-select").inputValue()!=="system")throw new Error("System selection lost");
+        for(const l of Object.keys(expected)) if(!nativeLanguages.includes(l))throw new Error(`Native bridge missed ${l}`);
+        if(errors.length)throw new Error(errors.join("\n"));
+        if(outbound.length)throw new Error("UI localization made an external request: "+outbound.join(","));
+      } finally {await preview.close();}
+    });
 
     // A project opens on your chat with its coordinator; the tasks it hands
     // out are cards in that chat; the members column says what each does.
@@ -1873,6 +1985,27 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
       await page.locator(".sp-pane-right").waitFor({ state: "detached", timeout: 10_000 });
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
+    });
+
+    // A card in the main chat opens two members' exchange in the right
+    // pane in place of what was there (a member's chat): a back button
+    // there brings that back.
+    if (!narrow) await step("项目 · 换掉右栏后能返回", async () => {
+      await clickVisible(page, page.locator(".sp-side .sp-member", { hasText: "docs-claude" }));
+      const right = page.locator(".sp-pane-right");
+      await right.locator(".conv-detail").waitFor({ timeout: 10_000 });
+      const before = compactText(await right.locator(".conv-head h2").innerText());
+      await clickVisible(page, page.locator(".sp-home .handoff", { hasText: "升级注意事项" }));
+      await page.waitForFunction((b) => {
+        const h = document.querySelector(".sp-pane-right .conv-head h2");
+        return !!h && h.textContent.replace(/\s+/g, "") !== b.replace(/\s+/g, "");
+      }, before, { timeout: 10_000 });
+      const back = right.locator(".conv-head").getByRole("button", { name: /^返回/ });
+      await back.waitFor({ timeout: 5_000 });
+      await back.click();
+      await page.waitForFunction((b) => (document.querySelector(".sp-pane-right .conv-head h2")?.textContent || "").replace(/\s+/g, "") === b.replace(/\s+/g, ""), before, { timeout: 10_000 });
+      await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
+      await page.locator(".sp-pane-right").waitFor({ state: "detached", timeout: 10_000 });
     });
 
     // In a member's chat, what it and the others said to each other is a
@@ -3138,6 +3271,9 @@ async function runMatrix(browser, size, scheme) {
       await openMember(page, narrow, "聊天", "Review (Codex 云端)");
       await noRound(page);
       const older = await sendFromElsewhere("hub_studio", "review-cloud", "保留任务，等我补充");
+      // The mock records milliseconds. Observe the first task before sending
+      // the next one, so equal timestamps cannot erase their intended order.
+      await page.waitForFunction((id) => !!document.querySelector(`[data-msg="${id}"]`), older.id, { timeout: 15000 });
       // (The mock answers 启动预览 after 7 seconds, 保留任务 after 20.)
       const newer = await sendFromElsewhere("hub_studio", "review-cloud", "启动预览：先回复这条新任务");
       await page.waitForFunction((id) => !!document.querySelector(`[data-msg="${id}"]`), newer.id, { timeout: 15000 });
@@ -4313,6 +4449,75 @@ async function runMatrix(browser, size, scheme) {
       await closeSettings(page);
     });
 
+    await step("设置 · 更新后空闲重启", async () => {
+      let state = { cli: { id: "first", state: "failed", at: new Date().toISOString(), error: "Download unavailable. Please retry." }, installed: "v0.24.0", runner: { pid: 1, instance: "demo", version: "v0.23.9", at: new Date().toISOString(), state: "expired" }, pending: true, expired: true, unsupported: false };
+      let upgrades = 0, restarts = 0;
+      const path = "**/app/local/upgrade";
+      const route = async (r) => {
+        if (r.request().method() === "POST") {
+          upgrades++; state = { ...state, cli: { id: "second", state: "succeeded", at: new Date().toISOString() } };
+          return r.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "unavailable", message: "upgrade acknowledgement was lost" }) });
+        }
+        await r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(state) });
+      };
+      const restart = async (r) => { restarts++; state = { ...state, expired: false, runner: { ...state.runner, state: "pending" } }; await r.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify(state) }); };
+      try {
+        intentionalUpgradeAckLoss.add(page);
+        await page.route(path, route);
+        await page.route("**/app/local/upgrade/restart", restart);
+        await go(page, "设置", narrow);
+        const search = page.locator(".app-settings-search input");
+        await search.fill("关于"); await search.press("Enter");
+        const notice = page.locator("[data-testid=runner-update-notice]");
+        await notice.getByText("命令行工具升级失败", { exact: true }).waitFor();
+        const retry = notice.getByRole("button", { name: "重试命令行升级", exact: true });
+        await retry.scrollIntoViewIfNeeded();
+        let box = await retry.boundingBox(); if (!box) throw Error("retry missing");
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await notice.getByText(/runner 正在运行 v0.23.9/).waitFor();
+        if ((await notice.innerText()).includes("upgrade acknowledgement was lost")) throw Error("confirmed receipt must settle an uncertain acknowledgement");
+        if (upgrades !== 1 || !(await notice.innerText()).includes("六小时")) throw Error("retry/ceiling notice missing");
+        const button = notice.getByRole("button", { name: "空闲时重启", exact: true });
+        await button.scrollIntoViewIfNeeded(); box = await button.boundingBox();
+        if (!box) throw Error("idle restart button missing");
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await button.focus();
+        await shot(page, size, scheme, "settings-idle-restart");
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await page.waitForFunction(() => !document.querySelector("[data-testid=runner-update-notice]")?.textContent.includes("六小时"));
+        if (restarts !== 1) throw Error("restart must enqueue once");
+        if (size.width === 1200) {
+          for (const language of ["zh", "en"]) {
+            const preview = await browser.newContext({ viewport: size, colorScheme: scheme, deviceScaleFactor: 2, storageState: await context.storageState() });
+            try {
+              await preview.addInitScript(({ language, scheme }) => { localStorage.setItem("myco-lang", language); localStorage.setItem("myco-theme", scheme); }, { language, scheme });
+              const capture = await preview.newPage();
+              await capture.route("**/app/info", async r => { const response = await r.fetch(); const data = await response.json(); await r.fulfill({ response, json: { ...data, version: state.installed } }); });
+              await capture.route("**/app/local", async r => { const response = await r.fetch(); const data = await response.json(); await r.fulfill({ response, json: { ...data, myco: { ...data.myco, version: state.installed } } }); });
+              await capture.route("**/app/update", r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ current: state.installed, latest: state.installed, available: false, can_install: true }) }));
+
+              await capture.route(path, r => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(state) }));
+              const url = new URL(page.url()); url.searchParams.set("lang", language);
+              await capture.goto(url.href);
+              await capture.locator(".app-shell").waitFor();
+              await go(capture, language === "zh" ? "设置" : "Settings", false);
+              const find = capture.locator(".app-settings-search input");
+              await find.fill(language === "zh" ? "关于" : "About"); await find.press("Enter");
+              await capture.locator("[data-testid=runner-update-notice]").getByText(language === "zh" ? /runner 正在运行 v0.23.9/ : /Runner on v0.23.9/).waitFor();
+              await settle(capture, 200);
+              await shot(capture, size, scheme, `runner-idle-update-${language}`);
+            } finally { await preview.close(); }
+          }
+        }
+
+      } finally {
+        intentionalUpgradeAckLoss.delete(page);
+        await page.unroute(path, route);
+        await page.unroute("**/app/local/upgrade/restart", restart);
+        await closeSettings(page);
+      }
+    });
+
     // 使用文档: from the last row of Settings' nav (and Settings › About;
     // no longer in the workspace menu); pages in
     // groups on the left, the page on the right, links between pages, a
@@ -4346,7 +4551,15 @@ async function runMatrix(browser, size, scheme) {
       // and one opens full size.
       const pics = doc.locator(".md img");
       if ((await pics.count()) < 1) throw new Error("项目那篇应有配图");
-      await page.waitForFunction(() => [...document.querySelectorAll("[data-testid=help-doc] .md img")].every((i) => i.complete && i.naturalWidth > 0), null, { timeout: 10_000 });
+      // Guide pictures load lazily. Visit each one before asserting it loaded;
+      // offscreen pictures are not broken merely because the browser deferred them.
+      for (let i = 0; i < await pics.count(); i++) {
+        await pics.nth(i).scrollIntoViewIfNeeded();
+        await page.waitForFunction((index) => {
+          const img = document.querySelectorAll("[data-testid=help-doc] .md img")[index];
+          return img instanceof HTMLImageElement && img.complete && img.naturalWidth > 0;
+        }, i, { timeout: 10_000 });
+      }
       await clickVisible(page, pics.first());
       await page.locator(".lightbox").waitFor({ timeout: 5_000 });
       await page.keyboard.press("Escape");
@@ -4720,6 +4933,22 @@ async function runMatrix(browser, size, scheme) {
         const d = document.querySelector(".conv-detail");
         return !!d && d.querySelectorAll(".trace.is-live, .trace.is-waiting").length === 0;
       }, null, { timeout: 30_000 });
+      // An answer with no run above it (a cloud session, 只看进度) sits
+      // right under your bubble: it keeps clear of the bubble's floating
+      // time and copy button.
+      const clear = await page.evaluate(() => {
+        const m = [...document.querySelectorAll(".conv-detail .conv-msg.is-me:not(.is-system)")].pop();
+        if (!m) return null;
+        const bare = document.createElement("div");
+        bare.className = "conv-msg is-agent";
+        bare.textContent = "一条紧跟在你气泡下面、没有过程的回答";
+        m.after(bare);
+        m.querySelector(".conv-msg-meta")?.classList.remove("is-shown");
+        const gap = bare.getBoundingClientRect().top - m.querySelector(".conv-msg-meta").getBoundingClientRect().bottom;
+        bare.remove();
+        return gap;
+      });
+      if (clear !== null && clear < 0) throw new Error(`没有过程的回答压到了气泡下面的时间和复制按钮上（差 ${clear}px）`);
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
@@ -5828,13 +6057,13 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".ms .ms-fold"));
       await page.locator(".ms .ms-fold-body .app-kv").first().waitFor({ timeout: 5_000 });
       if (await page.locator(".app-inspector").count()) throw new Error("详细信息不该再弹出另一个面板");
-      // The details are four tabs, one subject at a time (settings first).
+      // The details are five tabs, one subject at a time (settings first).
       const tabs = page.locator(".ms [data-testid=ms-tabs] [role=tab]");
-      if ((await tabs.allInnerTexts()).join("|") !== "设置|能力|记录|身份") throw new Error(`详细信息应分成 设置/能力/记录/身份 四页，实际「${(await tabs.allInnerTexts()).join("|")}」`);
+      if ((await tabs.allInnerTexts()).join("|") !== "设置|能力|记录|渠道|身份") throw new Error(`详细信息应分成 设置/能力/记录/渠道/身份 五页，实际「${(await tabs.allInnerTexts()).join("|")}」`);
       await page.locator(".ms [data-testid=ms-tabs]").scrollIntoViewIfNeeded();
       await settle(page, 300);
       await shot(page, size, scheme, "member-card-details");
-      for (const t of ["skills", "records", "identity"]) {
+      for (const t of ["skills", "records", "channels", "identity"]) {
         await clickVisible(page, page.locator(`.ms [data-testid=ms-tabs] [data-tab=${t}]`));
         await settle(page, 200);
         await shot(page, size, scheme, `member-card-details-${t}`);
@@ -6014,9 +6243,10 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
-    // An agent's own chat-app bots (ChatApps.tsx), in its details: PM has a
-    // Feishu bot; binding Slack pastes two tokens and shows the /claim line;
-    // binding Feishu shows a QR code; unbinding asks first.
+    // An agent's own chat-app bots (ChatApps.tsx), in its profile's own
+    // 渠道 tab: PM has a Feishu bot; binding Slack pastes two tokens and
+    // shows the /claim line in its row; binding Feishu shows a QR code;
+    // unbinding asks first.
     await step("成员 · 聊天软件机器人", async () => {
       await go(page, "成员", narrow);
       const pm = page.locator(".mb-card", { hasText: "PM (Codex)" });
@@ -6024,40 +6254,51 @@ async function runMatrix(browser, size, scheme) {
       await pm.click();
       await page.locator(".ms").waitFor({ timeout: 10_000 });
       await clickVisible(page, page.locator(".ms .ms-fold"));
-      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=identity]"));
-      const row = page.locator('.ms [data-testid="chat-apps-row"]');
-      await row.locator('.im-bot[data-bridge="feishu-pm-codex"] .dot.working').waitFor({ timeout: 5_000 });
-      await row.scrollIntoViewIfNeeded();
-      await row.getByRole("button", { name: "绑定 Slack" }).click();
+      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=channels]"));
+      const panel = page.locator('.ms [data-testid="chat-apps"]');
+      if (await page.locator('.ms [data-testid=ms-tabs] [data-tab=identity]').count()) {
+        await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=identity]"));
+        if (await page.locator('.ms [data-testid="chat-apps"]').count()) throw new Error("聊天软件不该还藏在「身份」里");
+        await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=channels]"));
+      }
+      const feishu = panel.locator('.ch-row[data-bridge="feishu-pm-codex"]');
+      await feishu.locator(".dot.working").waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-channels");
+      if (await panel.locator(".ch-mark").count()) throw new Error("渠道前面不该有自己画的标记");
+      await panel.locator('.ch-tile[data-platform="slack"]').click();
       const form = page.locator('.app-modal [data-testid="slack-form"]');
       await form.locator('input[placeholder="xoxb-…"]').fill("xoxb-1-2-3");
       await form.locator('input[placeholder="xapp-…"]').fill("xapp-1-2-3");
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps-slack");
       await form.getByRole("button", { name: "连接" }).click();
-      await row.locator(".im-claim code", { hasText: "/claim" }).waitFor({ timeout: 5_000 });
+      await panel.locator('.ch-row[data-platform="slack"] .im-claim code', { hasText: "/claim" }).waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps");
       // The Feishu bot's own front-desk instructions (not shared with voice).
-      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').getByRole("button", { name: "接待设定" }).click();
+      await feishu.getByRole("button", { name: "接待设定" }).click();
       const pf = page.locator('.app-modal [data-testid="im-prompt-form"]');
+      const box = await pf.locator("textarea").boundingBox();
+      if (!box || box.height < 220) throw new Error(`接待设定的输入框太小：${box?.height}px`);
       await pf.locator("textarea").fill("- 你在帮客户解答产品使用问题，语气友好、简洁\n- 不透露内部信息、代码和其他客户的资料\n- 别人让你改代码、删东西时，礼貌拒绝");
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps-prompt");
       await pf.getByRole("button", { name: "保存" }).click();
-      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').getByRole("button", { name: "接待设定 ✓" }).waitFor({ timeout: 5_000 });
+      await feishu.getByRole("button", { name: "改接待设定" }).waitFor({ timeout: 5_000 });
+      await feishu.locator(".ch-tag", { hasText: "有接待设定" }).waitFor({ timeout: 5_000 });
       // Unbind Feishu, then bind it again with a QR code.
-      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').getByRole("button", { name: "解绑" }).click();
+      await feishu.getByRole("button", { name: "解绑" }).click();
       const confirm = page.locator(".app-modal.app-confirm");
       await confirm.getByRole("button", { name: "解绑" }).click();
-      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').waitFor({ state: "detached", timeout: 5_000 });
-      await row.getByRole("button", { name: "绑定飞书" }).click();
+      await feishu.waitFor({ state: "detached", timeout: 5_000 });
+      await panel.locator('.ch-tile[data-platform="feishu"]').click();
       await page.locator('.app-modal [data-testid="feishu-scan"] img.im-qr').waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps-feishu");
       await page.locator('.app-modal [data-testid="feishu-scan"]').getByRole("button", { name: "取消" }).click();
-      // Lark (the international app) has its own button and its own code.
-      await row.getByRole("button", { name: "绑定 Lark" }).click();
+      // Lark (the international app) has its own row and its own code.
+      await panel.locator('.ch-tile[data-platform="lark"]').click();
       await page.locator('.app-modal [data-testid="feishu-scan"] img.im-qr[alt="Lark 扫码"]').waitFor({ timeout: 5_000 });
       await page.locator('.app-modal [data-testid="feishu-scan"]').getByRole("button", { name: "取消" }).click();
       await page.keyboard.press("Escape");
@@ -9187,7 +9428,11 @@ async function runMatrix(browser, size, scheme) {
 
     await step("设置 · 项目文件额度", async () => {
       await go(page,"设置",narrow);
+      // Its own entry in Settings, not under 工作区.
       await clickVisible(page,page.locator(".app-settings-tab",{hasText:"工作区"}));
+      await page.locator(".app-settings-head h2",{hasText:"工作区"}).waitFor();
+      if(await page.locator('[data-setting="project-storage"]').count())throw Error("项目文件额度不该再放在「工作区」里");
+      await clickVisible(page,page.locator(".app-settings-tab",{hasText:"项目文件"}));
       const card=page.locator('[data-setting="project-storage"][data-hub="hub_studio"]');
       await card.locator("select").selectOption("website");
       const files=card.getByRole("spinbutton",{name:"文件数上限",exact:true});

@@ -3171,7 +3171,7 @@ textarea.app-input {
 .conv-head-faces.is-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .conv-head-name { max-width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
-.conv-head-name:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--faint); }
+.conv-head-name:hover { color: var(--fg); }
 /* 查看并处理: its open work from elsewhere, settled in the chat. */
 .conv-elsewhere { max-height: min(60vh, 520px); overflow-y: auto; }
 /* (here what can be done is the point: the buttons in a row under each
@@ -3697,6 +3697,14 @@ textarea.app-input {
    buttons, before the box or the read-only note at the foot. */
 .conv-timeline > .conv-msg.is-me:last-child {
   margin-bottom: 18px;
+}
+/* What follows your bubble without a gap of its own (an agent's answer
+   with no run drawn above it: a cloud session, 只看进度) keeps clear of
+   that floating time and its copy button, which sit 7px below the 12px
+   gap. (A run has its own margin; your next bubble and a workflow card,
+   whose row is in the flow, need none.) */
+.conv-msg.is-me:not(.is-system) + :where(:not(.conv-msg.is-me, .trace)) {
+  margin-top: 8px;
 }
 /* What comes right after your bubble in the middle or across the chat (a
    handoff card, a line saying what ended) keeps clear of that floating
@@ -10955,6 +10963,41 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 
 /* An agent's chat-app bots, in its details (ChatApps.tsx) */
 .im-bot { display: inline-flex; align-items: center; gap: 6px; }
+/* 渠道 (ChatAppsPanel): one row per chat app, its mark, its state in words
+   and its actions on the right; what to do next (claim) under it. */
+.ch { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; margin-bottom: 14px; }
+.ch-intro { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.ch-list { padding: 2px 14px; }
+.ch-row { display: block; }
+.ch-row + .ch-row { border-top: 1px solid var(--line); }
+.ch-row-top { display: flex; align-items: center; gap: 12px; }
+.ch-head { margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.ch-none { padding: 12px 14px; border-radius: 10px; font-size: 12.5px; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+/* Channels not yet added: tiles that wrap, so a dozen still fit. */
+.ch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.ch-tile {
+  display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; text-align: left;
+  background: var(--card); box-shadow: inset 0 0 0 1px var(--line); color: var(--fg); cursor: pointer;
+}
+.ch-tile:hover { box-shadow: inset 0 0 0 1px var(--fg-2); }
+.ch-tile:focus-visible { outline: 2px solid var(--fg-2); outline-offset: 1px; }
+.ch-tile-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ch-tile-top b { font-size: 13px; font-weight: 600; }
+.ch-tile-top svg { width: 14px; height: 14px; color: var(--muted); }
+.ch-tile-how { font-size: 12px; line-height: 1.5; color: var(--muted); }
+.im-prompt-count { margin-top: -4px; font-size: 11.5px; color: var(--muted); text-align: right; }
+.im-prompt-note { margin: 0; line-height: 1.6; }
+.ch-text { flex: 1 1 auto; min-width: 0; }
+.ch-state { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ch-tag { padding: 0 6px; border-radius: 6px; font-size: 11px; line-height: 18px; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+.ch-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+.ch-claim { margin: 8px 0 2px; }
+.ch-claim .app-btn { margin-left: 6px; }
+.ch-foot { margin: 0; line-height: 1.6; }
+@media (max-width: 520px) {
+  .ch-row-top { flex-wrap: wrap; }
+  .ch-actions { width: 100%; }
+}
 .im-bot .app-kv-note { margin-left: 2px; }
 .im-claim { display: block; flex-basis: 100%; margin-top: 6px; font-size: 12px; color: var(--fg-2); }
 .im-claim .app-command { margin-top: 6px; }
@@ -10968,7 +11011,7 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .im-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; color: var(--fg-2); }
 .im-steps .app-input { display: block; width: 100%; margin-top: 6px; }
 .im-steps a { color: var(--accent); }
-.im-prompt { width: 100%; min-height: 160px; font-size: 13px; }
+.im-prompt { width: 100%; min-height: 260px; font-size: 13px; line-height: 1.65; resize: vertical; }
 /* where a run's steps will show once it comes near the view (TraceView) */
 .trace-lazy { display: block; height: 1px; }
 /* Settings › Appearance › 侧栏显示: a chip per sidebar entry, on = shown. */
@@ -11052,3 +11095,13 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 .machine-health-process { min-width: 0; overflow-wrap: anywhere; }
 .machine-health-process div { color: var(--muted); font-size: 11.5px; }
 .machine-health-alert .pc-online { color: var(--amber); }
+
+/* Seven native language names use a compact picker at both window widths. */
+.language-control { display: grid; gap: 4px; min-width: 0; }
+.app-language-select { width: 13rem; max-width: 100%; }
+
+/* Localized sentences and controls share space without squeezing prose. */
+.app-setting-line { flex-wrap: wrap; }
+.app-setting-line-text { flex: 1 1 200px; }
+.nav-show-chips { flex: 1 1 320px; }
+.app-setting-line .seg { max-width: 100%; flex-wrap: wrap; }

@@ -251,7 +251,7 @@ func quotaDTO(q *domain.Quota) *api.Quota {
 		return nil
 	}
 	now := time.Now().UTC()
-	out := &api.Quota{Source: q.Source, At: q.At, Provider: q.Provider, ProfileRef: q.ProfileRef, MachineID: q.MachineID, SourceKind: q.SourceKind, Status: quotaStatusAt(q, now), CheckedAt: q.CheckedAt, ErrorCode: q.ErrorCode, Plan: q.Plan, Windows: []api.QuotaWindow{}}
+	out := &api.Quota{Source: q.Source, At: q.At, Provider: q.Provider, ProfileRef: q.ProfileRef, MachineID: q.MachineID, SourceKind: q.SourceKind, Status: domain.QuotaStatusAt(q, now), CheckedAt: q.CheckedAt, ErrorCode: q.ErrorCode, Plan: q.Plan, Windows: []api.QuotaWindow{}}
 	for _, w := range q.Windows {
 		// A window whose reset time has passed is no longer the window these
 		// numbers describe: drop it rather than show yesterday's use.
@@ -264,31 +264,6 @@ func quotaDTO(q *domain.Quota) *api.Quota {
 		out.Status = "unknown"
 	}
 	return out
-}
-
-// quotaObserved is when the numbers themselves were observed. A runner's
-// shared snapshot may keep a weekly window's older observation time on
-// purpose, so where it has a profile the collection time is the freshness
-// signal; a session report carries the time it observed.
-func quotaObserved(q *domain.Quota) time.Time {
-	if q.ProfileRef != "" {
-		return q.CheckedAt
-	}
-	return q.At
-}
-
-// quotaStatusAt treats a snapshot nobody refreshed for an hour as unknown:
-// the account may have reset, or the session may be gone, since. Pickers and
-// the App read this, so they never act on an hour-old "ok".
-func quotaStatusAt(q *domain.Quota, now time.Time) string {
-	if q.Status != "" && q.Status != "ok" {
-		return q.Status
-	}
-	at := quotaObserved(q)
-	if at.IsZero() || now.Sub(at) > time.Hour {
-		return "unknown"
-	}
-	return q.Status
 }
 
 func quotaFromAPI(q *api.Quota) *domain.Quota {

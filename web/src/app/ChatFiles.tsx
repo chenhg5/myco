@@ -6,7 +6,7 @@ import { FileRow, isPicture } from "@/app/attachments";
 import { Lightbox } from "@/app/lightbox";
 import { PageCard } from "@/app/pages";
 import { DockPanel } from "@/app/preview";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 /** A file sent in this chat: the message it came with (to go back to it),
@@ -61,11 +61,11 @@ export function ChatFiles({ open, onOpenChange, hubId, items, apps = [], nameOf,
   const files = newest.filter((f) => !isPicture(f.a));
   const meta = (f: { from: string; at: string }) => `${nameOf(f.from)} · ${timeAgo(f.at, now)}`;
   const jump = (f: { msg: string }) => { onJump(f.msg); if (window.innerWidth < 900) onOpenChange(false); };
-  const count = L(`${appList.length} 个应用 · ${pictures.length} 张图片 · ${files.length} 个文件`, `${appList.length} apps · ${pictures.length} pictures · ${files.length} files`);
+  const count = L(E`${appList.length} 个应用 · ${pictures.length} 张图片 · ${files.length} 个文件`, E`${appList.length} apps · ${pictures.length} pictures · ${files.length} files`);
   return (
     <DockPanel open={open} onOpenChange={onOpenChange} title={L("文件和应用", "Files and apps")} about={count} className="cf-panel" bodyClass="cf-body">
       <div className="cf-tabs" role="tablist">
-        {([["all", L("全部", "All")], ["apps", L(`应用 ${appList.length}`, `Apps ${appList.length}`)], ["pictures", L(`图片 ${pictures.length}`, `Pictures ${pictures.length}`)], ["files", L(`文件 ${files.length}`, `Files ${files.length}`)]] as const).map(([k, label]) => (
+        {([["all", L("全部", "All")], ["apps", L(E`应用 ${appList.length}`, E`Apps ${appList.length}`)], ["pictures", L(E`图片 ${pictures.length}`, E`Pictures ${pictures.length}`)], ["files", L(E`文件 ${files.length}`, E`Files ${files.length}`)]] as const).map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={kind === k} className={cn("tp-chip", kind === k && "is-on")} onClick={() => setKind(k)}>{label}</button>
         ))}
       </div>

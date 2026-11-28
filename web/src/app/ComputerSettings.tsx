@@ -8,7 +8,7 @@ import { Avatar, whereOf } from "@/app/persona";
 import { projectsOf } from "@/app/Members";
 import { isNobody, nobody } from "@/app/AddToProject";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { senderEdit, removedSenders } from "@/lib/allow-from";
 import { cn } from "@/lib/utils";
 
@@ -150,7 +150,7 @@ export function ComputerSettings({ row, focus, rows, projects, onClose, onChange
             <div className="pcs-save">
               <span className="app-small-note">{allow.length === 0
                 ? L("一个都不勾：只有你自己能在终端里用。", "None ticked: only you can use it, in its terminal.")
-                : L(`勾上的 ${allow.length} 个 agent 能用你的身份在这个文件夹里跑命令。`, `The ${allow.length} ticked can run commands in this folder as you.`)}</span>
+                : L(E`勾上的 ${allow.length} 个 agent 能用你的身份在这个文件夹里跑命令。`, E`The ${allow.length} ticked can run commands in this folder as you.`)}</span>
               <button type="button" className="app-btn app-btn-small app-btn-primary" onClick={() => void save()} disabled={busy || !changed}>{L("保存", "Save")}</button>
               {saved && !changed && <span className="tr-tried">{L("已保存", "Saved")}</span>}
             </div>
@@ -163,7 +163,7 @@ export function ComputerSettings({ row, focus, rows, projects, onClose, onChange
                 <span key={p.name} className="pcs-project">
                   {p.title || p.name}
                   <button type="button" className="pcs-project-x" onClick={() => void leave(p.name)} disabled={busy}
-                    aria-label={L(`从「${p.title || p.name}」拿出来`, `Take it out of ${p.title || p.name}`)} title={L("从这个项目拿出来", "Take it out of this project")}>×</button>
+                    aria-label={L(E`从「${p.title || p.name}」拿出来`, E`Take it out of ${p.title || p.name}`)} title={L("从这个项目拿出来", "Take it out of this project")}>×</button>
                 </span>
               ))}
               {inProjects.length === 0 && <span className="app-small-note">{L("还不在任何项目里。", "Not in a project yet.")}</span>}

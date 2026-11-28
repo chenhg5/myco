@@ -1,12 +1,14 @@
+import { LanguageSelect } from "@/app/LanguageSelect";
 import { localPreferences, saveWorkspaceAppearance } from "@/lib/localPreferences";
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
+import { RunnerUpdateNotice } from "@/app/RunnerUpdateNotice";
 import { openHelp } from "@/app/Help";
 import { CopyButton } from "@/app/copy";
 import { TailscaleSetup } from "@/app/TailscaleSetup";
 import { IntroCard, introOf, noteDone } from "@/app/Onboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlertTriangle, ArrowUpRight, AudioLines, BookOpen, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, ShieldCheck, Terminal, Users, KeyRound,
+  AlertTriangle, ArrowUpRight, AudioLines, BookOpen, Bot, Check, Cloud, Globe, Info, Keyboard, Languages, Palette, Pencil, Plus, RotateCcw, ScrollText, Search, Server, ShieldCheck, Terminal, Users, KeyRound, HardDrive,
 } from "lucide-react";
 import {
   appApi, ApiError, type AppInfo, type CacheStats, type AppUpdate, type Hub, type HubOverview, type LocalState,
@@ -30,7 +32,7 @@ import type { TextSize, ThemeMode } from "@/lib/theme";
 import { setReportsOnly, useReportsOnly } from "@/app/quietRuns";
 import { appTo, setAutoTranslate, setTranslateReady, useAutoTranslate, useTranslateReady } from "@/app/translate";
 import type { TranslateConfig } from "@/appapi";
-import { L, lang, type LangChoice } from "@/lib/i18n";
+import { L, lang, type LangChoice, E } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
 import { ChatBgDialog } from "@/app/ChatBgDialog";
 import { ShortcutsSection } from "@/app/Shortcuts";
@@ -38,7 +40,7 @@ import { HubUpgrade, useLatestRelease } from "@/app/MycoUpgrade";
 import { ProjectStorageSettings } from "@/app/ProjectStorageSettings";
 import { BackupRow } from "@/app/Backups";
 
-type Section = "hubs" | "agents" | "members" | "providers" | "audit" | "appearance" | "translate" | "voice" | "network" | "apps" | "shortcuts" | "about";
+type Section = "hubs" | "agents" | "members" | "providers" | "storage" | "audit" | "appearance" | "translate" | "voice" | "network" | "apps" | "shortcuts" | "about";
 
 type UpdateState =
   | { step: "checking" }
@@ -77,10 +79,10 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
       status = <span className="app-about-status"><span className="app-spinner" />{L("正在检查…", "Checking…")}</span>;
       break;
     case "installing":
-      status = <span className="app-about-status"><span className="app-spinner" />{L(`正在下载 ${st.latest}…`, `Downloading ${st.latest}…`)}</span>;
+      status = <span className="app-about-status"><span className="app-spinner" />{L(E`正在下载 ${st.latest}…`, E`Downloading ${st.latest}…`)}</span>;
       break;
     case "relaunching":
-      status = <span className="app-about-status ok">{L(`已安装 ${st.latest}，正在重新打开…`, `Installed ${st.latest}, reopening…`)}</span>;
+      status = <span className="app-about-status ok">{L(E`已安装 ${st.latest}，正在重新打开…`, E`Installed ${st.latest}, reopening…`)}</span>;
       break;
     case "failed":
       status = <span className="app-about-status bad">{st.u ? L("更新失败", "Update failed") : L("检查失败", "Check failed")}</span>;
@@ -92,10 +94,10 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
         status = <span className="app-about-status bad">{L("连不上 GitHub 或 Gitee", "Can’t reach GitHub or Gitee")}</span>;
         action = <button type="button" className="app-btn" onClick={() => void check()}>{L("重试", "Retry")}</button>;
       } else if (u.available && u.can_install) {
-        status = <span className="app-about-status new">{L(`有新版本 ${u.latest}`, `New version ${u.latest}`)}</span>;
+        status = <span className="app-about-status new">{L(E`有新版本 ${u.latest}`, E`New version ${u.latest}`)}</span>;
         action = <button type="button" className="app-btn app-btn-primary" onClick={() => void install(u)}>{L("更新并重新打开", "Update and reopen")}</button>;
       } else if (u.available) {
-        status = <span className="app-about-status new">{L(`有新版本 ${u.latest}，请到 GitHub 或 Gitee 下载`, `New version ${u.latest} — download it from GitHub or Gitee`)}</span>;
+        status = <span className="app-about-status new">{L(E`有新版本 ${u.latest}，请到 GitHub 或 Gitee 下载`, E`New version ${u.latest} — download it from GitHub or Gitee`)}</span>;
       } else {
         status = <span className="app-about-status ok"><Check />{L("已是最新", "Up to date")}</span>;
         action = <button type="button" className="app-btn" onClick={() => void check()}>{L("再检查一次", "Check again")}</button>;
@@ -121,6 +123,7 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
           <span className="app-kv-label">{L("更新", "Updates")}</span>
           <span className="app-kv-value">{status}{action}</span>
         </div>
+        <RunnerUpdateNotice />
         <CacheRow />
         <div className="app-kv app-about-update" data-setting="prepare">
           <span className="app-kv-label">{L("上手引导", "Getting started")}</span>
@@ -140,12 +143,8 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
       <ErrorText error={failure} summary={st.step === "failed" && st.u ? updateFailure(failure) : null} />
       <p className="app-about-note">
         {isWindows
-          ? lang() === "zh"
-            ? <>更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换正在运行的这个 exe，再自动重新打开；这台电脑上的 myco 命令行工具也会一起升级。</>
-            : <>Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces this exe and reopens it; the myco command-line tool on this computer is upgraded along with it.</>
-          : lang() === "zh"
-            ? <>更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具和 runner 服务另外用 <code>myco upgrade</code> 升级。</>
-            : <>Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. Upgrade the command-line tool and the runner service separately with <code>myco upgrade</code>.</>}
+          ? L("更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换正在运行的这个 exe，再自动重新打开；这台电脑上的 myco 命令行工具也会一起升级。", "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces this exe and reopens it; the myco command-line tool on this computer is upgraded along with it.")
+          : L("更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具也会一起升级，runner 等任务完成后重启；升级失败可在上方重试。", "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. The command-line tool updates too; the runner restarts after tasks finish. Failed updates can be retried above.")}
       </p>
       <p className="app-about-note">{L("agent、任务和对话都由工作区提供，App 只负责显示和转发。", "Nodes, tasks and conversations come from the Hub; the app only displays and relays them.")}</p>
     </>
@@ -192,6 +191,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
   { key: "agents", get label() { return L("本机 agent", "Agents"); }, icon: Bot },
   { key: "members", get label() { return L("成员", "People"); }, icon: Users },
   { key: "providers", get label() { return L("模型供应商", "Model providers"); }, icon: KeyRound },
+  { key: "storage", get label() { return L("项目文件", "Project files"); }, icon: HardDrive },
   { key: "audit", get label() { return L("审计", "Audit"); }, icon: ScrollText },
   { key: "appearance", get label() { return L("外观", "Appearance"); }, icon: Palette },
   { key: "translate", get label() { return L("翻译", "Translation"); }, icon: Languages },
@@ -206,7 +206,7 @@ const SECTIONS: { key: Section; label: string; icon: typeof Server }[] = [
  *  workspace (shared with the others in it), and About. */
 const GROUPS: { title: () => string; keys: Section[] }[] = [
   { title: () => L("这台电脑", "This computer"), keys: ["appearance", "voice", "translate", "network", "apps", "agents"] },
-  { title: () => L("工作区", "Workspace"), keys: ["hubs", "members", "providers", "audit"] },
+  { title: () => L("工作区", "Workspace"), keys: ["hubs", "members", "providers", "storage", "audit"] },
   { title: () => "", keys: ["shortcuts", "about"] },
 ];
 
@@ -216,6 +216,7 @@ const SECTION_ABOUT: Record<Section, () => string> = {
   agents: () => L("这台电脑上装了哪些 AI 命令行，能不能用，怎么装、怎么登录。", "The AI command lines on this computer: whether they work, and how to install or sign in."),
   members: () => L("谁在这个工作区里、能做什么；邀请新的人。", "Who is in this workspace and what they may do; invite someone."),
   providers: () => L("你用 API key 接的模型供应商：存在工作区里，在哪台电脑上新增 agent 都能直接选。", "The model vendors you use with an API key: kept in the workspace, to pick when you add an agent on any computer."),
+  storage: () => L("每个项目最多能放多少文件、占多大空间。只有工作区的所有者和管理员能改。", "How many files each project may keep, and how much space. Only a workspace's owner and admins can change it."),
   audit: () => L("工作区里谁在什么时候做了什么。", "Who did what in this workspace, and when."),
   appearance: () => L("主题、文字大小、语言，以及对话怎么显示。", "Theme, text size, language, and how chats look."),
   translate: () => L("把 agent 说的话翻译成你的语言。", "Translate what agents say into your language."),
@@ -246,6 +247,7 @@ const FINDABLE: { section: Section; key?: string; title: () => string; words: st
   { section: "agents", key: "local-agents", title: () => L("这台电脑上的 agent", "Agents on this computer"), words: "本机 agent claude code codex gemini 安装 登录 cli install sign in" },
   { section: "hubs", title: () => L("工作区", "Workspaces"), words: "工作区 服务器 连接 加入 新建 停止 公网 cloudflare tailscale workspace hub server" },
   { section: "members", title: () => L("成员", "People"), words: "成员 邀请 角色 管理员 权限 people invite role admin member" },
+  { section: "storage", title: () => L("项目文件", "Project files"), words: "项目文件 额度 文件数 空间 容量 上下文文档 附件 project files quota storage space capacity attachments" },
   { section: "providers", title: () => L("模型供应商", "Model providers"), words: "模型供应商 服务商 供应商 密钥 key minimax deepseek kimi opencode 智谱 通义 豆包 openrouter model provider api key" },
   { section: "audit", title: () => L("审计", "Audit"), words: "审计 日志 记录 操作 audit log" },
   { section: "shortcuts", title: () => L("快捷键", "Keyboard shortcuts"), words: "快捷键 键盘 按键 热键 shortcuts keyboard hotkeys keys" },
@@ -272,13 +274,6 @@ const THEMES: { mode: ThemeMode; label: string }[] = [
   { mode: "system", get label() { return L("跟随系统", "System"); } },
   { mode: "light", get label() { return L("浅色", "Light"); } },
   { mode: "dark", get label() { return L("深色", "Dark"); } },
-];
-
-/** Language names stay in their own language so either reader can find theirs. */
-const LANGS: { choice: LangChoice; label: string }[] = [
-  { choice: "system", get label() { return L("跟随系统", "System"); } },
-  { choice: "zh", label: "中文" },
-  { choice: "en", label: "English" },
 ];
 
 /** A section another page asks Settings to open on (say, voice from the
@@ -336,7 +331,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   textSize: TextSize;
   onTextSize: (size: TextSize) => void;
   langChoice: LangChoice;
-  onLangChoice: (c: LangChoice) => void;
+  onLangChoice: (c: LangChoice) => void | Promise<void>;
   /** Bumped by the App poll so the local hub state stays current. */
   refreshKey: number;
   /** Bumped when the Hub switcher asks for the Hub section. */
@@ -596,7 +591,6 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
             <IntroCard id="workspaces" {...introOf("workspaces")} />
             <ErrorText error={localError} />
             <ErrorText error={actionError} />
-            {hubs.filter(h=>h.ok && hubsOv?.find(o=>o.id===h.id)?.me?.can_manage).map(h=><ProjectStorageSettings key={h.id} hub={h}/>)}
 
             {/* The workspaces this computer runs: one row each, with what they
                 are reachable at and how they are opened. */}
@@ -838,23 +832,10 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
               {info?.shell === "mac" && <IslandLine />}
               <div data-setting="language" className="app-setting-line">
                 <div className="app-setting-line-text">
-                  <b>语言 / Language</b>
-                  <span>{L("跟随系统时，App 使用 macOS 的语言设置。", "With System, the app uses the macOS language.")}</span>
+                  <b>{L("语言", "Language")} / Language</b>
+                  <span>{L("跟随系统时，App 使用这台设备的语言偏好。", "With System, the app follows this device’s language preferences.")}</span>
                 </div>
-                <div className="seg" role="tablist" aria-label="语言 / Language">
-                  {LANGS.map((t) => (
-                    <button
-                      key={t.choice}
-                      type="button"
-                      role="tab"
-                      aria-selected={langChoice === t.choice}
-                      className={cn("seg-btn", langChoice === t.choice && "active")}
-                      onClick={() => { langSwitchSection = section; onLangChoice(t.choice); }}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
+                <LanguageSelect value={langChoice} onChange={(choice) => { langSwitchSection = section; return onLangChoice(choice); }} />
               </div>
             </section>
           </>
@@ -869,6 +850,12 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
         {section === "hubs" && simple && <MyDevices hubsOv={hubsOv} />}
         {section === "members" && <MembersSection hubsOv={hubsOv} onRefresh={onRefresh} />}
         {section === "audit" && <AuditSection hubsOv={hubsOv} />}
+        {section === "storage" && (() => {
+          const managed = hubs.filter((h) => h.ok && hubsOv?.find((o) => o.id === h.id)?.me?.can_manage);
+          return managed.length
+            ? managed.map((h) => <ProjectStorageSettings key={h.id} hub={h} />)
+            : <div className="app-empty-note">{L("你不是任何工作区的所有者或管理员，这里没有能改的。", "You don't own or administer a workspace, so there is nothing to change here.")}</div>;
+        })()}
         {section === "providers" && <ModelProvidersSection hubsOv={hubsOv} onRefresh={onRefresh} onOpenWorkspaces={() => setSection("hubs")} />}
       </div>
 
@@ -894,7 +881,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
             const on = !renameLook.pic && (renameLook.color ?? colorIndex(renameTarget?.id || "")) === i;
             return (
               <button key={i} type="button" role="radio" aria-checked={on} className={cn("av-color app-hub-avatar", `c${i}`, on && "is-on")}
-                aria-label={L(`颜色 ${i + 1}`, `Colour ${i + 1}`)} onClick={() => setRenameLook({ color: i })}>
+                aria-label={L(E`颜色 ${i + 1}`, E`Colour ${i + 1}`)} onClick={() => setRenameLook({ color: i })}>
                 {on && <Check />}
               </button>
             );
@@ -941,7 +928,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
       <ConfirmDialog
         open={!!removeTarget}
         onOpenChange={(o) => !o && setRemoveTarget(null)}
-        title={removeTarget ? L(`移除 ${removeTarget.name}？`, `Remove ${removeTarget.name}?`) : L("移除工作区", "Remove Hub")}
+        title={removeTarget ? L(E`移除 ${removeTarget.name}？`, E`Remove ${removeTarget.name}?`) : L("移除工作区", "Remove Hub")}
         description={L("只会从这个 App 里移除。工作区本身和它上面的 agent 都不受影响，仍在照常运行。", "Removes it from this app only. The Hub and its agents aren’t affected and keep running.")}
         consequences={<p>{L("你将看不到这个工作区的 agent，之后只能凭 App 连接链接重新添加。", "You won’t see this Hub’s nodes. To add it back later, you’ll need its app link.")}</p>}
         confirmLabel={L("移除工作区", "Remove Hub")}
@@ -1080,7 +1067,7 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
               <div className="pub-progress-head">
                 <span className="app-spinner" />
                 <b>{choice === 2 ? L("正在用 Tailscale Funnel 开放…", "Opening with Tailscale Funnel…") : L("正在用 Cloudflare 开放…", "Opening with Cloudflare…")}</b>
-                <span className="pub-progress-time">{L(`${waited} 秒`, `${waited}s`)}</span>
+                <span className="pub-progress-time">{L(E`${waited} 秒`, E`${waited}s`)}</span>
               </div>
               <div className="pub-bar" aria-hidden><i /></div>
               <ol className="pub-steps">
@@ -1400,7 +1387,7 @@ function ProxySection({ hubsOv }: { hubsOv?: HubOverview[] }) {
       const hubUrl = target ? (await appApi.hubs().catch(() => [])).find((h) => h.id === target)?.url : undefined;
       const r = await appApi.testProxy({ ...input(), url: hubUrl });
       setTried(r.ok
-        ? { ok: true, text: L(`连通了，用时 ${r.ms} 毫秒`, `Connected in ${r.ms} ms`) }
+        ? { ok: true, text: L(E`连通了，用时 ${r.ms} 毫秒`, E`Connected in ${r.ms} ms`) }
         : { ok: false, text: (r.reason && reasons[r.reason]) || r.error || L("连不上", "Could not connect") });
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
@@ -1570,8 +1557,8 @@ function VoiceSection() {
   const voices = svc.voices || [];
   // The voice on the list, or the default one when none is set.
   const chosen = speaker.trim() || svc.default_speaker || "";
-  const svcName = lang() === "en" ? svc.name_en : svc.name;
-  const svcHelp = lang() === "en" ? svc.help_en : svc.help;
+  const svcName = L(svc.name, svc.name_en);
+  const svcHelp = L(svc.help || "", svc.help_en || svc.help || "");
   // The key shown as kept is the chosen service's.
   const hasTtsKey = info.tts_providers ? svc.has_key : info.has_tts_key;
   const share = info.share !== false;
@@ -1618,7 +1605,7 @@ function VoiceSection() {
             {providers.map((p) => (
               <button key={p.id} type="button" role="tab" aria-selected={svc.id === p.id} className={cn("seg-btn", svc.id === p.id && "active")}
                 onClick={() => { setProvider(p.id); setTtsKey(""); setSpeaker(""); setTyping(false); setSaved(false); setError(null); }}>
-                {lang() === "en" ? p.name_en : p.name}
+                {L(p.name, p.name_en)}
               </button>
             ))}
           </div>
@@ -1654,7 +1641,7 @@ function VoiceSection() {
         <div className="app-setting-line tr-fields">
           <label>{L("API Key", "API key")}
             <input className="app-input mono" type="password" value={ttsKey} onChange={(e) => setTtsKey(e.target.value)} autoComplete="off" spellCheck={false}
-              placeholder={hasTtsKey ? L("已保存在系统钥匙串里（不显示）", "Kept in the system keychain (not shown)") : L(`粘贴${svcName}的 API Key`, `Paste the ${svcName} API key`)} />
+              placeholder={hasTtsKey ? L("已保存在系统钥匙串里（不显示）", "Kept in the system keychain (not shown)") : L(E`粘贴${svcName}的 API Key`, E`Paste the ${svcName} API key`)} />
           </label>
           {hasTtsKey && <button type="button" className="app-btn app-btn-quiet" disabled={busy} onClick={() => void save({ clear_tts_key: true })}>{L("删掉密钥", "Remove the key")}</button>}
         </div>
@@ -1702,9 +1689,9 @@ function VoiceSection() {
               "With this on, the settings above and their keys are kept on the workspaces (hubs) you are signed in to, so your phone and other computers need not be set up again; the device that changed them last wins. The keys are handed only to your own devices, but whoever administers a hub's machine can read its database: turn this off for a hub that is not yours, if that matters.")}</span>
             {share && sync.length > 0 && (
               <span className="vs-sync" data-testid="voice-sync">
-                {kept.length > 0 && L(`已存到：${kept.map((h) => h.name).join("、")}。`, `Kept on: ${kept.map((h) => h.name).join(", ")}. `)}
-                {behind.length > 0 && L(`${behind.map((h) => h.name).join("、")} 的 Hub 版本太旧，还不能存，升级它的 myco 就可以。`, `${behind.map((h) => h.name).join(", ")}: the hub is too old to keep them; update its myco. `)}
-                {away.length > 0 && L(`${away.map((h) => h.name).join("、")} 现在连不上，下次再试。`, `${away.map((h) => h.name).join(", ")}: not reachable now; tried again next time.`)}
+                {kept.length > 0 && L(E`已存到：${kept.map((h) => h.name).join("、")}。`, E`Kept on: ${kept.map((h) => h.name).join(", ")}. `)}
+                {behind.length > 0 && L(E`${behind.map((h) => h.name).join("、")} 的 Hub 版本太旧，还不能存，升级它的 myco 就可以。`, E`${behind.map((h) => h.name).join(", ")}: the hub is too old to keep them; update its myco. `)}
+                {away.length > 0 && L(E`${away.map((h) => h.name).join("、")} 现在连不上，下次再试。`, E`${away.map((h) => h.name).join(", ")}: not reachable now; tried again next time.`)}
               </span>
             )}
           </div>

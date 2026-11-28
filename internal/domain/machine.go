@@ -180,6 +180,39 @@ type Quota struct {
 	Windows []QuotaWindow `json:"windows"`
 }
 
+// QuotaMaxAge is how old an observation may be and still be acted on: by
+// then the account may have reset, or the session may be gone.
+const QuotaMaxAge = time.Hour
+
+// QuotaObservedAt is when the numbers themselves were observed. A runner's
+// shared snapshot may keep a weekly window's older observation time on
+// purpose, so where it has a profile the collection time is the freshness
+// signal; a session report carries the time it observed.
+func QuotaObservedAt(q *Quota) time.Time {
+	if q.ProfileRef != "" {
+		return q.CheckedAt
+	}
+	return q.At
+}
+
+// QuotaStatusAt is the status a reader may act on at now. A snapshot nobody
+// refreshed within QuotaMaxAge is unknown, whatever it last said; a status
+// that is not ok is kept as it is. Pickers, fork checks and the App all read
+// this, so none of them act on an hour-old "ok".
+func QuotaStatusAt(q *Quota, now time.Time) string {
+	if q == nil {
+		return ""
+	}
+	if q.Status != "" && q.Status != "ok" {
+		return q.Status
+	}
+	at := QuotaObservedAt(q)
+	if at.IsZero() || now.Sub(at) > QuotaMaxAge {
+		return "unknown"
+	}
+	return q.Status
+}
+
 // QuotaWindow is one limit: how much of it is used (0..1) and when it resets.
 type QuotaWindow struct {
 	DurationSec int    `json:"duration_sec,omitempty"`

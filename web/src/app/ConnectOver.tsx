@@ -3,7 +3,7 @@ import { Check, ChevronDown, Monitor, RefreshCw, Server, X } from "lucide-react"
 import { appApi, type ConnectJob, type RemoteError, type RemoteRoute, type SSHHost, type WSLDistro } from "@/appapi";
 import { ErrorText } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -184,7 +184,7 @@ export function ConnectOver({ hubId, via, onConnected, purpose = "machine" }: {
           <div className="app-modal-actions">
             {chosen.length === 0 && hosts !== null && hosts.length > 0 && <span className="app-modal-hint">{forHub ? L("先选一台服务器", "Pick a server first") : L("先勾上要连的", "Tick one first")}</span>}
             <button type="button" className="app-btn app-btn-primary" disabled={chosen.length === 0} onClick={() => void start(chosen)}>
-              {forHub ? L("装好并加进来", "Set it up") : chosen.length > 1 ? L(`连上这 ${chosen.length} 台`, `Connect these ${chosen.length}`) : L("连上", "Connect")}
+              {forHub ? L("装好并加进来", "Set it up") : chosen.length > 1 ? L(E`连上这 ${chosen.length} 台`, E`Connect these ${chosen.length}`) : L("连上", "Connect")}
             </button>
           </div>
         </>
@@ -272,7 +272,7 @@ export function remoteErrorText(e: RemoteError, rt: RemoteRoute): string {
   switch (e.code) {
     case "auth": return L("App 不能替你输密码或密钥口令。先用 ssh-add 把密钥放进 ssh-agent，在终端里确认下面这条不用输密码就能登录，再重试。", "The App cannot type a password or a key's passphrase. Put your key in ssh-agent with ssh-add, check in a terminal that the line below logs in without one, then try again.");
     case "host_unknown": return L("第一次连这台：先在终端里运行下面这条，核对指纹并接受，再回来重试。", "First time with this one: run the line below in a terminal, check the fingerprint and accept it, then try again.");
-    case "host_changed": return L(`这台的指纹和上次不一样：可能重装过系统，也可能有人冒充。确认没问题后，运行 ssh-keygen -R ${host} 删掉旧的，再重试。`, `Its fingerprint is not the one seen before: it may have been reinstalled, or someone may be posing as it. Once you are sure, remove the old one with ssh-keygen -R ${host} and try again.`);
+    case "host_changed": return L(E`这台的指纹和上次不一样：可能重装过系统，也可能有人冒充。确认没问题后，运行 ssh-keygen -R ${host} 删掉旧的，再重试。`, E`Its fingerprint is not the one seen before: it may have been reinstalled, or someone may be posing as it. Once you are sure, remove the old one with ssh-keygen -R ${host} and try again.`);
     case "refused": return L("连接被拒绝：那台电脑没开 SSH，或者端口不对。", "Connection refused: SSH is not running there, or the port is wrong.");
     case "unknown_host": return L("找不到这个地址：检查名字，或者 SSH 配置里的 HostName。", "No such address: check the name, or HostName in your SSH config.");
     case "unreachable": case "timeout": return L("连不上：地址或端口不对，或者那台电脑没开、被防火墙挡了。", "Cannot reach it: the address or port is wrong, or it is off or behind a firewall.");
