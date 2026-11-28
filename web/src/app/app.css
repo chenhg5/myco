@@ -10955,6 +10955,32 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 
 /* An agent's chat-app bots, in its details (ChatApps.tsx) */
 .im-bot { display: inline-flex; align-items: center; gap: 6px; }
+/* 渠道 (ChatAppsPanel): one row per chat app, its mark, its state in words
+   and its actions on the right; what to do next (claim) under it. */
+.ch { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; margin-bottom: 14px; }
+.ch-intro { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.ch-list { padding: 2px 14px; }
+.ch-row { display: block; }
+.ch-row + .ch-row { border-top: 1px solid var(--line); }
+.ch-row-top { display: flex; align-items: center; gap: 12px; }
+.ch-mark {
+  flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 9px;
+  font-size: 13px; font-weight: 650; color: var(--fg-2); background: var(--hover, rgba(127, 127, 127, 0.12));
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.ch-row.is-bound .ch-mark { color: var(--fg); }
+.ch-text { flex: 1 1 auto; min-width: 0; }
+.ch-state { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ch-tag { padding: 0 6px; border-radius: 6px; font-size: 11px; line-height: 18px; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
+.ch-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+.ch-claim { margin: 8px 0 2px 44px; }
+.ch-claim .app-btn { margin-left: 6px; }
+.ch-foot { margin: 0; line-height: 1.6; }
+@media (max-width: 520px) {
+  .ch-row-top { flex-wrap: wrap; }
+  .ch-actions { width: 100%; padding-left: 44px; }
+  .ch-claim { margin-left: 0; }
+}
 .im-bot .app-kv-note { margin-left: 2px; }
 .im-claim { display: block; flex-basis: 100%; margin-top: 6px; font-size: 12px; color: var(--fg-2); }
 .im-claim .app-command { margin-top: 6px; }

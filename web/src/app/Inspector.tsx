@@ -23,7 +23,7 @@ import { L, lang, locale } from "@/lib/i18n";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { Avatar } from "@/app/persona";
 import { ResumeRow } from "@/app/ResumeRow";
-import { ChatAppsRow } from "@/app/ChatApps";
+import { ChatAppsPanel } from "@/app/ChatApps";
 import { RunRows } from "@/app/RunSettings";
 import { fetchMachineInfo, cachedMachineInfo } from "@/app/machineInfoCache";
 import { machineTellsInfo } from "@/app/hubVersion";
@@ -981,12 +981,13 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
   }, [row?.hub.id, ag?.machine_id, ag?.runtime?.cli, toolAsk]);
 
   const [more, setMore] = useState(openDetails);
-  type DetailTab = "settings" | "skills" | "records" | "identity";
+  type DetailTab = "settings" | "skills" | "records" | "channels" | "identity";
   const [dtab, setDtab] = useState<DetailTab>("settings");
   const detailTabs: { key: DetailTab; label: string }[] = [
     { key: "settings", label: L("设置", "Settings") },
     { key: "skills", label: L("能力", "Skills") },
     { key: "records", label: L("记录", "Records") },
+    { key: "channels", label: L("渠道", "Channels") },
     { key: "identity", label: L("身份", "Identity") },
   ];
   useEffect(() => { if (openDetails) setMore(true); }, [openDetails, row?.hub.id, ag?.name]);
@@ -1450,7 +1451,6 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               <AliasRow row={row} mayManage={mayManage} onRefresh={onRefresh} />
               <div className="app-kv"><span className="app-kv-label">{L("谁能给它派活", "Who can send it tasks")}</span><span className="app-kv-value">{ag.allow_from.length && !ag.allow_from.includes("*") ? ag.allow_from.join(", ") : L("任何 agent", "Any node")}</span></div>
               <ResumeRow row={row} now={now} mayManage={mayManage} onRefresh={onRefresh} />
-              <ChatAppsRow row={row} mayManage={mayManage} />
             </div>
           </section>
           <section className="app-group">
@@ -1507,6 +1507,10 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           </section>
         </>
       );
+  // 渠道 only for an agent you may manage (another one opened after it
+  // shows its settings instead).
+  const channels = mayManage && kind === "agent";
+  const tab: DetailTab = dtab === "channels" && !channels ? "settings" : dtab;
   // Open work it holds (left open, waiting on someone, queued): above the
   // fold, where it can be closed or stopped.
   const openWork = (row.st.current || []).length > 0;
@@ -1523,17 +1527,18 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
               reads one subject at a time: how it runs and whose it is, what
               it is good at, what it did, and what it is. */}
           <div className="wf-tabs ms-tabs" role="tablist" aria-label={L("看什么", "View")} data-testid="ms-tabs">
-            {detailTabs.map((t) => (
-              <button key={t.key} type="button" role="tab" aria-selected={dtab === t.key} className={cn("wf-tab", dtab === t.key && "is-on")}
+            {detailTabs.filter((t) => t.key !== "channels" || channels).map((t) => (
+              <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={cn("wf-tab", tab === t.key && "is-on")}
                 onClick={() => setDtab(t.key)} data-tab={t.key}>
                 {t.label}
               </button>
             ))}
           </div>
-          {dtab === "settings" && <>{sec_run}{sec_labels}</>}
-          {dtab === "skills" && (kind === "human" ? <div className="app-empty-note">{L("人没有擅长和工具。", "People have no skills or tools here.")}</div> : sec_about)}
-          {dtab === "records" && <>{sec_peers}{sec_history}</>}
-          {dtab === "identity" && sec_identity}
+          {tab === "settings" && <>{sec_run}{sec_labels}</>}
+          {tab === "skills" && (kind === "human" ? <div className="app-empty-note">{L("人没有擅长和工具。", "People have no skills or tools here.")}</div> : sec_about)}
+          {tab === "records" && <>{sec_peers}{sec_history}</>}
+          {tab === "channels" && <ChatAppsPanel row={row} mayManage={mayManage} />}
+          {tab === "identity" && sec_identity}
         </div>
       )}
       <HandoverHistory row={row} now={now} />
@@ -1570,6 +1575,12 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
           {sec_peers}
           {sec_history}
           {sec_identity}
+          {channels && (
+            <section className="app-group">
+              <div className="app-group-title"><span className="name">{L("渠道", "Channels")}</span></div>
+              <ChatAppsPanel row={row} mayManage={mayManage} />
+            </section>
+          )}
           <HandoverHistory row={row} now={now} />
           {sec_actions}
         </div>

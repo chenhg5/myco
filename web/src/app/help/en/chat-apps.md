@@ -10,7 +10,7 @@ Each agent can have its own Feishu, Lark and Slack bots: one bot per agent, the 
 
 **A front desk, as in voice chats.** Once a model is set in **Settings › Voice**, the bot uses that same model: it answers at once what it can (who it is, what it is on, how far it got, what came of it), and for real work it says "Sure, on it" and gets going. Without a model, everything you say goes straight to the agent as work.
 
-**Instructions.** Each bot can have its own instructions for the front desk, separate from voice chats: in the "Chat apps" row, click **Instructions** next to the bot and write how it should talk, what it may answer and what it must not do. This matters most when people other than you talk to it (customers, for example). Work handed over for anyone other than the owner carries the instructions too, so the agent keeps to them as well.
+**Instructions.** Each bot can have its own instructions for the front desk, separate from voice chats: on the agent's **Channels** tab, click **Instructions** in that bot's row and write how it should talk, what it may answer and what it must not do. This matters most when people other than you talk to it (customers, for example). Work handed over for anyone other than the owner carries the instructions too, so the agent keeps to them as well.
 
 Note: instructions guide the model; they are not a permission boundary, and someone may talk the model past them. Who can talk to the bot at all is set under "Who can use it" below; what must never be touched has to be limited by the agent's own permissions and its project's settings.
 
@@ -18,10 +18,10 @@ Note: instructions guide the model; they are not a permission boundary, and some
 
 ## Bind a Feishu bot to an agent
 
-1. Open the agent's details and find the "Chat apps" row under **Name and access**.
-2. Click **Bind Feishu**. A QR code appears.
+1. Open the agent's profile, click **Details** and switch to the **Channels** tab. Feishu, Lark and Slack each have a row.
+2. In the Feishu row, click **Bind**. A QR code appears.
 3. Scan it with the Feishu phone app and approve on the phone. Feishu makes the bot, with you as its owner.
-4. The dialog closes by itself. A few seconds later the row shows "Feishu online".
+4. The dialog closes by itself. A few seconds later the Feishu row shows "Online".
 
 ![Binding Feishu: scan the code](shot:member-chat-apps-feishu)
 
@@ -31,15 +31,15 @@ Then:
 
 ## Bind a Lark bot
 
-Lark is the international version of Feishu, with separate accounts and apps, so it has its own QR code. In the same row, click **Bind Lark** and scan with the Lark phone app; the rest is as for Feishu. A Feishu code does not work in Lark, nor the other way round.
+Lark is the international version of Feishu, with separate accounts and apps, so it has its own QR code. In the Lark row, click **Bind** and scan with the Lark phone app; the rest is as for Feishu. A Feishu code does not work in Lark, nor the other way round.
 
 ## Bind a Slack bot
 
-1. In the same row, click **Bind Slack**.
+1. In the Slack row, click **Bind**.
 2. Click "Create in Slack". Slack's create-app page opens with the settings filled in. Pick your workspace and create the app.
 3. Click "Install App" in Slack to install it to the workspace. Paste the **Bot User OAuth Token** (starts xoxb-) into the first box.
 4. Under "Basic Information", generate an **App-Level Token** with `connections:write`. Paste it (starts xapp-) into the second box and click **Connect**.
-5. Once it is connected, the row shows a `/claim <code>` line. Send that line to the bot in a Slack direct message, and you become its owner.
+5. Once it is connected, the Slack row shows a `/claim <code>` line. Send that line to the bot in a Slack direct message, and you become its owner.
 
 ![Slack connected, waiting to be claimed](shot:member-chat-apps)
 
@@ -65,7 +65,7 @@ Every task goes out from the bot's node, which is yours, so the agent treats it 
 
 ## Good to know
 
-- Only people who may manage the agent see the "Chat apps" row.
+- Only people who may manage the agent see the **Channels** tab.
 - The bot runs on this computer, under its runner service. When the computer is off or asleep, the bot is offline too. For a bot that is always online, bind it on a computer that stays on.
 - The Feishu and Lark App Secrets, the Slack tokens and the front desk's model key stay on this computer. They are not uploaded to the workspace.
 - To stop using a bot, click **Unbind**. This computer stops running it; the app itself stays in Feishu or Slack, and you can delete it there.

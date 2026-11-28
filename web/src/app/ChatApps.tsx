@@ -16,13 +16,21 @@ const PLATFORM: Record<string, () => string> = {
 
 type Scan = { id: string; qr: string; url: string; state: string; error?: string };
 
-/** An agent's chat-app bots, in its details ("Name and access"): each agent
- *  can have its own Feishu/Lark bot and Slack bot (as voice is per agent);
- *  what is written to the bot goes to this agent. Bind one by scanning a
- *  QR code (Feishu) or pasting a Slack app's two tokens; it runs on this
- *  computer. Only for those who may manage the agent, in an App that runs
- *  on a computer (the route is absent otherwise, and so is the row). */
-export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: boolean }) {
+/** The chat apps a bot can be made in: what each is, and how binding goes. */
+const APPS: { id: "feishu" | "lark" | "slack"; mark: string; how: () => string }[] = [
+  { id: "feishu", mark: "飞", how: () => L("国内版。用飞书手机 App 扫个码就建好。", "Mainland China. Scan a code with the Feishu phone app.") },
+  { id: "lark", mark: "L", how: () => L("飞书国际版。用 Lark 手机 App 扫个码就建好。", "Feishu's international app. Scan a code with the Lark phone app.") },
+  { id: "slack", mark: "S", how: () => L("在 Slack 里建一个应用（设置都已填好），粘贴它的两个令牌。", "Make an app in Slack (its settings are filled in) and paste its two tokens.") },
+];
+
+/** An agent's chat apps (its profile's 渠道 tab): each agent can have its
+ *  own Feishu, Lark and Slack bot (as voice is per agent); what is written
+ *  to the bot goes to this agent, and its answers come back there. One row
+ *  per app: bound (online, waiting for its owner to claim it, its own
+ *  instructions) or a way to bind it (a QR code for Feishu and Lark, two
+ *  tokens for Slack). It runs on this computer. Only for those who may
+ *  manage the agent, in an App that runs on a computer. */
+export function ChatAppsPanel({ row, mayManage }: { row: AgentRow; mayManage: boolean }) {
   const ag = row.st.agent;
   const [bridges, setBridges] = useState<IMBridge[] | null>(null);
   const [slackURL, setSlackURL] = useState("");
@@ -43,7 +51,7 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
       if (isOldHub(e)) setGone(true); else setError(e);
     }
   }, [row.hub.id, ag.name]);
-  const show = mayManage && agentKind(ag) === "agent" && !gone;
+  const show = mayManage && agentKind(ag) === "agent";
   useEffect(() => { if (show) void load(); }, [show, load]);
   // A new bot comes online within seconds of being saved: look again.
   useEffect(() => {
@@ -53,8 +61,6 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
   }, [bridges, load]);
   if (!show) return null;
 
-  // Feishu and Lark are separate apps (China / international): one of each.
-  const has = (p: string) => bridges?.some((b) => b.platform === p);
   const name = nodeName(ag, row.hub);
   const label = (b: IMBridge) => PLATFORM[b.platform]?.() || b.platform;
   // "Slack 机器人", "飞书机器人": a space only after a Latin name.
@@ -67,43 +73,72 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
     setBusy(true); setError(null);
     try { await appApi.removeIMBridge(b.name); setRemoving(null); await load(); } catch (e) { setError(e); } finally { setBusy(false); }
   };
+  // What a bound bot is doing, in words.
+  const state = (b: IMBridge) => !b.online ? L("正在启动…", "Starting…")
+    : b.claim ? L("在线 · 等你认领", "Online · waiting for you to claim it")
+    : b.claim_expired ? L("在线 · 还没有主人", "Online · no owner yet")
+    : L("在线", "Online");
+
+  if (gone) {
+    return (
+      <div className="ch" data-testid="chat-apps">
+        <div className="app-empty-note">{L("这里绑不了聊天软件：要在装在电脑上的 myco App 里绑，工作区也要是新版。", "Chat apps can't be bound here: use the myco App on a computer, with an up-to-date workspace.")}</div>
+      </div>
+    );
+  }
 
   return (
     <>
-      <div className="app-kv has-help" data-testid="chat-apps-row">
-        <span className="app-kv-label">{L("聊天软件", "Chat apps")}</span>
-        <span className="app-kv-value app-resume-actions">
-          {bridges?.length ? bridges.map((b) => (
-            <span key={b.name} className="im-bot" data-bridge={b.name}>
-              <i className={cn("dot", b.online ? "working" : "pending")} aria-hidden />
-              {label(b)}
-              <span className="app-kv-note">{b.online ? L("在线", "online") : L("启动中…", "starting…")}</span>
-              <button type="button" className="app-kv-link" disabled={busy} onClick={() => setEditing(b)}>{b.prompt ? L("接待设定 ✓", "Instructions ✓") : L("接待设定", "Instructions")}</button>
-              <button type="button" className="app-kv-link" disabled={busy} onClick={() => setRemoving(b)}>{L("解绑", "Unbind")}</button>
-            </span>
-          )) : <span className="app-kv-note">{bridges ? L("还没有绑定", "None yet") : L("正在读取…", "Loading…")}</span>}
-          {bridges && !has("feishu") && <button type="button" className="app-kv-link" onClick={() => setAdding("feishu")}>{L("绑定飞书", "Bind Feishu")}</button>}
-          {bridges && !has("lark") && <button type="button" className="app-kv-link" onClick={() => setAdding("lark")}>{L("绑定 Lark", "Bind Lark")}</button>}
-          {bridges && !has("slack") && <button type="button" className="app-kv-link" onClick={() => setAdding("slack")}>{L("绑定 Slack", "Bind Slack")}</button>}
-        </span>
-        <span className="app-kv-help">
-          {L(`给它一个飞书、Lark 或 Slack 机器人：机器人就是 ${name} 本人，在聊天软件里跟它说话就行，进度和结果都回到聊天里。（预览）机器人跑在这台电脑上，电脑睡眠时它会离线。`,
-            `Give it a Feishu, Lark or Slack bot: the bot is ${name} itself; talk to it in the chat app, and its progress and answers come back there. (Preview) The bot runs on this computer, and is offline while it sleeps.`)}
+      <div className="ch" data-testid="chat-apps">
+        <p className="ch-intro">{L(`让别人在飞书、Lark 或 Slack 里直接找 ${name}：机器人就是它本人，在聊天软件里跟它说话就行，进度和结果都回到那里。`,
+          `Let people reach ${name} in Feishu, Lark or Slack: the bot is ${name} itself; talk to it there, and its progress and answers come back there.`)}</p>
+        <section className="app-setting-card app-setting-lines ch-list">
+          {APPS.map((app) => {
+            const b = bridges?.find((x) => x.platform === app.id);
+            const title = PLATFORM[app.id]();
+            return (
+              <div key={app.id} className={cn("app-setting-line ch-row", b && "is-bound")} data-platform={app.id} data-bridge={b?.name}>
+                <div className="ch-row-top">
+                  <span className={cn("ch-mark", `is-${app.id}`)} aria-hidden>{app.mark}</span>
+                  <div className="app-setting-line-text ch-text">
+                    <b>{title}</b>
+                    {b ? (
+                      <span className="ch-state"><i className={cn("dot", b.online ? "working" : "pending")} aria-hidden />{state(b)}
+                        {b.prompt && <span className="ch-tag">{L("有接待设定", "Has instructions")}</span>}</span>
+                    ) : <span>{bridges ? app.how() : L("正在读取…", "Loading…")}</span>}
+                  </div>
+                  <div className="ch-actions">
+                    {b ? (
+                      <>
+                        <button type="button" className="app-btn app-btn-small" disabled={busy} onClick={() => setEditing(b)}>{b.prompt ? L("改接待设定", "Edit instructions") : L("接待设定", "Instructions")}</button>
+                        <button type="button" className="app-btn app-btn-small app-btn-quiet" disabled={busy} onClick={() => setRemoving(b)}>{L("解绑", "Unbind")}</button>
+                      </>
+                    ) : bridges && (
+                      <button type="button" className="app-btn app-btn-small app-btn-primary" onClick={() => setAdding(app.id)}>{L("绑定", "Bind")}</button>
+                    )}
+                  </div>
+                </div>
+                {b?.claim && (
+                  <div className="ch-claim im-claim">
+                    {L(`在${/[A-Za-z]$/.test(title) ? ` ${title} ` : title}里私聊这个机器人，发下面这一行，你就成了它的主人（别人发给它的消息才会交给 ${name}）：`, `Send this line to the bot in a direct message in ${title} to become its owner (then what others write to it reaches ${name}):`)}
+                    <span className="app-command"><code>/claim {b.claim}</code><CopyButton value={`/claim ${b.claim}`} /></span>
+                  </div>
+                )}
+                {b?.claim_expired && (
+                  <div className="ch-claim im-claim">
+                    {L(`${label(b)}${sp(b)}机器人还没有主人，认领码已经失效（过期或错太多次）。`, `The ${label(b)} bot has no owner yet, and its claim code no longer works (it expired, or was mistyped too often). `)}
+                    <button type="button" className="app-btn app-btn-small" disabled={busy} onClick={() => void renew(b)}>{L("重新生成认领码", "New claim code")}</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </section>
+        <p className="app-small-note ch-foot">
+          {L("（预览）机器人跑在这台电脑上，电脑睡眠时它会离线。", "(Preview) The bots run on this computer, and are offline while it sleeps.")}
           {bridges?.some((b) => !b.desk) && L("在 设置 › 语音 配好模型后，它会像语音聊天一样：能答的马上答，要动手的再去做。",
             " Once a model is set in Settings › Voice, it works as in voice chats: it answers what it can at once and does the rest.")}
-        </span>
-        {bridges?.filter((b) => b.claim).map((b) => (
-          <span key={b.name} className="im-claim">
-            {L(`${label(b)}${sp(b)}机器人还没有主人：私聊机器人发这一行，就成为它的主人：`, `The ${label(b)} bot has no owner yet: send it this line in a direct message to become its owner:`)}
-            <span className="app-command"><code>/claim {b.claim}</code><CopyButton value={`/claim ${b.claim}`} /></span>
-          </span>
-        ))}
-        {bridges?.filter((b) => b.claim_expired).map((b) => (
-          <span key={b.name} className="im-claim">
-            {L(`${label(b)}${sp(b)}机器人还没有主人，认领码已经失效（过期或错太多次）。`, `The ${label(b)} bot has no owner yet, and its claim code no longer works (it expired, or was mistyped too often). `)}
-            <button type="button" className="app-kv-link" disabled={busy} onClick={() => void renew(b)}>{L("重新生成认领码", "New claim code")}</button>
-          </span>
-        ))}
+        </p>
         <ErrorText error={error} />
       </div>
 

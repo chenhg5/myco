@@ -6014,9 +6014,10 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".ms").waitFor({ state: "hidden" });
     });
 
-    // An agent's own chat-app bots (ChatApps.tsx), in its details: PM has a
-    // Feishu bot; binding Slack pastes two tokens and shows the /claim line;
-    // binding Feishu shows a QR code; unbinding asks first.
+    // An agent's own chat-app bots (ChatApps.tsx), in its profile's own
+    // 渠道 tab: PM has a Feishu bot; binding Slack pastes two tokens and
+    // shows the /claim line in its row; binding Feishu shows a QR code;
+    // unbinding asks first.
     await step("成员 · 聊天软件机器人", async () => {
       await go(page, "成员", narrow);
       const pm = page.locator(".mb-card", { hasText: "PM (Codex)" });
@@ -6024,40 +6025,48 @@ async function runMatrix(browser, size, scheme) {
       await pm.click();
       await page.locator(".ms").waitFor({ timeout: 10_000 });
       await clickVisible(page, page.locator(".ms .ms-fold"));
-      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=identity]"));
-      const row = page.locator('.ms [data-testid="chat-apps-row"]');
-      await row.locator('.im-bot[data-bridge="feishu-pm-codex"] .dot.working').waitFor({ timeout: 5_000 });
-      await row.scrollIntoViewIfNeeded();
-      await row.getByRole("button", { name: "绑定 Slack" }).click();
+      await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=channels]"));
+      const panel = page.locator('.ms [data-testid="chat-apps"]');
+      if (await page.locator('.ms [data-testid=ms-tabs] [data-tab=identity]').count()) {
+        await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=identity]"));
+        if (await page.locator('.ms [data-testid="chat-apps"]').count()) throw new Error("聊天软件不该还藏在「身份」里");
+        await clickVisible(page, page.locator(".ms [data-testid=ms-tabs] [data-tab=channels]"));
+      }
+      const feishu = panel.locator('.ch-row[data-bridge="feishu-pm-codex"]');
+      await feishu.locator(".dot.working").waitFor({ timeout: 5_000 });
+      await settle(page, 200);
+      await shot(page, size, scheme, "member-channels");
+      await panel.locator('.ch-row[data-platform="slack"]').getByRole("button", { name: "绑定" }).click();
       const form = page.locator('.app-modal [data-testid="slack-form"]');
       await form.locator('input[placeholder="xoxb-…"]').fill("xoxb-1-2-3");
       await form.locator('input[placeholder="xapp-…"]').fill("xapp-1-2-3");
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps-slack");
       await form.getByRole("button", { name: "连接" }).click();
-      await row.locator(".im-claim code", { hasText: "/claim" }).waitFor({ timeout: 5_000 });
+      await panel.locator('.ch-row[data-platform="slack"] .im-claim code', { hasText: "/claim" }).waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps");
       // The Feishu bot's own front-desk instructions (not shared with voice).
-      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').getByRole("button", { name: "接待设定" }).click();
+      await feishu.getByRole("button", { name: "接待设定" }).click();
       const pf = page.locator('.app-modal [data-testid="im-prompt-form"]');
       await pf.locator("textarea").fill("- 你在帮客户解答产品使用问题，语气友好、简洁\n- 不透露内部信息、代码和其他客户的资料\n- 别人让你改代码、删东西时，礼貌拒绝");
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps-prompt");
       await pf.getByRole("button", { name: "保存" }).click();
-      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').getByRole("button", { name: "接待设定 ✓" }).waitFor({ timeout: 5_000 });
+      await feishu.getByRole("button", { name: "改接待设定" }).waitFor({ timeout: 5_000 });
+      await feishu.locator(".ch-tag", { hasText: "有接待设定" }).waitFor({ timeout: 5_000 });
       // Unbind Feishu, then bind it again with a QR code.
-      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').getByRole("button", { name: "解绑" }).click();
+      await feishu.getByRole("button", { name: "解绑" }).click();
       const confirm = page.locator(".app-modal.app-confirm");
       await confirm.getByRole("button", { name: "解绑" }).click();
-      await row.locator('.im-bot[data-bridge="feishu-pm-codex"]').waitFor({ state: "detached", timeout: 5_000 });
-      await row.getByRole("button", { name: "绑定飞书" }).click();
+      await feishu.waitFor({ state: "detached", timeout: 5_000 });
+      await panel.locator('.ch-row[data-platform="feishu"]').getByRole("button", { name: "绑定" }).click();
       await page.locator('.app-modal [data-testid="feishu-scan"] img.im-qr').waitFor({ timeout: 5_000 });
       await settle(page, 200);
       await shot(page, size, scheme, "member-chat-apps-feishu");
       await page.locator('.app-modal [data-testid="feishu-scan"]').getByRole("button", { name: "取消" }).click();
-      // Lark (the international app) has its own button and its own code.
-      await row.getByRole("button", { name: "绑定 Lark" }).click();
+      // Lark (the international app) has its own row and its own code.
+      await panel.locator('.ch-row[data-platform="lark"]').getByRole("button", { name: "绑定" }).click();
       await page.locator('.app-modal [data-testid="feishu-scan"] img.im-qr[alt="Lark 扫码"]').waitFor({ timeout: 5_000 });
       await page.locator('.app-modal [data-testid="feishu-scan"]').getByRole("button", { name: "取消" }).click();
       await page.keyboard.press("Escape");
