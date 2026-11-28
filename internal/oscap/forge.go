@@ -133,7 +133,7 @@ func forgeCLI(ctx context.Context, e *Env, provider, host string) (string, error
 	if provider == "gitlab" {
 		argv = []string{prog, "auth", "status", "--hostname", u.Host, "--show-token"}
 	}
-	args := execArgs{Argv: argv, Env: map[string]string{"GH_TOKEN": "", "GITHUB_TOKEN": "", "GH_ENTERPRISE_TOKEN": "", "GITHUB_ENTERPRISE_TOKEN": "", "GITLAB_TOKEN": "", "GITLAB_ACCESS_TOKEN": "", "GITLAB_OAUTH_TOKEN": "", "GH_DEBUG": "", "DEBUG": "", "GLAB_DEBUG": "", "NO_COLOR": "1", "CLICOLOR": "0", "GH_PROMPT_DISABLED": "1", "GIT_TERMINAL_PROMPT": "0"}}
+	args := execArgs{Argv: argv, Env: map[string]string{"GH_TOKEN": "", "GITHUB_TOKEN": "", "GH_ENTERPRISE_TOKEN": "", "GITHUB_ENTERPRISE_TOKEN": "", "GITLAB_TOKEN": "", "GITLAB_ACCESS_TOKEN": "", "GITLAB_OAUTH_TOKEN": "", "GH_DEBUG": "", "DEBUG": "", "GLAB_DEBUG": "", "GITLAB_HOST": u.Host, "GITLAB_API_HOST": u.Host, "GLAB_API_PROTOCOL": "https", "NO_COLOR": "1", "CLICOLOR": "0", "GH_PROMPT_DISABLED": "1", "GIT_TERMINAL_PROMPT": "0"}}
 	cmd, err := e.command(ctx, &args)
 	if err != nil {
 		return "", errf(CodeNoCredentials, "install the provider CLI and sign in, or use an access token")

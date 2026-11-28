@@ -157,6 +157,21 @@ type forgeRequest struct {
 
 var forgeRepoPattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+(?:/[a-zA-Z0-9_.-]+)+$`)
 
+func forgeValidRepo(provider, repo string) bool {
+	if len(repo) > 500 || !forgeRepoPattern.MatchString(repo) {
+		return false
+	}
+	parts := strings.Split(repo, "/")
+	if provider != "gitlab" && len(parts) != 2 {
+		return false
+	}
+	for _, part := range parts {
+		if part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
+}
 func forgeQuery(ctx context.Context, e *Env, args json.RawMessage, _ Emit) (any, error) {
 	var in forgeRequest
 	if err := decode(args, &in); err != nil {
@@ -190,7 +205,7 @@ func forgeQuery(ctx context.Context, e *Env, args json.RawMessage, _ Emit) (any,
 	if in.Scope != "created" && in.Scope != "assigned" && in.Scope != "review" && in.Scope != "repo" {
 		return nil, errf(CodeInvalid, "invalid scope")
 	}
-	if in.Repo != "" && (!forgeRepoPattern.MatchString(in.Repo) || len(in.Repo) > 500 || strings.Contains(in.Repo, "..")) {
+	if in.Repo != "" && !forgeValidRepo(p.Provider, in.Repo) {
 		return nil, errf(CodeInvalid, "enter a repository path such as owner/repository")
 	}
 	if len(in.Search) > 200 {
@@ -312,7 +327,7 @@ func forgeItems(ctx context.Context, p forgeAccount, t string, in forgeRequest) 
 		more, err = forgeGet(ctx, p, t, path, q, &raw)
 	} else {
 		if in.Repo != "" {
-			path = "/repos/" + in.Repo + "/issues"
+			path = "/repos/" + forgeEscapedRepo(in.Repo) + "/issues"
 		} else {
 			path = "/repos/issues/search"
 		}
@@ -350,7 +365,7 @@ func forgeItems(ctx context.Context, p forgeAccount, t string, in forgeRequest) 
 	return map[string]any{"items": out, "has_more": more, "page": in.Page, "incomplete": incomplete}, nil
 }
 func forgeDetail(ctx context.Context, p forgeAccount, t string, in forgeRequest) (any, error) {
-	base := "/repos/" + in.Repo
+	base := "/repos/" + forgeEscapedRepo(in.Repo)
 	kind := "/issues/"
 	if in.Kind == "pull" {
 		kind = "/pulls/"
@@ -485,4 +500,12 @@ func forgeNormalize(p forgeAccount, r map[string]any, in forgeRequest) forgeItem
 		item.Base = str(obj(r, "base"), "ref")
 	}
 	return item
+}
+
+func forgeEscapedRepo(repo string) string {
+	parts := strings.Split(repo, "/")
+	for i, p := range parts {
+		parts[i] = url.PathEscape(p)
+	}
+	return strings.Join(parts, "/")
 }

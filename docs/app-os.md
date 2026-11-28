@@ -585,3 +585,10 @@ resolves to loopback, link-local, private or CGNAT addresses. Requests recheck
 DNS; direct connections pin the checked address. Rebinding to a private address
 requires reconnecting with explicit consent. Secrets store both the web/API
 origins and provider; a changed profile origin is refused.
+
+When using a system or environment proxy, the proxy can resolve the target
+hostname itself. The local private-address check and pinned socket apply to
+direct connections; remote proxy resolution is outside this check. HTTPS is
+still verified end to end. Use a trusted proxy. GitHub/Gitea repository paths
+contain exactly owner/name; GitLab can include nested groups. Dot path segments
+are rejected, and repository path components are URL-escaped.

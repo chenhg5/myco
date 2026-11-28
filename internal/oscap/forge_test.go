@@ -200,3 +200,21 @@ func TestForgeSecretOriginAndPrivateNetworkBinding(t *testing.T) {
 		t.Fatal("public address classified private")
 	}
 }
+
+func TestForgeRepositoryPathsAreFixed(t *testing.T) {
+	for _, provider := range []string{"github", "gitea", "gitlab"} {
+		for _, repo := range []string{"../user/emails", "../../user/emails", "acme/.", "acme/..", "./widget", "acme/./widget", "acme/../widget"} {
+			if forgeValidRepo(provider, repo) {
+				t.Fatal(provider, "accepted traversal", repo)
+			}
+		}
+	}
+	for _, provider := range []string{"github", "gitea"} {
+		if forgeValidRepo(provider, "acme/group/widget") {
+			t.Fatal("non-GitLab accepted nested repository", provider)
+		}
+	}
+	if !forgeValidRepo("gitlab", "acme/group/widget") || !forgeValidRepo("github", "acme/a..b") {
+		t.Fatal("legitimate repository rejected")
+	}
+}

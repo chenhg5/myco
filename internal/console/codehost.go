@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -46,7 +47,11 @@ func (b *Backend) codeHostEnv(page osPage) (*oscap.Env, *oscap.Error) {
 	env, _ := b.osInit()
 	scoped := *env
 	hash := sha256.Sum256([]byte(credential))
-	scoped.Scope = page.Hub + "\x00" + hex.EncodeToString(hash[:16]) + "\x00" + page.ID
+	profile := ""
+	if b.Store != nil {
+		profile = filepath.Clean(b.Store.path)
+	}
+	scoped.Scope = profile + "\x00" + page.Hub + "\x00" + hex.EncodeToString(hash[:16]) + "\x00" + page.ID
 	return &scoped, nil
 }
 func (b *Backend) codeHostAllowed(w http.ResponseWriter, r *http.Request, in codeHostInput) bool {
