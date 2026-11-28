@@ -9,7 +9,7 @@ export function LanguageSelect({ value, onChange, className }: {
   onChange: (choice: LangChoice) => void | Promise<void>;
   className?: string;
 }) {
-  const menu = useContextMenu("language-menu");
+  const menu = useContextMenu("language-menu app-menu");
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(languageProblem);
   const [retryChoice, setRetryChoice] = useState(value);

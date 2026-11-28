@@ -528,8 +528,12 @@ async function pcMore(page, item) {
 // Pick through the actual menu: selectOption bypasses WebKit's native popup.
 async function selectLanguage(page, language) {
   const names = { zh: "简体中文", "zh-Hant": "繁體中文", en: "English", ja: "日本語", ko: "한국어", es: "Español", "pt-BR": "Português (Brasil)" };
-  await clickVisible(page, page.getByTestId("language-select"));
+  const picker = page.getByTestId("language-select");
+  await picker.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await clickVisible(page, picker);
   const items = page.locator(".language-menu [role=menuitem]");
+  await items.last().waitFor();
   if (await items.count() !== 8) throw Error("Expected System plus seven languages");
   await clickVisible(page, language === "system" ? items.first() : page.locator(".language-menu").getByRole("menuitem", {name:names[language],exact:true}));
 }
@@ -725,7 +729,17 @@ async function runMatrix(browser, size, scheme) {
           const onNavigate = () => { navigated = true; };
           check.on("framenavigated", onNavigate);
           try {
-            await selectLanguage(check,"zh");
+            if(language === "zh-Hant") {
+              await check.getByTestId("language-select").scrollIntoViewIfNeeded();
+              await check.waitForTimeout(300);
+              await clickVisible(check,check.getByTestId("language-select"));
+              await check.keyboard.press("Escape");
+              if(!await check.getByTestId("settings-dialog").isVisible())throw Error("Escape from the language menu closed Settings");
+              await clickVisible(check,check.getByTestId("language-select"));
+              await check.locator(".language-menu [role=menuitem]").first().waitFor();
+              await check.keyboard.press("ArrowDown");
+              await check.keyboard.press("Enter");
+            } else await selectLanguage(check,"zh");
             await check.waitForFunction(()=>document.documentElement.lang==="zh-CN");
             await check.locator(".app-settings-tab.active").filter({hasText:"外观"}).waitFor();
             await saved("zh");
