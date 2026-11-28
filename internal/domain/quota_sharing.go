@@ -137,7 +137,7 @@ func ResolveQuotaNumbers(a *Agent, profile, shared *Quota, now time.Time) *Quota
 	if base.Shared {
 		base.SharedAt = best.ReportedAt
 	}
-	if base.Status == "" || base.Status == "ok" || base.Status == "unknown" || base.ErrorCode == "pending" || base.ErrorCode == "collector_busy" {
+	if base.Status == "" || base.Status == "ok" || base.Status == "unknown" || base.Status == "transient_error" && (base.ErrorCode == "pending" || base.ErrorCode == "collector_busy") {
 		base.Status = "ok"
 		base.CheckedAt = best.At
 		base.ErrorCode = ""

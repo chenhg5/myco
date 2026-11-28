@@ -77,7 +77,8 @@ optional balance object, but displaying USD/unlimited requires an updated App.
 The Hub shares Claude and Codex subscription windows across machines and cloud
 sessions owned by the same member. The effective quota is the newest observation
 (`at`) among the agent's own report, its current local profile and its account
-snapshot. Account observations older than one hour, future observations, and
+snapshot. Account observations older than one hour, observations more than five minutes
+in the future (clock-skew tolerance), and
 windows whose reset has passed do not replace current numbers. Legacy status-only
 reports retain their existing resource-check behaviour. The App, picker and fork
 checks use the same resolved data and one-hour freshness rule.

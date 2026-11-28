@@ -47,3 +47,16 @@ func TestSubscriptionQuotaContextDoesNotBorrowOAuthForAPI(t *testing.T) {
 		t.Fatal("legacy cloud identity unavailable")
 	}
 }
+
+func TestResolveQuotaPlaceholderCannotClearAuthenticationFailure(t *testing.T) {
+	now := time.Now().UTC()
+	shared := &Quota{Provider: "claude", Plan: "claude_subscription", Status: "ok", At: now, Windows: []QuotaWindow{{Name: "five_hour", Used: .6}}}
+	for _, status := range []string{"auth_required", "no_credentials", "throttled"} {
+		for _, code := range []string{"pending", "collector_busy"} {
+			a := &Agent{Runtime: Runtime{Quota: &Quota{Provider: "claude", Plan: "claude_subscription", Status: status, ErrorCode: code}}}
+			if got := ResolveQuotaNumbers(a, nil, shared, now); got.Status != status || got.Windows[0].Used != .6 {
+				t.Fatalf("local state %s was cleared by %s", status, code)
+			}
+		}
+	}
+}
