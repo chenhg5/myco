@@ -114,8 +114,11 @@ candidate also carries its historical sample sizes. Default count is 3, maximum
 
 Slot reports older than 90 seconds and quota reports older than 15 minutes are
 unknown. Expired quota windows do not block work; `allowed_warning` is available.
-Explicit rejection/authentication/throttling or an unexpired full usage window
-blocks. Unsupported/schema/network quota checks remain unknown. Account quota
+Explicit usage rejection or an unexpired full usage window without an explicit
+provider allowance blocks. Collector
+authentication errors, missing collector credentials, quota-query throttling, and
+unsupported/schema/network quota checks remain unknown: a failed quota query is
+not evidence that the CLI cannot work. Account quota
 visibility is enforced **before** scoring: someone else's private quota cannot
 affect the reason, score or strict filtering. Shared account snapshots are used
 where authorized. Slots are shared across a runner process, so free capacity is

@@ -207,7 +207,7 @@ func quotaAvailability(q *domain.Quota, now time.Time) string {
 	}
 	blocked := func(s string) bool {
 		switch s {
-		case "blocked", "rejected", "limit_reached", "rate_limit", "rate_limited", "throttled", "auth_required", "no_credentials":
+		case "blocked", "rejected", "limit_reached", "rate_limit", "rate_limited":
 			return true
 		}
 		return false
@@ -223,7 +223,7 @@ func quotaAvailability(q *domain.Quota, now time.Time) string {
 		if w.ResetsAt != nil && !w.ResetsAt.After(now) {
 			continue
 		}
-		if w.Used >= 1 || blocked(w.Status) {
+		if blocked(w.Status) || (w.Used >= 1 && w.Status != "allowed" && w.Status != "allowed_warning") {
 			return "blocked"
 		}
 	}
