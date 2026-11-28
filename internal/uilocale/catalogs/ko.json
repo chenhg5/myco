@@ -3438,5 +3438,19 @@
   "Back to {0} and {1}": "{0}와(과) {1}의 대화로 돌아가기",
   "Project files": "프로젝트 파일",
   "How many files each project may keep, and how much space. Only a workspace's owner and admins can change it.": "각 프로젝트에 둘 수 있는 파일 수와 용량입니다. 워크스페이스 소유자와 관리자만 바꿀 수 있습니다.",
-  "You don't own or administer a workspace, so there is nothing to change here.": "소유하거나 관리하는 워크스페이스가 없어 여기서 바꿀 수 있는 것이 없습니다."
+  "You don't own or administer a workspace, so there is nothing to change here.": "소유하거나 관리하는 워크스페이스가 없어 여기서 바꿀 수 있는 것이 없습니다.",
+  "an unknown version": "알 수 없는 버전",
+  "Background restart not confirmed": "백그라운드 서비스 재시작이 확인되지 않음",
+  "Background service": "백그라운드 서비스",
+  "Command-line tool {0} is installed. Tasks already in progress will finish first.": "명령줄 도구 {0}이(가) 설치되어 있습니다. 진행 중인 작업이 끝난 뒤 재시작합니다.",
+  "Command-line update failed": "명령줄 도구 업데이트 실패",
+  "Restart handoff is unconfirmed; new tasks are paused. Check the local service before restarting manually.": "재시작 인계가 확인되지 않아 새 작업 수신이 일시 중지되었습니다. 로컬 서비스를 확인한 뒤 수동으로 재시작하세요.",
+  "Restart when idle": "유휴 상태에서 재시작",
+  "Retry command-line update": "명령줄 도구 업데이트 재시도",
+  "Runner on {0}; restart pending until idle": "runner {0} 실행 중; 유휴 상태가 되면 재시작",
+  "Running version not reported yet": "실행 중인 버전이 아직 보고되지 않음",
+  "The six-hour wait ended. Automatic restart is paused; you can request another idle restart.": "6시간의 대기가 끝나 자동 재시작이 일시 중지되었습니다. 유휴 상태에서 재시작하도록 다시 요청할 수 있습니다.",
+  "This older runner cannot safely restart when idle. After all tasks finish, restart it once from a terminal.": "이 구버전 runner는 안전한 유휴 상태 재시작을 지원하지 않습니다. 모든 작업이 끝나면 터미널에서 한 번 수동으로 재시작하세요.",
+  "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. The command-line tool updates too; the runner restarts after tasks finish. Failed updates can be retried above.": "업데이트는 GitHub와 Gitee 중 응답이 빠른 곳에서 최신 App을 다운로드하고 SHA256을 검증한 후 응용 프로그램 폴더의 myco를 교체하고 다시 엽니다. 명령줄 도구도 함께 업데이트되며 runner는 작업이 끝나면 재시작합니다. 업데이트에 실패하면 위에서 재시도할 수 있습니다.",
+  "Updating the command-line tool…": "명령줄 도구 업데이트 중…"
 }

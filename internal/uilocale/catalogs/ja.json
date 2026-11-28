@@ -3438,5 +3438,19 @@
   "Back to {0} and {1}": "{0} と {1} の会話に戻る",
   "Project files": "プロジェクトのファイル",
   "How many files each project may keep, and how much space. Only a workspace's owner and admins can change it.": "各プロジェクトに置けるファイル数と容量です。変更できるのはワークスペースのオーナーと管理者だけです。",
-  "You don't own or administer a workspace, so there is nothing to change here.": "オーナーまたは管理者になっているワークスペースがないため、ここで変更できるものはありません。"
+  "You don't own or administer a workspace, so there is nothing to change here.": "オーナーまたは管理者になっているワークスペースがないため、ここで変更できるものはありません。",
+  "an unknown version": "不明なバージョン",
+  "Background restart not confirmed": "バックグラウンドサービスの再起動を確認できていません",
+  "Background service": "バックグラウンドサービス",
+  "Command-line tool {0} is installed. Tasks already in progress will finish first.": "コマンドラインツール {0} がインストールされています。実行中のタスクが完了してから再起動します。",
+  "Command-line update failed": "コマンドラインツールの更新に失敗しました",
+  "Restart handoff is unconfirmed; new tasks are paused. Check the local service before restarting manually.": "再起動の引き継ぎを確認できないため、新しいタスクの取得を停止しています。ローカルサービスを確認してから手動で再起動してください。",
+  "Restart when idle": "アイドル時に再起動",
+  "Retry command-line update": "コマンドラインツールの更新を再試行",
+  "Runner on {0}; restart pending until idle": "runner {0} を実行中。アイドル状態になるまで再起動を待機します",
+  "Running version not reported yet": "実行中のバージョンはまだ報告されていません",
+  "The six-hour wait ended. Automatic restart is paused; you can request another idle restart.": "6時間の待機が終了し、自動再起動を停止しました。アイドル時の再起動をもう一度リクエストできます。",
+  "This older runner cannot safely restart when idle. After all tasks finish, restart it once from a terminal.": "この古い runner は安全なアイドル時再起動に対応していません。すべてのタスクが完了してから、ターミナルで一度手動再起動してください。",
+  "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. The command-line tool updates too; the runner restarts after tasks finish. Failed updates can be retried above.": "更新時は GitHub と Gitee の応答が速い方から最新の App をダウンロードし、SHA256 を検証して「アプリケーション」の myco を置き換え、再度開きます。コマンドラインツールも更新され、runner はタスクの完了後に再起動します。更新に失敗した場合は上で再試行できます。",
+  "Updating the command-line tool…": "コマンドラインツールを更新中…"
 }

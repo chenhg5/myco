@@ -3438,5 +3438,19 @@
   "Back to {0} and {1}": "Voltar para {0} e {1}",
   "Project files": "Arquivos do projeto",
   "How many files each project may keep, and how much space. Only a workspace's owner and admins can change it.": "Quantos arquivos cada projeto pode guardar e quanto espaço. Só o proprietário e os administradores do espaço de trabalho podem mudar isso.",
-  "You don't own or administer a workspace, so there is nothing to change here.": "Você não é proprietário nem administrador de nenhum espaço de trabalho, então não há nada para mudar aqui."
+  "You don't own or administer a workspace, so there is nothing to change here.": "Você não é proprietário nem administrador de nenhum espaço de trabalho, então não há nada para mudar aqui.",
+  "an unknown version": "uma versão desconhecida",
+  "Background restart not confirmed": "Reinício do serviço em segundo plano não confirmado",
+  "Background service": "Serviço em segundo plano",
+  "Command-line tool {0} is installed. Tasks already in progress will finish first.": "A ferramenta de linha de comando {0} está instalada. As tarefas em andamento serão concluídas primeiro.",
+  "Command-line update failed": "Falha na atualização da ferramenta de linha de comando",
+  "Restart handoff is unconfirmed; new tasks are paused. Check the local service before restarting manually.": "A transferência do reinício não foi confirmada; o recebimento de novas tarefas está pausado. Verifique o serviço local antes de reiniciá-lo manualmente.",
+  "Restart when idle": "Reiniciar quando estiver ocioso",
+  "Retry command-line update": "Tentar atualizar a ferramenta de linha de comando novamente",
+  "Runner on {0}; restart pending until idle": "Runner em {0}; reinício pendente até ficar ocioso",
+  "Running version not reported yet": "A versão em execução ainda não foi informada",
+  "The six-hour wait ended. Automatic restart is paused; you can request another idle restart.": "A espera de seis horas terminou. O reinício automático está pausado; você pode solicitar outro reinício quando estiver ocioso.",
+  "This older runner cannot safely restart when idle. After all tasks finish, restart it once from a terminal.": "Este runner antigo não pode reiniciar com segurança quando estiver ocioso. Quando todas as tarefas terminarem, reinicie-o uma vez pelo terminal.",
+  "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. The command-line tool updates too; the runner restarts after tasks finish. Failed updates can be retried above.": "A atualização baixa a versão mais recente da App do GitHub ou do Gitee, o que responder mais rápido, verifica seu SHA256, substitui o myco em Aplicativos e o reabre. A ferramenta de linha de comando também é atualizada; o runner reinicia quando as tarefas terminam. Você pode tentar novamente acima se a atualização falhar.",
+  "Updating the command-line tool…": "Atualizando a ferramenta de linha de comando…"
 }
