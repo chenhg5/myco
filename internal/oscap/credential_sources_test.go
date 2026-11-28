@@ -2,6 +2,7 @@ package oscap
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -73,5 +74,56 @@ func TestCredentialSourceMappingsNeverUseAppAuthenticationRules(t *testing.T) {
 		if strings.Contains(origin, "evil") && real == origin {
 			t.Fatal("app destination overrode fixed source mapping")
 		}
+	}
+}
+
+func TestCredentialGitLabSourceKeepsTokensAndIdentityInHost(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX CLI fixture")
+	}
+	e := credentialTestEnv(t)
+	bin := t.TempDir()
+	config := t.TempDir()
+	record := filepath.Join(bin, "argv.txt")
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	script := `#!/bin/sh
+[ -z "$GITLAB_TOKEN" ] || exit 1
+[ "$GITLAB_HOST" = "git.example.com" ] || exit 1
+[ "$GITLAB_API_HOST" = "git.example.com" ] || exit 1
+[ "$GLAB_API_PROTOCOL" = "https" ] || exit 1
+printf '%s\n' "$@" > "` + record + `"
+printf '%s\n' 'Logged in to git.example.com as demo' 'Token: fixture-glab-credential'
+`
+	if err := os.WriteFile(filepath.Join(bin, "glab"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config, "config.yml"), []byte("hosts:\n  git.example.com:\n    user: demo\n    token: fixture-config-secret\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GLAB_CONFIG_DIR", config)
+	t.Setenv("GITLAB_TOKEN", "ambient-token-must-not-be-used")
+	e.Path = func() string { return bin }
+	sources := CredentialSources(context.Background(), e)
+	if len(sources) != 1 || sources[0].BasePath != "/api/v4" {
+		t.Fatal(sources)
+	}
+	raw, _ := json.Marshal(sources)
+	if strings.Contains(string(raw), "fixture-config-secret") {
+		t.Fatal("configuration credential exposed")
+	}
+	token, err := CredentialSourceToken(context.Background(), e, sources[0])
+	if err != nil || token != "fixture-glab-credential" {
+		t.Fatal("glab import failed", err)
+	}
+	argv, _ := os.ReadFile(record)
+	if string(argv) != "auth\nstatus\n--hostname\ngit.example.com\n--show-token\n" {
+		t.Fatalf("unexpected glab argv %q", argv)
+	}
+	changed := sources[0]
+	changed.Login = "someone-else"
+	if _, err := CredentialSourceToken(context.Background(), e, changed); err == nil {
+		t.Fatal("CLI identity change accepted")
 	}
 }

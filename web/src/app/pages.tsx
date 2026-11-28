@@ -508,6 +508,7 @@ function PageView({ target, open, active, reload, onMeta }: {
   const [settingsRead, setSettingsRead] = useState<BrowserSettingsReview | null>(null);
   const [credentialPrompt, setCredentialPrompt] = useState<{prompt:CredentialConfirmation; answer:(value:CredentialAnswer)=>void}|null>(null);
   const credentialConsent = useRef<((value:CredentialAnswer)=>void)|null>(null);
+  const credentialPreparing = useRef(false);
   const remoteConsent = useRef<((ok:boolean)=>void) | null>(null);
   // (while the page is there: tucked away, it still runs and is answered,
   // and what it started on the computer goes on)
@@ -799,8 +800,11 @@ function PageView({ target, open, active, reload, onMeta }: {
           const input=(args.args && typeof args.args === "object" ? args.args : {}) as Record<string,unknown>;
           if(args.name === "credentials.connections" && input.action === "connect") {
             if(!o?.isolated)throw Object.assign(new Error("Update the myco App to connect accounts"),{code:"unsupported"});
-            if(credentialConsent.current)throw Object.assign(new Error("Finish the current permission request first"),{code:"busy"});
-            const prepared=await withConsent(who,()=>appApi.credentialPrepare(who,input.descriptor as unknown as CredentialDescriptor));
+            if(credentialConsent.current||credentialPreparing.current)throw Object.assign(new Error("Finish the current permission request first"),{code:"busy"});
+            credentialPreparing.current=true;
+            let prepared:CredentialConfirmation;
+            try { prepared=await withConsent(who,()=>appApi.credentialPrepare(who,input.descriptor as unknown as CredentialDescriptor)); }
+            finally { credentialPreparing.current=false; }
             if(closed)throw Object.assign(new Error("Page closed"),{code:"cancelled"});
             if(credentialConsent.current)throw Object.assign(new Error("Finish the current permission request first"),{code:"busy"});
             const approved=await new Promise<CredentialAnswer>(resolve=>{credentialConsent.current=resolve;setCredentialPrompt({prompt:prepared,answer:resolve});});

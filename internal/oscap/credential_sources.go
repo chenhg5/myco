@@ -98,6 +98,9 @@ func CredentialSources(ctx context.Context, e *Env) []api.CredentialSource {
 		if dir == "" {
 			dir = os.Getenv("XDG_CONFIG_HOME")
 			if dir == "" {
+				dir = os.Getenv("APPDATA")
+			}
+			if dir == "" {
 				dir = filepath.Join(e.Home, ".config")
 			}
 			dir = filepath.Join(dir, "glab-cli")
