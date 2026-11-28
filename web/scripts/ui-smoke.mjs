@@ -719,36 +719,39 @@ async function runMatrix(browser, size, scheme) {
 
     await step("设置 · 七种语言核心流程", async () => {
       const preview = await browser.newContext({ viewport: size, colorScheme: scheme, locale: "ja-JP", deviceScaleFactor: Number(process.env.UI_SMOKE_SCALE) || 1 });
-      const check = await preview.newPage();
+      let check = await preview.newPage();
       const errors = [], nativeLanguages = [], outbound = [];
       const durable = {"myco-lang":"zh", "myco-theme":scheme};
-      let deliberateReload = false;
       const hostWrites = new Set();
       let hostWriteActivity = Date.now();
-      check.on("pageerror", error => errors.push(error.stack || String(error)));
-      check.on("crash", () => errors.push("Language page crashed"));
-      check.on("console",message=>{
-        if(message.type()!=="error") return;
-        // WebKit reports old-document polling as access-control errors during
-        // a test-requested reload. Keep those auditable, without exempting
-        // preference/bridge saves, language assets, page errors or crashes.
-        const resource=reloadCancellation(message.text(),r.base,deliberateReload);
-        if(resource) {
-          r.reloadCancellations.push(resource);
-          return;
-        }
-        const expectedPack503=/\/assets\/ko-[^/]+\.json$/.test(message.location().url||"") && message.text().includes("503");
-        if(!expectedPack503)errors.push(`${message.text()} (${message.location().url||"unknown resource"})`);
-      });
-      check.on("request", request => {
-        if (!request.url().startsWith(r.base) && !request.url().startsWith("data:")) outbound.push(request.url());
-        if(request.method()!=="GET" && /\/app\/(?:preferences(?:\/import)?|ui-lang)$/.test(request.url())) {
-          hostWrites.add(request);hostWriteActivity=Date.now();
-        }
-      });
-      const hostWriteFinished = request => { if(hostWrites.delete(request))hostWriteActivity=Date.now(); };
-      check.on("requestfinished",hostWriteFinished);
-      check.on("requestfailed",hostWriteFinished);
+      const observePage = page => {
+        const life={retiring:false};
+        page.on("pageerror", error => errors.push(error.stack || String(error)));
+        page.on("crash", () => errors.push("Language page crashed"));
+        page.on("console",message=>{
+          if(message.type()!=="error") return;
+          // Bind retirement to this Page, not a timing window shared with the
+          // new document: WebKit can deliver the old page's console messages late.
+          const resource=reloadCancellation(message.text(),r.base,life.retiring);
+          if(resource) {
+            r.reloadCancellations.push(resource);
+            return;
+          }
+          const expectedPack503=/\/assets\/ko-[^/]+\.json$/.test(message.location().url||"") && message.text().includes("503");
+          if(!expectedPack503)errors.push(`${message.text()} (${message.location().url||"unknown resource"})`);
+        });
+        page.on("request", request => {
+          if (!request.url().startsWith(r.base) && !request.url().startsWith("data:")) outbound.push(request.url());
+          if(request.method()!=="GET" && /\/app\/(?:preferences(?:\/import)?|ui-lang)$/.test(request.url())) {
+            hostWrites.add(request);hostWriteActivity=Date.now();
+          }
+        });
+        const hostWriteFinished = request => { if(hostWrites.delete(request))hostWriteActivity=Date.now(); };
+        page.on("requestfinished",hostWriteFinished);
+        page.on("requestfailed",hostWriteFinished);
+        return life;
+      };
+      let pageLife=observePage(check);
       // Exercise durable language preferences independently of the optional
       // conversation cache, whose unload writes WebKit can cancel noisily.
       await preview.route(/\/app\/cache\?kind=(?:pages|traces)$/,route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({enabled:false,entries:[]})}));
@@ -787,9 +790,13 @@ async function runMatrix(browser, size, scheme) {
           if(Date.now()>deadline)throw Error("Language preference/bridge writes did not finish before reload");
           await check.waitForTimeout(20);
         }
-        deliberateReload=true;
-        try { await check.reload();await check.locator(".app-shell").waitFor(); }
-        finally { deliberateReload=false; }
+        // A fresh Page is a real cold start. Its strict error collector cannot
+        // accidentally consume delayed cancellation messages from the old Page.
+        pageLife.retiring=true;
+        await check.close();
+        check=await preview.newPage();
+        pageLife=observePage(check);
+        await check.goto(r.base);await check.locator(".app-shell").waitFor();
       };
       const expected = {zh:"外观", "zh-Hant":"外觀", en:"Appearance", ja:"外観", ko:"모양", es:"Apariencia", "pt-BR":"Aparência"};
       try {
@@ -881,7 +888,7 @@ async function runMatrix(browser, size, scheme) {
       } catch (error) {
         await check.screenshot({path:path.join(OUT,`failed-${size.width}x${size.height}-${scheme}-language-settings.png`)}).catch(()=>undefined);
         throw error;
-      } finally {await preview.close();}
+      } finally {pageLife.retiring=true;await preview.close();}
     });
 
     // A project opens on your chat with its coordinator; the tasks it hands

@@ -1,6 +1,6 @@
-/** Only expected WebKit cancellations from a test-requested reload. */
-export function reloadCancellation(text, base, reloading) {
-  if (!reloading) return null;
+/** Only expected WebKit cancellations from an explicitly retired test Page. */
+export function reloadCancellation(text, base, retired) {
+  if (!retired) return null;
   const prefix = `Fetch API cannot load ${base}`;
   const suffix = " due to access control checks.";
   if (!text.startsWith(prefix)) return null;
