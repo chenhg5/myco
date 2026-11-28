@@ -224,6 +224,8 @@ type Backend struct {
 	// translating messages (translate.go): settings, keys in Secrets
 	translateOnce sync.Once
 	translate     *translator
+	codeHostOnce  sync.Once
+	codeHost      *codeHostState
 	proxyOnce     sync.Once
 	proxy         *proxyState
 	// pages opened in the App's panel (pages.go)
@@ -299,6 +301,7 @@ func (b *Backend) Handler() http.Handler {
 		m.HandleFunc("POST /app/local/concurrency", b.postLocalConcurrency)
 		// (pages using this computer: only an App on it)
 		b.osRoutes(m)
+		b.codeHostRoutes(m)
 		b.browserRoutes(m)
 		b.grantRoutes(m)
 		b.installRoutes(m)

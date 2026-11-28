@@ -72,6 +72,8 @@ func osGroupOf(name string) string {
 		return "system"
 	case strings.HasPrefix(name, "browser."):
 		return "browser"
+	case strings.HasPrefix(name, "forge."):
+		return "codehost"
 	case strings.HasPrefix(name, "db."):
 		return "database"
 	}
@@ -398,7 +400,17 @@ func (b *Backend) osCheck(ctx context.Context, in osCallIn) (*osConsent, error) 
 	if allowed {
 		return nil, nil
 	}
-	return &osConsent{Error: "consent_required", Message: "ask the person first", Group: group, Declared: declared, OnceOnly: osOnceOnly[group]}, nil
+	host := ""
+	if group == "codehost" {
+		var a struct {
+			Provider string `json:"provider"`
+			Host     string `json:"host"`
+		}
+		if json.Unmarshal(in.Args, &a) == nil && a.Host != "" {
+			host = a.Provider + " · " + a.Host
+		}
+	}
+	return &osConsent{Error: "consent_required", Message: "ask the person first", Group: group, Host: host, Declared: declared, OnceOnly: osOnceOnly[group]}, nil
 }
 
 // undeclaredOS: an app may not use a group of the computer's capabilities

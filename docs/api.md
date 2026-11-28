@@ -352,7 +352,7 @@ not advance the editor's shared watch cursor; an ordinary unfiltered list keeps
 its existing watch initialization behavior. SDK examples and types live in the
 [apps query guide](https://github.com/myco-ai/apps/blob/main/docs/page-data-queries.md).
 
-**Templates**: a folder with `myco.json` (its manifest: `id` as `author/name`, `name`, `version` as `x.y.z`, `kind`, `category` (from v0.20.6: `office`, `dev`, `tools`, `life`, `creative`, `game` or `other`; the App's shelves), `icon` (from v0.20.7: an `.svg` in the template, at most 16 KB; the App shows its shape), `requires` (from v0.20.7: `{"hub": "0.20.7"}`; an older hub refuses it, saying which version it needs), `description`, `entry`, `data` (collections → `{fields: {name: type}, single?, write?}` (`write: "managers"`, from v0.22.2: only those who manage the page change that collection); types `text, markdown, number, bool, date, datetime, person, select, multi, url, file, json`), `permissions` (`send`, `download`), `os` (from v0.22.1: the groups of `myco.os` capabilities it uses: `files`, `files.write`, `files.delete`, `exec`, `screen`, `microphone`, `speech`, `clipboard`, `notify`, `system`, `network`, `ssh`, `database`, `proxy`; see docs/app-os.md), `net` (from v0.22.1: the hosts `net.fetch` may reach, as `host`, `host:port` or `*.domain`; needs `network` in `os`), `export`, `agent` (default `agent.md`), `sample` (default `sample.json`)), its page files, the agent's guide and sample data (`{collection: [records…]}`). Everyone in the workspace sees the library and uses its templates; whoever published one (a person, or agents of the same owner) and the workspace's managers publish its versions and delete it. A page made from a template keeps its own copy of the files and the manifest.
+**Templates**: a folder with `myco.json` (its manifest: `id` as `author/name`, `name`, `version` as `x.y.z`, `kind`, `category` (from v0.20.6: `office`, `dev`, `tools`, `life`, `creative`, `game` or `other`; the App's shelves), `icon` (from v0.20.7: an `.svg` in the template, at most 16 KB; the App shows its shape), `requires` (from v0.20.7: `{"hub": "0.20.7"}`; an older hub refuses it, saying which version it needs), `description`, `entry`, `data` (collections → `{fields: {name: type}, single?, write?}` (`write: "managers"`, from v0.22.2: only those who manage the page change that collection); types `text, markdown, number, bool, date, datetime, person, select, multi, url, file, json`), `permissions` (`send`, `download`), `os` (from v0.22.1: the groups of `myco.os` capabilities it uses: `files`, `files.write`, `files.delete`, `exec`, `screen`, `microphone`, `speech`, `clipboard`, `notify`, `system`, `network`, `ssh`, `database`, `proxy`, `browser`, `codehost`; see docs/app-os.md), `net` (from v0.22.1: the hosts `net.fetch` may reach, as `host`, `host:port` or `*.domain`; needs `network` in `os`), `export`, `agent` (default `agent.md`), `sample` (default `sample.json`)), its page files, the agent's guide and sample data (`{collection: [records…]}`). Everyone in the workspace sees the library and uses its templates; whoever published one (a person, or agents of the same owner) and the workspace's managers publish its versions and delete it. A page made from a template keeps its own copy of the files and the manifest.
 
 | Endpoint | What |
 | --- | --- |
@@ -2123,3 +2123,16 @@ state is `restart_unknown`: new claims remain paused and automatic retries stop.
 The App keeps the error and a manual-check action; it never reopens claims while
 a delayed service stop could still interrupt them. CLI receipts capture setup
 errors before the upgrade handler too. Each result file is bounded to 64 KiB.
+
+
+### Desktop code-host owner confirmation
+
+Local App endpoints `POST /app/codehost/prepare` and `POST /app/codehost/connect`
+require the trusted owner's `X-Myco-Codehost-Owner: 1` header and the page's
+`codehost` permission. Prepare takes `{page:{hub,id,name},provider,host,source,name}`
+and returns `{confirmation,provider,host,source,private_network}`. Connect takes
+`{confirmation,token,allow_private}` and returns only connected account metadata.
+The one-use confirmation binds the workspace sign-in, page and immutable server
+origin for two minutes. The token is entered in the host dialog; it is never a
+page bridge argument. See [Code hosts](app-os.md#code-hosts-desktop) for the
+read-only `forge.accounts` and `forge.query` page contracts and network policy.

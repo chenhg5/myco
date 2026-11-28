@@ -107,7 +107,7 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 		if !decode(w, r, &in) {
 			return
 		}
-		if (in.Name == "proxy.profile" || in.Name == "proxy.control" || strings.HasPrefix(in.Name, "db.")) && (in.Page.ID == "" || in.Page.Hub == "") {
+		if (in.Name == "proxy.profile" || in.Name == "proxy.control" || (strings.HasPrefix(in.Name, "db.") || strings.HasPrefix(in.Name, "forge."))) && (in.Page.ID == "" || in.Page.Hub == "") {
 			writeOSErr(w, &oscap.Error{Code: oscap.CodeInvalid, Message: "controller calls require a workspace and page"})
 			return
 		}
@@ -118,6 +118,25 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 		start := time.Now()
 		scoped := *env
 		scoped.Scope = in.Page.Hub + "\x00" + in.Page.ID
+		if strings.HasPrefix(in.Name, "forge.") {
+			var scopeErr *oscap.Error
+			scopedEnv, scopeErr := b.codeHostEnv(in.Page)
+			if scopeErr != nil {
+				writeOSErr(w, scopeErr)
+				return
+			}
+			scoped = *scopedEnv
+			if in.Name == "forge.accounts" {
+				var action struct {
+					Action string `json:"action"`
+				}
+				_ = json.Unmarshal(in.Args, &action)
+				if action.Action == "connect" {
+					writeOSErr(w, &oscap.Error{Code: oscap.CodePermission, Message: "account connections require the host dialog"})
+					return
+				}
+			}
+		}
 		v, err := oscap.Call(r.Context(), &scoped, in.Name, in.Args)
 		b.osLog(in, "", start, err)
 		if err == nil && in.Name == "ssh.profiles" && b.Local != nil && b.Store != nil {

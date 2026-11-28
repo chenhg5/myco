@@ -3452,5 +3452,13 @@
   "The six-hour wait ended. Automatic restart is paused; you can request another idle restart.": "6시간의 대기가 끝나 자동 재시작이 일시 중지되었습니다. 유휴 상태에서 재시작하도록 다시 요청할 수 있습니다.",
   "This older runner cannot safely restart when idle. After all tasks finish, restart it once from a terminal.": "이 구버전 runner는 안전한 유휴 상태 재시작을 지원하지 않습니다. 모든 작업이 끝나면 터미널에서 한 번 수동으로 재시작하세요.",
   "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. The command-line tool updates too; the runner restarts after tasks finish. Failed updates can be retried above.": "업데이트는 GitHub와 Gitee 중 응답이 빠른 곳에서 최신 App을 다운로드하고 SHA256을 검증한 후 응용 프로그램 폴더의 myco를 교체하고 다시 엽니다. 명령줄 도구도 함께 업데이트되며 runner는 작업이 끝나면 재시작합니다. 업데이트에 실패하면 위에서 재시도할 수 있습니다.",
-  "Updating the command-line tool…": "명령줄 도구 업데이트 중…"
+  "Updating the command-line tool…": "명령줄 도구 업데이트 중…",
+  "connect local code-host accounts and read repositories, pull requests and issues": "로컬 코드 호스팅 계정을 연결하고 저장소, 풀 리퀘스트 및 이슈를 읽기",
+  "Access token": "액세스 토큰",
+  "Allow this private-network server": "이 사설 네트워크 서버 허용",
+  "Connect a code-host account": "코드 호스팅 계정 연결",
+  "Connect to {0}: {1}": "{0}에 연결: {1}",
+  "Read repositories, pull requests and issues. Credentials stay on this computer and are never given to the app page.": "저장소, 풀 리퀘스트 및 이슈를 읽습니다. 자격 증명은 이 컴퓨터에 저장되며 앱 페이지에 전달되지 않습니다.",
+  "This server resolves to this computer or a private network. Allow it only if you trust this server.": "이 서버는 이 컴퓨터 또는 사설 네트워크를 가리킵니다. 신뢰하는 서버인 경우에만 허용하세요.",
+  "Use the CLI login for this server on this computer, saving a separate credential copy for this page.": "이 컴퓨터에서 이 서버의 CLI 로그인을 사용하고 이 페이지 전용 자격 증명 사본을 저장합니다."
 }
