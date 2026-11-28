@@ -8,15 +8,16 @@ import { L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 /** The vendors the App knows (internal/provider's catalogue): their two
- *  interfaces' addresses, filled in when one is picked. */
+ *  interfaces' addresses, filled in when one is picked. A name with no
+ *  English of its own is a getter, read in the App's language. */
 export const VENDORS: { id: string; name: string; anthropic: string; openai: string }[] = [
   { id: "minimax", name: "MiniMax", anthropic: "https://api.minimax.io/anthropic", openai: "https://api.minimax.io/v1" },
   { id: "deepseek", name: "DeepSeek", anthropic: "https://api.deepseek.com/anthropic", openai: "https://api.deepseek.com/v1" },
   { id: "kimi", name: "Kimi", anthropic: "https://api.moonshot.cn/anthropic", openai: "https://api.moonshot.cn/v1" },
   { id: "opencode_go", name: "OpenCode Go", anthropic: "https://opencode.ai/inference/go", openai: "https://opencode.ai/inference/go/v1" },
-  { id: "zhipu", name: "智谱", anthropic: "https://open.bigmodel.cn/api/anthropic", openai: "https://open.bigmodel.cn/api/paas/v4" },
-  { id: "qwen", name: "通义", anthropic: "https://dashscope.aliyuncs.com/apps/anthropic", openai: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
-  { id: "doubao", name: "豆包", anthropic: "https://ark.cn-beijing.volces.com/api/compatible", openai: "https://ark.cn-beijing.volces.com/api/v3" },
+  { id: "zhipu", get name() { return L("智谱", "Zhipu GLM"); }, anthropic: "https://open.bigmodel.cn/api/anthropic", openai: "https://open.bigmodel.cn/api/paas/v4" },
+  { id: "qwen", get name() { return L("通义", "Qwen (Alibaba Cloud)"); }, anthropic: "https://dashscope.aliyuncs.com/apps/anthropic", openai: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
+  { id: "doubao", get name() { return L("豆包", "Doubao (Volcengine)"); }, anthropic: "https://ark.cn-beijing.volces.com/api/compatible", openai: "https://ark.cn-beijing.volces.com/api/v3" },
   { id: "openrouter", name: "OpenRouter", anthropic: "https://openrouter.ai/api", openai: "https://openrouter.ai/api/v1" },
 ];
 

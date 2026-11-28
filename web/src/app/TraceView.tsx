@@ -98,6 +98,11 @@ function rowsOf(events: TraceEvent[]): { rows: Row[]; usage?: TraceStep } {
 /** How long a run may be silent after it said something before it counts
  *  as stopped (a session with no turn_end: an older myco following it). */
 const QUIET_AFTER_SAY_MS = 120_000;
+/** A run that just ended (usage, turn_end) on a task still open: its
+ *  answer is usually a second or two behind (the runner sends it after the
+ *  run). It stays at work this long, so the loading hands over to the
+ *  answer instead of vanishing first. */
+const ANSWER_ON_ITS_WAY_MS = 10_000;
 
 /** Whether a run still open has stopped, not at work: its session ended
  *  its turn (turn_end is its latest step) or its run (usage), it was put
@@ -109,15 +114,16 @@ export function pausedRun(events: TraceEvent[], task: Message, reports: Message[
   const ev = events[events.length - 1];
   const report = reports[reports.length - 1];
   const activeAt = Math.max(lastAt(ev?.at), lastAt(report?.created_at));
-  // Its run over (usage ends a runner's run: the answer is on its way).
-  if (ev?.data.kind === "usage" && lastAt(report?.created_at) <= lastAt(ev.at)) return true;
+  // Its run over (usage ends a runner's run: the answer is on its way),
+  // a while ago: just now, it is still on it (see ANSWER_ON_ITS_WAY_MS).
+  if (ev?.data.kind === "usage" && lastAt(report?.created_at) <= lastAt(ev.at)) return now - lastAt(ev.at) > ANSWER_ON_ITS_WAY_MS;
   // Its turn over, and not at work since: after a turn ends, only a step
   // that does something (not a chore, not only words) or a new report says
   // it is at it again.
   let end = -1;
   for (let k = events.length - 1; k >= 0; k--) if (events[k].data.kind === "turn_end") { end = k; break; }
   if (end >= 0 && lastAt(report?.created_at) <= lastAt(events[end].at)
-    && !events.slice(end + 1).some((e) => e.data.kind === "tool" && !isChore(e.data.input))) return true;
+    && !events.slice(end + 1).some((e) => e.data.kind === "tool" && !isChore(e.data.input))) return now - lastAt(events[end].at) > ANSWER_ON_ITS_WAY_MS;
   // Set aside (held): waiting, until a step after it was held does some
   // work. What it says it waits for (a progress), the work it hands out,
   // the hold itself: none of these (an agent holds, then says so).
@@ -532,7 +538,8 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!running) return;
-    const t = window.setInterval(() => setNow(Date.now()), 15_000);
+    // (5s: a run that just ended counts as stopped once its answer is late)
+    const t = window.setInterval(() => setNow(Date.now()), 5_000);
     return () => window.clearInterval(t);
   }, [running]);
   const paused = running && !asking && !gone && pausedRun(events || [], task, said || [], now);

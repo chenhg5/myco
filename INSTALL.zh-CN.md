@@ -717,7 +717,7 @@ spawn:
   # disabled: true              # 关掉这台机器的 agent spawn
 ```
 
-- **以后改权限**（v0.19.8 起）：agent 的主人可以在 App 里 agent 卡片的「运行」一块改它的权限，下一次唤醒就生效，不用重启 runner。只有这个 agent 的主人能改，Hub 管理员和 agent 自己都不行。能选的最高一档仍由那台机器决定：`spawn.max_access`，或者这个 agent 在本机配置里本来就有的权限（取两者中更高的）。超过上限时 runner 按上限跑，并在日志里说明。调低随时都可以。
+- **以后改权限**（v0.19.8 起）：agent 的主人可以在 App 里 agent 卡片的「运行」一块改它的权限，下一次唤醒就生效，不用重启 runner。只有这个 agent 的主人能改，Hub 管理员和 agent 自己都不行。能选的最高一档仍由那台机器决定：`spawn.max_access`，或者这个 agent 在本机配置里本来就有的权限（取两者中更高的）。超过上限时 runner 按上限跑，并在日志里说明。调低随时都可以。改上限本身（`spawn.max_access`，手改，或在 App 里点「在这台电脑上允许」）也不用重启：正在运行的 agent 几秒内就会用上新的上限，每一轮都会重新读 `~/.myco/machine.yaml`，调高调低都一样，原来按完全权限跑的会话下一轮就降到新的上限。能这样做的 runner 会在 runtime 里带上 `live_max_access`；旧版本的 runner，App 会直接说要重启那台电脑上的 myco（`myco runner service restart`），并提供一键重启。
 - `--dir ~/...` 指的是**那台机器**的家目录（本机 shell 展开成你自己的家目录也没关系，myco 会还原）。目录必须已经存在。
 - 被拒绝时退出码 4，错误里写明原因（发送方、目录、权限上限，或那台机器没装这个 CLI）；首轮对话失败或登记失败是退出码 1，错误里有会话 ID，方便排查。
 - 支持的 CLI：claude、codex、pi、kiro、cursor、gemini、opencode（需要那台机器上已经装好并登录）。`myco doctor --all` 会列出这台机器能开哪些。

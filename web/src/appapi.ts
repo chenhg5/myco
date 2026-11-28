@@ -473,7 +473,9 @@ export interface LocalState {
   addrs?: string[];
 }
 export type LocalTunnel = "cloudflare" | "tailscale" | "none";
-export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string; /** Another hub on this computer (`myco hub up --name`); omit for the default one. */ name?: string }
+export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string; /** Another hub on this computer (`myco hub up --name`); omit for the default one. */ name?: string;
+  /** what to call it in the App, in the App's language (newer consoles; older ones name the first "我的工作区") */
+  display?: string }
 export interface StartLocalHubResult {
   hub: Hub;
   public_url: string;
@@ -1115,7 +1117,10 @@ export const appApi = {
   /** Starts this computer's runner service, or restarts it when running. */
   restartRunner: () => request<{ runner: string }>("POST", "app/local/runner"),
   /** Allow (or stop allowing) shell nodes and full-access sessions on this computer. */
-  shellAccess: (allow: boolean) => request<{ shell_allowed: boolean }>("POST", "app/local/shell-access", { allow }),
+  /** max_access: the limit this computer's agents now run under (newer
+   *  consoles; runners that list "live_max_access" pick it up within
+   *  seconds, older ones after a restart) */
+  shellAccess: (allow: boolean) => request<{ shell_allowed: boolean; max_access?: string }>("POST", "app/local/shell-access", { allow }),
   /** Downloads and verifies the myco CLI; can take up to a minute. */
   installMyco: () => request<MycoInstall>("POST", "app/local/myco"),
   /** A computer upgrades its own myco (its machine node does it, then its

@@ -3,7 +3,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { appApi, isOldHub } from "@/appapi";
 import type { RunSettings, Runtime, RuntimeAccess, RuntimeModel } from "@/api";
 import type { AgentRow } from "@/app/types";
-import { accessLabel, agentKind, canManage, isCloud, isInbox, machineOfRow, machinesOfHub, modelSourceLabel } from "@/app/nodes";
+import { accessLabel, agentKind, canManage, isCloud, isInbox, machineOfRow, machinesOfHub, modelSourceLabel, nodeName } from "@/app/nodes";
 import { ChevronDown, ChevronRight, Shield, ShieldOff, TriangleAlert } from "lucide-react";
 import { hubAfter0194 } from "@/app/hubVersion";
 import { ConfirmDialog, ErrorText } from "@/app/dialogs";
@@ -207,11 +207,14 @@ export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
         <div className="app-kv-help">
           {accessEditable && <div>{L("现在用的：", "In use: ")}<SourceValue value={accessLabel(rt?.access)} sourceLabel={access ? "App" : undefined} /></div>}
           {!rt?.max_access && L("升级那台电脑上的 myco 后才能在这里改。", "Upgrade myco on that computer to change this here.")}
+          {/* (how to allow more: LocalShellAccess under it, "Allow" on this
+              computer, or where to change it on another) */}
           {rt?.max_access && cap !== "full" && <div>{L(
-            `这台电脑最多允许「${accessLabel(cap)}」。要更高，在那台电脑的 ~/.myco/machine.yaml 里设 spawn.max_access。`,
-            `This computer allows at most ${accessLabel(cap)}. For more access, set spawn.max_access in ~/.myco/machine.yaml on that computer.`,
+            `这台电脑最多允许「${accessLabel(cap)}」。`,
+            `This computer allows at most ${accessLabel(cap)}.`,
           )}</div>}
-          {accessEditable && cap !== "full" && <LocalShellAccess machine={machineOfRow(row)} hub={row.hub} what="full" onlyLocal onChange={onRefresh} />}
+          {accessEditable && cap !== "full" && <LocalShellAccess machine={machineOfRow(row)} hub={row.hub} what="full" onlyLocal onChange={onRefresh}
+            agent={{ name: nodeName(ag, row.hub), live: !!rt?.features?.includes("live_max_access") }} />}
         </div>
       )}
     </div>
@@ -626,7 +629,8 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
                 {cap !== "full" && (
                   <div className="run-pill-note">
                     {L(`那台电脑最多允许「${accessLabel(cap)}」。`, `That computer allows at most ${accessLabel(cap)}. `)}
-                    <LocalShellAccess machine={machineOfRow(row)} hub={row.hub} what="full" onlyLocal onChange={onRefresh} />
+                    <LocalShellAccess machine={machineOfRow(row)} hub={row.hub} what="full" onlyLocal onChange={onRefresh}
+                      agent={{ name: nodeName(ag, row.hub), live: !!rt.features?.includes("live_max_access") }} />
                   </div>
                 )}
               </>

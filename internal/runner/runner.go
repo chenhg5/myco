@@ -68,6 +68,11 @@ type Options struct {
 	// (spawn.max_access); the higher of the two caps the hub's choice.
 	Access    harness.Access
 	MaxAccess harness.Access
+	// MaxAccessFunc, when set, reads the machine's current limit
+	// (spawn.max_access in ~/.myco/machine.yaml) at the start of every run,
+	// so allowing more, or less, in the app takes effect on the next turn
+	// without a restart. MaxAccess is then only the value at start.
+	MaxAccessFunc func() harness.Access
 	// CommandWatchAllowed is the live local machine permission, independent of
 	// Hub-reported capabilities. Nil disables raw command watches.
 	CommandWatchAllowed func() bool
@@ -1222,10 +1227,14 @@ func withModelEnv(req *harness.Request, vars map[string]string) {
 // machine's spawn.max_access, or the agent's own configured access if that
 // is higher (it was given locally).
 func (r *Runner) accessLimit() harness.Access {
-	if r.opts.Access.Rank() > r.opts.MaxAccess.Rank() {
+	max := r.opts.MaxAccess
+	if r.opts.MaxAccessFunc != nil {
+		max = r.opts.MaxAccessFunc()
+	}
+	if r.opts.Access.Rank() > max.Rank() {
 		return r.opts.Access
 	}
-	return r.opts.MaxAccess
+	return max
 }
 
 // watchIdle ends the run when the harness reports nothing for the timeout.

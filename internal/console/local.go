@@ -606,6 +606,9 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 		Tunnel   string `json:"tunnel"`
 		Hostname string `json:"hostname"`
+		// Display is the name the App shows it under, in the App's language
+		// ("My workspace" when it is English); older Apps send none.
+		Display string `json:"display"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -755,7 +758,10 @@ func (b *Backend) startLocal(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, errors.New("myco console token create did not return a token"))
 		return
 	}
-	display := in.Name
+	display := strings.TrimSpace(in.Display)
+	if display == "" {
+		display = in.Name
+	}
 	if display == "" {
 		display = "我的工作区"
 	}
