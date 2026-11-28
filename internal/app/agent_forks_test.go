@@ -152,6 +152,29 @@ func TestAgentForkDryRunResourcesIdempotencyAndProvenance(t *testing.T) {
 		t.Fatalf("old runner accepted even with force: %v", err)
 	}
 }
+
+// A quota snapshot from ten hours ago still says "ok", but nobody refreshed
+// it: fork must not read it as room, the same rule the Hub shows people.
+func TestAgentForkRefusesStaleQuota(t *testing.T) {
+	r := newForkRig(t)
+	r.source.Runtime.Quota = &domain.Quota{Status: "ok", At: r.clock.t.Add(-10 * time.Hour), Source: "codex"}
+	if err := r.agents.SetRuntime(r.ctx, r.source.Name, r.source.Runtime); err != nil {
+		t.Fatal(err)
+	}
+	actor, viewer := app.Actor{Agent: r.creator}, domain.Viewer{Agent: r.creator}
+	if _, err := r.svc.Fork(r.ctx, actor, viewer, app.ForkInput{From: string(r.source.Name), RequestID: "stale-quota"}, false); !domain.IsCode(err, domain.CodeInvalidState) {
+		t.Fatalf("stale quota accepted: %v", err)
+	}
+	// Observed a minute ago, the same numbers pass the resource check.
+	r.source.Runtime.Quota.At = r.clock.t.Add(-time.Minute)
+	if err := r.agents.SetRuntime(r.ctx, r.source.Name, r.source.Runtime); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.svc.Fork(r.ctx, actor, viewer, app.ForkInput{From: string(r.source.Name), RequestID: "fresh-quota"}, false); err != nil {
+		t.Fatalf("fresh quota refused: %v", err)
+	}
+}
+
 func TestAgentRetireNarrowPermissionsAndNoNestedFork(t *testing.T) {
 	r := newForkRig(t)
 	f := r.activate(t, r.fork(t, "one"))
