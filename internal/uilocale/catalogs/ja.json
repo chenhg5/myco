@@ -3452,5 +3452,13 @@
   "The six-hour wait ended. Automatic restart is paused; you can request another idle restart.": "6時間の待機が終了し、自動再起動を停止しました。アイドル時の再起動をもう一度リクエストできます。",
   "This older runner cannot safely restart when idle. After all tasks finish, restart it once from a terminal.": "この古い runner は安全なアイドル時再起動に対応していません。すべてのタスクが完了してから、ターミナルで一度手動再起動してください。",
   "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. The command-line tool updates too; the runner restarts after tasks finish. Failed updates can be retried above.": "更新時は GitHub と Gitee の応答が速い方から最新の App をダウンロードし、SHA256 を検証して「アプリケーション」の myco を置き換え、再度開きます。コマンドラインツールも更新され、runner はタスクの完了後に再起動します。更新に失敗した場合は上で再試行できます。",
-  "Updating the command-line tool…": "コマンドラインツールを更新中…"
+  "Updating the command-line tool…": "コマンドラインツールを更新中…",
+  "connect local code-host accounts and read repositories, pull requests and issues": "ローカルのコードホストアカウントに接続し、リポジトリ、プルリクエスト、Issue を読み取る",
+  "Access token": "アクセストークン",
+  "Allow this private-network server": "このプライベートネットワークのサーバーを許可",
+  "Connect a code-host account": "コードホストのアカウントに接続",
+  "Connect to {0}: {1}": "{0} に接続: {1}",
+  "Read repositories, pull requests and issues. Credentials stay on this computer and are never given to the app page.": "リポジトリ、プルリクエスト、Issue を読み取ります。認証情報はこのコンピューターに保存され、アプリのページには渡されません。",
+  "This server resolves to this computer or a private network. Allow it only if you trust this server.": "このサーバーは、このコンピューターまたはプライベートネットワークを指しています。信頼できるサーバーの場合のみ許可してください。",
+  "Use the CLI login for this server on this computer, saving a separate credential copy for this page.": "このコンピューターでこのサーバーの CLI ログインを使用し、このページ専用の認証情報のコピーを保存します。"
 }

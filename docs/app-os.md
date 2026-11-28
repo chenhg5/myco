@@ -535,3 +535,53 @@ profile after the App obtains the owner's exact-profile confirmation. Check
 that the method exists and `browser.status().features` includes `profile_delete`.
 It removes local sign-ins/downloads and script approvals across workspaces;
 active browser windows or controlled profiles return `busy` and stay open.
+
+
+## Code hosts (desktop)
+
+The `codehost` OS permission group provides `forge.accounts` and `forge.query`.
+This is a read-only page bridge, not an agent capability. An interactive page
+with an isolated origin can connect GitHub, GitLab (including self-hosted HTTPS
+servers), or Gitea / Forgejo. Credentials stay in the system credential store,
+scoped by local App profile, workspace sign-in and page. Query results stay in
+page memory and are not automatically written to shared page records.
+
+`forge.accounts` takes `action` (`list`, `discover`, `connect`, `remove`). Connect
+takes `provider` (`github`, `gitlab`, `gitea`), HTTPS origin `host`, optional `name`,
+and `source` (`token` or `cli`). Connect is intercepted by the trusted App: the token
+input is drawn in the App origin, never in the page. Raw generic OS connect calls
+are refused. CLI connection uses only fixed
+`gh auth token --hostname HOST` / `glab auth status --hostname HOST --show-token` arguments and
+copies the selected login's credential to its own private entry. Reconnect after
+rotating the provider token. Returned metadata is `{id,provider,host,login,name,source}`;
+tokens are never returned. Disconnect deletes the local entry, not the upstream
+token or the CLI login. Discovery reports whether `gh` and `glab` are installed.
+
+`forge.query` takes `account`, `action` (`repos`, `list`, `detail`, `comments`,
+`files`), optional `kind` (`pull`, `issue`), `repo` (`owner/repo`), `scope`
+(`created`, `assigned`, `review`, `repo`), `state` (`open`, `closed`, `all`),
+`search`, `page` (1–100), and item `number`. Repository and discussion/file pages
+return `{items,has_more,page}`; list also reports `incomplete` for incomplete
+provider searches. Each page requests up to 50 entries. Detail returns one
+normalized item. Only fixed GET endpoints are used, with verified HTTPS, no
+redirects, a 20-second deadline and a 4 MiB response cap. Provider error bodies
+and credentials are never logged or returned. Raw HTML/images in descriptions
+are not executed. Errors include `no_credentials`, `permission_denied`,
+`rate_limited`, `network_error`, `invalid_response` and `provider_error`.
+
+No merge, comment, edit, close, arbitrary HTTP, shell or agent operations are
+exposed. Reviews, inline comments and check runs can be viewed on the original
+provider site. Installing a newer template cannot add this bridge to an older
+desktop, iOS or Android App; apps must feature-detect `forge.accounts`.
+
+The trusted App calls `POST /app/codehost/prepare` with `{page,provider,host,source,name}`
+and header `X-Myco-Codehost-Owner: 1`. This returns
+`{confirmation,provider,host,source,private_network}`. The one-use confirmation
+expires after two minutes and binds the page, workspace sign-in, provider and
+origin. `POST /app/codehost/connect` takes `{confirmation,token,allow_private}`
+with the same owner header. Neither route is exposed to iframe JavaScript.
+The host prompt names the server and requires an additional checkbox if DNS
+resolves to loopback, link-local, private or CGNAT addresses. Requests recheck
+DNS; direct connections pin the checked address. Rebinding to a private address
+requires reconnecting with explicit consent. Secrets store both the web/API
+origins and provider; a changed profile origin is refused.
