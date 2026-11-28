@@ -1984,6 +1984,27 @@ async function runMatrix(browser, size, scheme) {
       await page.locator(".sp-home").waitFor({ timeout: 10_000 });
     });
 
+    // A card in the main chat opens two members' exchange in the right
+    // pane in place of what was there (a member's chat): a back button
+    // there brings that back.
+    if (!narrow) await step("项目 · 换掉右栏后能返回", async () => {
+      await clickVisible(page, page.locator(".sp-side .sp-member", { hasText: "docs-claude" }));
+      const right = page.locator(".sp-pane-right");
+      await right.locator(".conv-detail").waitFor({ timeout: 10_000 });
+      const before = compactText(await right.locator(".conv-head h2").innerText());
+      await clickVisible(page, page.locator(".sp-home .handoff", { hasText: "升级注意事项" }));
+      await page.waitForFunction((b) => {
+        const h = document.querySelector(".sp-pane-right .conv-head h2");
+        return !!h && h.textContent.replace(/\s+/g, "") !== b.replace(/\s+/g, "");
+      }, before, { timeout: 10_000 });
+      const back = right.locator(".conv-head").getByRole("button", { name: /^返回/ });
+      await back.waitFor({ timeout: 5_000 });
+      await back.click();
+      await page.waitForFunction((b) => (document.querySelector(".sp-pane-right .conv-head h2")?.textContent || "").replace(/\s+/g, "") === b.replace(/\s+/g, ""), before, { timeout: 10_000 });
+      await clickVisible(page, right.getByRole("button", { name: "关掉这一栏" }));
+      await page.locator(".sp-pane-right").waitFor({ state: "detached", timeout: 10_000 });
+    });
+
     // In a member's chat, what it and the others said to each other is a
     // card each, not bubbles in your conversation; a card opens theirs.
     if (!narrow) await step("项目 · 成员之间的往来", async () => {

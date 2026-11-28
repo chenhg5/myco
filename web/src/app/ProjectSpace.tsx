@@ -270,17 +270,22 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   // has one, else the pane last clicked into shows it instead (a first
   // one opens beside). One pane with the whole room stays so: the member
   // takes it.
-  const showSide = (next: Side) => setGrid((g) => {
+  // What a pane showed, to go back to once something else took its place
+  // (a conversation between two agents opened from the main chat).
+  const backOf = (x: Side): Side => ({ agent: x.agent, peer: x.peer, focus: x.focus, also: x.also, back: x.back });
+  // (remember: keep what it showed, for a back button there)
+  const showSide = (next: Side, remember = false) => setGrid((g) => {
     const there = g.sides.find((x) => sameSide(x, next)) || g.sides.find((x) => x.agent === next.agent);
     if (there) {
       setLastSide(there.id);
-      return { ...g, sides: g.sides.map((x) => (x.id === there.id ? { ...x, ...next } : x)), zoom: g.zoom ? there.id : "" };
+      const same = sameSide(there, next);
+      return { ...g, sides: g.sides.map((x) => (x.id === there.id ? { ...x, ...next, back: same || !remember ? x.back : backOf(x) } : x)), zoom: g.zoom ? there.id : "" };
     }
     const id = paneId();
     setLastSide(id);
     const old = g.sides.find((x) => x.id === lastSide) || g.sides[g.sides.length - 1];
     if (!old) return { sides: [{ ...next, id }], layout: placePane(oneLayout(), id) || oneLayout(), zoom: g.zoom ? id : "" };
-    return { sides: g.sides.map((x) => (x.id === old.id ? { ...next, id } : x)), layout: replacePane(g.layout, old.id, id), zoom: g.zoom ? id : "" };
+    return { sides: g.sides.map((x) => (x.id === old.id ? { ...next, id, back: remember ? backOf(old) : undefined } : x)), layout: replacePane(g.layout, old.id, id), zoom: g.zoom ? id : "" };
   });
   // A member dragged in, or 「在新的一栏打开」: a pane of its own where it was
   // dropped (in place of the one under it, dropped on its middle), or the
@@ -367,7 +372,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
   // read-only, at that message; beside the coordinator when there is room.
   const openExchange = (agent: string, other: string, focus?: string) => {
     if (split && view.kind === "home") {
-      showSide({ agent, peer: other, focus });
+      showSide({ agent, peer: other, focus }, true);
       return;
     }
     setView({ kind: "pair", agent, peer: other, focus });
@@ -695,13 +700,15 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             rows={rows}
             now={now}
             showBack={!!side.back}
-            backLabel={side.back ? L(E`返回和 ${nameOf(side.back.agent)} 的对话`, E`Back to ${nameOf(side.back.agent)}`) : undefined}
+            backLabel={side.back ? (side.back.peer && !youPeer(side.back.peer)
+              ? L(E`返回 ${nameOf(side.back.agent)} 和 ${nameOf(side.back.peer)} 的对话`, E`Back to ${nameOf(side.back.agent)} and ${nameOf(side.back.peer)}`)
+              : L(E`返回和 ${nameOf(side.back.agent)} 的对话`, E`Back to ${nameOf(side.back.agent)}`)) : undefined}
             // (opened from a card in this pane: back to what was here)
             onBack={() => (side.back ? updateSide(side.id, (x) => ({ ...x.back!, id: x.id })) : closeSide(side.id))}
             headActions={actions}
             onNewConversation={(_h, agent) => void chatWith(agent)}
             onOpen={(_h, agent) => void chatWith(agent)}
-            onOpenExchange={(agent, other, focus) => updateSide(side.id, (x) => ({ id: x.id, agent, peer: other, focus, back: { agent: x.agent, peer: x.peer, focus: x.focus, also: x.also, back: x.back } }))}
+            onOpenExchange={(agent, other, focus) => updateSide(side.id, (x) => ({ id: x.id, agent, peer: other, focus, back: backOf(x) }))}
             onRefresh={onRefresh}
           />
       ),

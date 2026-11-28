@@ -3171,7 +3171,7 @@ textarea.app-input {
 .conv-head-faces.is-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .conv-head-name { max-width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: top; }
-.conv-head-name:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--faint); }
+.conv-head-name:hover { color: var(--fg); }
 /* 查看并处理: its open work from elsewhere, settled in the chat. */
 .conv-elsewhere { max-height: min(60vh, 520px); overflow-y: auto; }
 /* (here what can be done is the point: the buttons in a row under each

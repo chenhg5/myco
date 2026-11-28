@@ -3434,5 +3434,6 @@
   "Online · no owner yet": "On-line · ainda sem proprietário",
   "Online · waiting for you to claim it": "On-line · aguardando você assumir o controle",
   "Send this line to the bot in a direct message in {0} to become its owner (then what others write to it reaches {1}):": "Envie esta linha ao bot por mensagem direta no {0} para se tornar seu proprietário; depois, as mensagens de outras pessoas chegarão a {1}:",
-  "Live · port {0}": "Ao vivo · porta {0}"
+  "Live · port {0}": "Ao vivo · porta {0}",
+  "Back to {0} and {1}": "Voltar para {0} e {1}"
 }

@@ -3434,5 +3434,6 @@
   "Online · no owner yet": "온라인 · 아직 소유자 없음",
   "Online · waiting for you to claim it": "온라인 · 소유자 등록 대기 중",
   "Send this line to the bot in a direct message in {0} to become its owner (then what others write to it reaches {1}):": "{0}에서 봇에게 다음 줄을 개인 메시지로 보내면 소유자가 됩니다. 이후 다른 사람이 봇에게 보낸 메시지가 {1}에게 전달됩니다:",
-  "Live · port {0}": "실시간 · 포트 {0}"
+  "Live · port {0}": "실시간 · 포트 {0}",
+  "Back to {0} and {1}": "{0}와(과) {1}의 대화로 돌아가기"
 }

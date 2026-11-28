@@ -3434,5 +3434,6 @@
   "Online · no owner yet": "オンライン · 所有者未設定",
   "Online · waiting for you to claim it": "オンライン · あなたの登録待ち",
   "Send this line to the bot in a direct message in {0} to become its owner (then what others write to it reaches {1}):": "{0} でボットに次の行をダイレクトメッセージで送ると、所有者として登録されます。その後、他の人からのメッセージが {1} に届きます：",
-  "Live · port {0}": "ライブ · ポート {0}"
+  "Live · port {0}": "ライブ · ポート {0}",
+  "Back to {0} and {1}": "{0} と {1} の会話に戻る"
 }
