@@ -4,6 +4,24 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.13
+
+Brief release notes, generated from commit titles. Formal notes will follow.
+- Hub: ` Keep workflow projections scoped to GET responses ` (5b2d53c3)
+- CLI, Hub: ` Add compact workflow run and selected-step reads ` (6f255ba0)
+- Hub: ` Keep failed quota queries eligible for agent selection ` (66400426)
+- App: ` App: an hour-old quota keeps its last numbers, greyed ` (2dd13a8d)
+
+**中文**
+
+简要说明，直接列出提交原标题；正式说明稍后补充。
+- Hub：` Keep workflow projections scoped to GET responses ` (5b2d53c3)
+- 命令行、Hub：` Add compact workflow run and selected-step reads ` (6f255ba0)
+- Hub：` Keep failed quota queries eligible for agent selection ` (66400426)
+- 桌面应用：` App: an hour-old quota keeps its last numbers, greyed ` (2dd13a8d)
+
+https://github.com/myco-ai/myco/compare/dd1daf374e3730a288039c770b0fd36325fbca1a...5b2d53c39dfb47273ea67ab591677eecb20c005b
+
 ## v0.23.12
 
 Brief release notes, generated from commit titles. Formal notes will follow.
