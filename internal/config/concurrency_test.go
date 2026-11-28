@@ -23,6 +23,7 @@ func TestEffectiveConcurrency(t *testing.T) {
 		{"setting only", 0, time.Time{}, RunnerPolicy{MaxConcurrent: 12, SetAt: t0}, 12, ConcurrencyFromSetting},
 		{"setting changed after the flag", 3, t0, RunnerPolicy{MaxConcurrent: 12, SetAt: t0.Add(time.Minute)}, 12, ConcurrencyFromSetting},
 		{"flag chosen after the setting", 8, t0.Add(time.Hour), RunnerPolicy{MaxConcurrent: 12, SetAt: t0}, 8, ConcurrencyFromFlag},
+		{"set in the same clock tick as the flag", 3, t0, RunnerPolicy{MaxConcurrent: 12, SetAt: t0}, 12, ConcurrencyFromSetting},
 		{"setting above the ceiling", 0, time.Time{}, RunnerPolicy{MaxConcurrent: 500, SetAt: t0}, MaxConcurrentCeiling, ConcurrencyFromSetting},
 	}
 	for _, c := range cases {

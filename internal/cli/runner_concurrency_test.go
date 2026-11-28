@@ -59,6 +59,9 @@ func TestSlotLimitFollowsTheSettingLive(t *testing.T) {
 	}
 
 	// Lowered through the machine node: both keep running, a new one waits.
+	// (On a coarse clock the setting gets the very time the flag was seen:
+	// set after start, it still wins.)
+	l.now = func() time.Time { return l.flagAt }
 	v, err := l.Set(1)
 	if err != nil || v.Limit != 1 || v.InUse != 2 {
 		t.Fatalf("lowered: %+v %v", v, err)
@@ -74,9 +77,16 @@ func TestSlotLimitFollowsTheSettingLive(t *testing.T) {
 	<-c.Ready
 	c.Done()
 
-	// What the App on this computer reads.
+	if v := l.View(); v.Source != config.ConcurrencyFromSetting || v.InUse != 0 {
+		t.Fatalf("after the lowered tasks ended: %+v", v)
+	}
+
+	// What the App on this computer reads, once written (Run writes it on
+	// every change; here it is written directly).
+	l.now = time.Now
+	l.save()
 	st, err := config.LoadRunnerSlots(cfg)
-	if err != nil || st == nil || st.Limit != 1 || st.Source != config.ConcurrencyFromSetting || st.Flag != 1 || !st.Fresh(time.Now()) {
+	if err != nil || st == nil || st.Limit != 1 || st.Source != config.ConcurrencyFromSetting || st.Flag != 1 || st.InUse != 0 || !st.Fresh(time.Now()) {
 		t.Fatalf("runner-slots.json: %+v %v", st, err)
 	}
 

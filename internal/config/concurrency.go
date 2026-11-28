@@ -39,9 +39,11 @@ const (
 // EffectiveConcurrency is the rule for how many agent CLIs run at once: of
 // the runner's explicit --max-concurrent (flag, chosen at flagAt) and
 // machine.yaml's runner.max_concurrent, the one chosen last; the default
-// when neither is there.
+// when neither is there. A tie goes to the setting: a coarse clock (Windows)
+// can stamp a setting made right after the runner started with the very
+// time its flag was seen.
 func EffectiveConcurrency(flag int, flagAt time.Time, set RunnerPolicy) (int, string) {
-	if set.MaxConcurrent > 0 && (flag <= 0 || set.SetAt.After(flagAt)) {
+	if set.MaxConcurrent > 0 && (flag <= 0 || !set.SetAt.Before(flagAt)) {
 		return min(set.MaxConcurrent, MaxConcurrentCeiling), ConcurrencyFromSetting
 	}
 	if flag > 0 {

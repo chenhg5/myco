@@ -99,29 +99,42 @@ func (l *slotLimit) save() {
 	}
 }
 
-// Run follows machine.yaml and keeps runner-slots.json current (at most once
-// a second while slots change) until ctx ends.
+// Run follows machine.yaml and keeps runner-slots.json current until ctx
+// ends: every change is written, at most once a second while slots change
+// (the last of a burst a moment later, never dropped), and every 30 seconds
+// with nothing new.
 func (l *slotLimit) Run(ctx context.Context) {
 	changes, stop := l.pool.Subscribe()
 	defer stop()
 	poll := time.NewTicker(slotLimitPoll)
 	defer poll.Stop()
 	l.save()
-	last, dirty := l.now(), false
+	last := time.Now()
+	var flush <-chan time.Time // the trailing write of a burst
+	changed := func() {
+		if wait := time.Second - time.Since(last); wait > 0 {
+			if flush == nil {
+				flush = time.After(wait)
+			}
+			return
+		}
+		l.save()
+		last, flush = time.Now(), nil
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-changes:
-			dirty = true
-		case <-poll.C:
-			if l.apply() {
-				dirty = true
-			}
-		}
-		if (dirty && l.now().Sub(last) >= time.Second) || l.now().Sub(last) >= slotStateHeartbeat {
+			changed()
+		case <-flush:
+			flush = nil
 			l.save()
-			last, dirty = l.now(), false
+			last = time.Now()
+		case <-poll.C:
+			if l.apply() || time.Since(last) >= slotStateHeartbeat {
+				changed()
+			}
 		}
 	}
 }
