@@ -4,6 +4,26 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.14
+
+Brief release notes, generated from commit titles. Formal notes will follow.
+- Hub: ` Keep normalized quota warnings usable for coordinator selection ` (177f78e4)
+- App, CLI, Hub: ` Remind Claude cloud sessions to refresh stale usage and preserve quota warnings ` (31fa1e85)
+- App: ` Show GLM MCP quota separately from model windows ` (76c0f706)
+- App, Hub: ` Add GLM Kimi and OpenRouter account quota sources ` (762bc184)
+- App: ` Keep Escape scoped to the open language menu ` (23e05a38)
+
+**中文**
+
+简要说明，直接列出提交原标题；正式说明稍后补充。
+- Hub：` Keep normalized quota warnings usable for coordinator selection ` (177f78e4)
+- 桌面应用、命令行、Hub：` Remind Claude cloud sessions to refresh stale usage and preserve quota warnings ` (31fa1e85)
+- 桌面应用：` Show GLM MCP quota separately from model windows ` (76c0f706)
+- 桌面应用、Hub：` Add GLM Kimi and OpenRouter account quota sources ` (762bc184)
+- 桌面应用：` Keep Escape scoped to the open language menu ` (23e05a38)
+
+https://github.com/myco-ai/myco/compare/9dc9e2f7444c62002ff6facac8474ed23387726d...0b1123a47706db7410188c3cfb093e69630f073c
+
 ## v0.23.13
 
 Brief release notes, generated from commit titles. Formal notes will follow.
@@ -32,41 +52,26 @@ https://github.com/myco-ai/myco/compare/dd1daf374e3730a288039c770b0fd36325fbca1a
 
 ## v0.23.12
 
-Brief release notes, generated from commit titles. Formal notes will follow.
-- CLI: ` Runner concurrency: a setting made in the same clock tick wins; every change is written ` (dd1daf37)
-- App: ` Pin code-host identity scopes and validate repository segments ` (d3e45560)
-- App, Hub: ` Add private read-only code-host account bridge ` (b4c7ea5b)
-- App: ` Localize runner update notices across all App languages ` (9290c262)
-- App: ` App: project file quotas get their own Settings entry ` (820db674)
-- App: ` Describe automatic command-line updates and idle runner restarts in About ` (afc7bbd3)
-- App, Runner, CLI, Hub: ` Restart updated runners when idle and retain App upgrade results ` (6d2417c0)
-- App: ` App: back to what a project's right pane showed; no underline on a chat's name ` (d07090f7)
-- App, Hub: ` Add seven offline App languages with system selection and core flow translations ` (fc991171)
-- App: ` App: an answer right under your bubble keeps clear of its copy button ` (b5755d80)
-- Hub: ` One rule decides whether quota is current ` (7ad819f0)
-- App: ` App: channels list what is connected and offer the rest as tiles ` (eeb51b0a)
 
-1 additional production commits are listed in the comparison below.
+- Runner: a concurrency setting wins a same-tick tie with the startup flag, and slot changes receive a trailing write to the local status file.
+- App: runner update notices show a pending restart and explain that tasks already in progress finish first, with translated notice text.
+- App: project file and space limits now have a searchable Project files entry in Settings; people who manage no workspace see that there is nothing to change.
+- App: About explains that App updates also upgrade the local command-line tool; on macOS, it explains that the runner restarts after tasks finish.
+- App: after opening two members' exchange in a project's right pane, you can return to the conversation previously shown there; chat names brighten on hover.
+- App: an answer directly below your message keeps clear of that message's time and copy button.
+- Hub: copying an agent session checks the source's quota at the time of the resource check, so an old OK reading is no longer accepted as current.
+- App: people who may manage an agent can use its Channels tab to see connected chat services as rows and the remaining services as tiles to add.
 
 **中文**
 
-简要说明，直接列出提交原标题；正式说明稍后补充。
-- 命令行：` Runner concurrency: a setting made in the same clock tick wins; every change is written ` (dd1daf37)
-- 桌面应用：` Pin code-host identity scopes and validate repository segments ` (d3e45560)
-- 桌面应用、Hub：` Add private read-only code-host account bridge ` (b4c7ea5b)
-- 桌面应用：` Localize runner update notices across all App languages ` (9290c262)
-- 桌面应用：` App: project file quotas get their own Settings entry ` (820db674)
-- 桌面应用：` Describe automatic command-line updates and idle runner restarts in About ` (afc7bbd3)
-- 桌面应用、任务执行器、命令行、Hub：` Restart updated runners when idle and retain App upgrade results ` (6d2417c0)
-- 桌面应用：` App: back to what a project's right pane showed; no underline on a chat's name ` (d07090f7)
-- 桌面应用、Hub：` Add seven offline App languages with system selection and core flow translations ` (fc991171)
-- 桌面应用：` App: an answer right under your bubble keeps clear of its copy button ` (b5755d80)
-- Hub：` One rule decides whether quota is current ` (7ad819f0)
-- 桌面应用：` App: channels list what is connected and offer the rest as tiles ` (eeb51b0a)
-
-另有 1 条生产提交，见下方完整比较。
-
-https://github.com/myco-ai/myco/compare/6e3f68e266a54d8b42f6b150eda6477c0e8f2eec...dd1daf374e3730a288039c770b0fd36325fbca1a
+- 任务执行器：并发设置与启动参数时间相同时以设置为准；名额变化结束后会补写本机状态文件。
+- 桌面应用：任务执行器更新提示会显示待重启状态，并以翻译后的文案说明进行中的任务会先完成。
+- 桌面应用：项目文件与空间上限现可从“设置”中可搜索的“项目文件”入口管理；未管理任何工作区时会提示没有可修改的内容。
+- 桌面应用：“关于”页面说明更新应用时也会升级本机命令行工具；在 macOS 上还说明任务结束后执行器会重启。
+- 桌面应用：在项目右侧栏打开两位成员的对话后，可以返回此前显示的对话；鼠标悬停时聊天名称会变亮。
+- 桌面应用：紧接在自己消息下方的回复会避开该消息的时间和复制按钮。
+- Hub：复制 Agent 会话时会按资源检查当时的时间判断来源配额，不再把过期的正常读数当作当前状态。
+- 桌面应用：有权管理 Agent 的用户可在其“渠道”标签页按列表查看已接入的聊天服务，并从卡片添加其余服务。
 
 ## v0.23.11
 
