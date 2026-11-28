@@ -325,8 +325,10 @@ func (s *baseline) release(agent string) {
 }
 
 // await waits for a task's reply: "ok" with it, "gone" when its agent went
-// away, "stopped" when we stopped it.
+// away (offline at two looks a unit apart: one stalled moment is not
+// gone), "stopped" when we stopped it.
 func (s *baseline) await(ctx context.Context, a *assignment) (string, string) {
+	away := 0
 	for ctx.Err() == nil {
 		reply, err := s.c.WaitReply(ctx, a.msg, s.w.Unit())
 		if err == nil && reply != nil {
@@ -340,7 +342,12 @@ func (s *baseline) await(ctx context.Context, a *assignment) (string, string) {
 		}
 		if agents, err := s.c.ListAgents(ctx, "", false); err == nil {
 			for _, ag := range agents {
-				if ag.Name == a.agent && !ag.Online {
+				if ag.Name != a.agent {
+					continue
+				}
+				if ag.Online {
+					away = 0
+				} else if away++; away >= 2 {
 					_, _ = s.c.StopTask(ctx, a.msg, false)
 					return "", "gone"
 				}

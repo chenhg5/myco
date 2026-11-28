@@ -7,8 +7,51 @@ import (
 	"time"
 )
 
+// testOpts: a unit long enough for a loaded machine, twice that under the
+// race detector. The assertions below do not depend on speed anyway.
 func testOpts(t *testing.T) RunOptions {
-	return RunOptions{Options: Options{Dir: t.TempDir(), Unit: 150 * time.Millisecond, Seed: 7}}
+	unit := 150 * time.Millisecond
+	if raceOn {
+		unit *= 2
+	}
+	return RunOptions{Options: Options{Dir: t.TempDir(), Unit: unit, Seed: 7}}
+}
+
+// timeOnly reports whether a deduction depends on how fast the machine
+// is: time over the critical path, noticing late, and work given out again
+// because a stalled agent looked away.
+func timeOnly(d string) bool {
+	return strings.Contains(d, " took ") || strings.Contains(d, " noticed after ") || strings.Contains(d, " given out again")
+}
+
+// expected is each scenario's own expectation of a good coordinator.
+var expected = map[string]func(Result) string{
+	"parallel-five": func(r Result) string {
+		if hasDeduction(r, "nothing ran in parallel") {
+			return "not in parallel"
+		}
+		return ""
+	},
+	"expert-busy": func(r Result) string {
+		for _, n := range r.Notes {
+			if n == "told the person why it waits" || n == "forked the busy agent" {
+				return ""
+			}
+		}
+		return "neither forked nor said why it waits"
+	},
+	"offline-midway": func(r Result) string {
+		if r.Detect < 0 {
+			return "never noticed the agent went away"
+		}
+		return ""
+	},
+	"priority": func(r Result) string {
+		if hasDeduction(r, "low-priority job was finished before") {
+			return "the urgent request was not first"
+		}
+		return ""
+	},
 }
 
 // The scripted baseline does what each scenario expects: every one passes.
@@ -23,10 +66,19 @@ func TestTheBaselinePassesEveryScenario(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Logf("%s: score %d ratio %.2f waste %d detect %.1f %v %v", sc.Name, res.Score, res.Ratio, res.Waste, res.Detect, res.Deductions, res.Notes)
-			// right, nothing wasted, nobody bothered (time depends on the
-			// machine's load: it only deducts)
-			if !res.Passed || res.Waste != 0 || res.Interruptions != 0 || res.Score < 40 {
+			// What it did, not how fast: right, nothing vetoed, nobody
+			// bothered, the scenario's own expectation met. Deductions that
+			// depend on the machine's speed are only logged.
+			if !res.Passed || res.Veto != "" || res.Interruptions != 0 {
 				t.Fatalf("baseline on %s: %+v", sc.Name, res)
+			}
+			if why := expected[sc.Name]; why != nil && why(res) != "" {
+				t.Fatalf("baseline on %s: %s: %+v", sc.Name, why(res), res)
+			}
+			for _, d := range res.Deductions {
+				if !timeOnly(d) {
+					t.Fatalf("baseline on %s: %s", sc.Name, d)
+				}
 			}
 		})
 	}
