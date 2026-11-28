@@ -9,14 +9,18 @@ import (
 // email does not identify its selected API provider or key's spending limit.
 func SubscriptionQuotaContext(a *Agent) (provider, plan string) {
 	q := a.Runtime.Quota
+	cloudBinding := a.Binding.Harness == "claude-cloud" || a.Binding.Harness == "" && a.Runtime.CLI == "claude-cloud"
 	if q != nil {
-		if q.Status == "unsupported" {
+		if q.Status == "unsupported" && !cloudBinding {
 			return "", ""
 		}
 		provider, plan = q.Provider, q.Plan
 		if provider == "" {
 			provider = q.Source
 		}
+	}
+	if cloudBinding && (provider == "" || provider == "unknown") && (q == nil || q.Source == "" || q.Source == "claude") {
+		provider = "claude"
 	}
 	cli := a.Runtime.CLI
 	if cli == "" {
@@ -88,6 +92,11 @@ func ResolveQuotaNumbers(a *Agent, profile, shared *Quota, now time.Time) *Quota
 	var base Quota
 	if own != nil {
 		base = *own
+		if base.Provider == "unknown" {
+			if p, plan := SubscriptionQuotaContext(a); p != "" {
+				base.Provider, base.Plan = p, plan
+			}
+		}
 	} else {
 		p, plan := SubscriptionQuotaContext(a)
 		if p == "" {
@@ -137,7 +146,11 @@ func ResolveQuotaNumbers(a *Agent, profile, shared *Quota, now time.Time) *Quota
 	if base.Shared {
 		base.SharedAt = best.ReportedAt
 	}
-	if base.Status == "" || base.Status == "ok" || base.Status == "unknown" || base.Status == "transient_error" && (base.ErrorCode == "pending" || base.ErrorCode == "collector_busy") {
+	legacyCloudUnsupported := base.Status == "unsupported" && (a.Binding.Harness == "claude-cloud" || a.Binding.Harness == "" && a.Runtime.CLI == "claude-cloud")
+	if p, _ := SubscriptionQuotaContext(a); p == "" {
+		legacyCloudUnsupported = false
+	}
+	if base.Status == "" || base.Status == "ok" || base.Status == "unknown" || legacyCloudUnsupported || base.Status == "transient_error" && (base.ErrorCode == "pending" || base.ErrorCode == "collector_busy") {
 		base.Status = "ok"
 		base.CheckedAt = best.At
 		base.ErrorCode = ""

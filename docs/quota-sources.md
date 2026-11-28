@@ -83,7 +83,9 @@ windows whose reset has passed do not replace current numbers. Legacy status-onl
 reports retain their existing resource-check behaviour. The App, picker and fork
 checks use the same resolved data and one-hour freshness rule.
 
-A newer snapshot can clear `pending`/`collector_busy` placeholders. It cannot
+A newer snapshot can clear `pending`/`collector_busy` placeholders, and the
+legacy `unknown` provider / `unsupported` collector marker on a bound Claude
+cloud session without an API provider/plan. It cannot
 clear that agent's `auth_required`, `no_credentials`, throttling or collection
 failure. Those connection states stay local: another agent does not inherit them.
 Only usage windows and observation time are shared. A client sending runtime

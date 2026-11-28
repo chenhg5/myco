@@ -24,7 +24,11 @@ func TestAccountQuotaCloudAndCrossMachineSharing(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		cl := cloud(fmt.Sprintf("cloud-%d", i))
 		clients = append(clients, cl)
-		if e := cl.ReportRuntime(c, api.Runtime{CLI: "claude-cloud", Account: " Shared@Example.com "}); e != nil {
+		rt := api.Runtime{CLI: "claude-cloud", Account: " Shared@Example.com "}
+		if i == 2 {
+			rt.Quota = &api.Quota{Source: "claude", Provider: "unknown", Status: "unsupported"}
+		}
+		if e := cl.ReportRuntime(c, rt); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -38,7 +42,7 @@ func TestAccountQuotaCloudAndCrossMachineSharing(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		if got.Runtime == nil || got.Runtime.Quota == nil || !got.Runtime.Quota.Shared || got.Runtime.Quota.Windows[0].Used != .85 {
+		if got.Runtime == nil || got.Runtime.Quota == nil || !got.Runtime.Quota.Shared || got.Runtime.Quota.Status != "ok" || got.Runtime.Quota.Provider != "claude" || got.Runtime.Quota.Windows[0].Used != .85 {
 			t.Fatal("cloud peer did not inherit current numbers")
 		}
 	}

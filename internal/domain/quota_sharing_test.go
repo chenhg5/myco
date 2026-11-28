@@ -60,3 +60,16 @@ func TestResolveQuotaPlaceholderCannotClearAuthenticationFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestSubscriptionQuotaCloudUnsupportedAPIIsNotShared(t *testing.T) {
+	for _, q := range []*Quota{
+		{Provider: "claude", Source: "claude", Plan: "api", Status: "unsupported"},
+		{Provider: "unknown", Source: "claude", SourceKind: "official_api", Status: "unsupported"},
+		{Provider: "kimi", Source: "kimi", Plan: "coding_plan", Status: "unsupported"},
+	} {
+		a := &Agent{Binding: Binding{Harness: "claude-cloud"}, Runtime: Runtime{Quota: q}}
+		if p, _ := SubscriptionQuotaContext(a); p != "" {
+			t.Fatal("cloud binding joined an API quota to a subscription")
+		}
+	}
+}

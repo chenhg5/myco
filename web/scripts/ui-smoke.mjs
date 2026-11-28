@@ -6718,6 +6718,7 @@ async function runMatrix(browser, size, scheme) {
           }
         }
         await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
+        // This agent belongs to the project; it is not in the loose-chat group.
         await openMember(page, narrow, "官网改版", "Release (Claude 云端)");
         const pill = page.locator(".conv-detail [data-testid=quota-pill]"); await pill.waitFor();
         if (!(await pill.getAttribute("title")).includes("同账号的另一个 agent")) throw Error("输入框额度 tooltip 缺少匿名共享来源");
