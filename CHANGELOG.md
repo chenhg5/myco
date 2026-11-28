@@ -4,19 +4,60 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
-## v0.23.11
+## v0.23.12
 
 Brief release notes, generated from commit titles. Formal notes will follow.
-- App, CLI, Hub: ` Quota older than an hour reads as unknown, not ok ` (5cd636e3)
-- CLI: ` Status line keeps Claude Code's usage limits for quota ` (7f0ab0a4)
+- CLI: ` Runner concurrency: a setting made in the same clock tick wins; every change is written ` (dd1daf37)
+- App: ` Pin code-host identity scopes and validate repository segments ` (d3e45560)
+- App, Hub: ` Add private read-only code-host account bridge ` (b4c7ea5b)
+- App: ` Localize runner update notices across all App languages ` (9290c262)
+- App: ` App: project file quotas get their own Settings entry ` (820db674)
+- App: ` Describe automatic command-line updates and idle runner restarts in About ` (afc7bbd3)
+- App, Runner, CLI, Hub: ` Restart updated runners when idle and retain App upgrade results ` (6d2417c0)
+- App: ` App: back to what a project's right pane showed; no underline on a chat's name ` (d07090f7)
+- App, Hub: ` Add seven offline App languages with system selection and core flow translations ` (fc991171)
+- App: ` App: an answer right under your bubble keeps clear of its copy button ` (b5755d80)
+- Hub: ` One rule decides whether quota is current ` (7ad819f0)
+- App: ` App: channels list what is connected and offer the rest as tiles ` (eeb51b0a)
+
+1 additional production commits are listed in the comparison below.
 
 **中文**
 
 简要说明，直接列出提交原标题；正式说明稍后补充。
-- 桌面应用、命令行、Hub：` Quota older than an hour reads as unknown, not ok ` (5cd636e3)
-- 命令行：` Status line keeps Claude Code's usage limits for quota ` (7f0ab0a4)
+- 命令行：` Runner concurrency: a setting made in the same clock tick wins; every change is written ` (dd1daf37)
+- 桌面应用：` Pin code-host identity scopes and validate repository segments ` (d3e45560)
+- 桌面应用、Hub：` Add private read-only code-host account bridge ` (b4c7ea5b)
+- 桌面应用：` Localize runner update notices across all App languages ` (9290c262)
+- 桌面应用：` App: project file quotas get their own Settings entry ` (820db674)
+- 桌面应用：` Describe automatic command-line updates and idle runner restarts in About ` (afc7bbd3)
+- 桌面应用、任务执行器、命令行、Hub：` Restart updated runners when idle and retain App upgrade results ` (6d2417c0)
+- 桌面应用：` App: back to what a project's right pane showed; no underline on a chat's name ` (d07090f7)
+- 桌面应用、Hub：` Add seven offline App languages with system selection and core flow translations ` (fc991171)
+- 桌面应用：` App: an answer right under your bubble keeps clear of its copy button ` (b5755d80)
+- Hub：` One rule decides whether quota is current ` (7ad819f0)
+- 桌面应用：` App: channels list what is connected and offer the rest as tiles ` (eeb51b0a)
 
-https://github.com/myco-ai/myco/compare/fb680da6831d8d75ec670e9b2186cfa3f72d6d61...6e3f68e266a54d8b42f6b150eda6477c0e8f2eec
+另有 1 条生产提交，见下方完整比较。
+
+https://github.com/myco-ai/myco/compare/6e3f68e266a54d8b42f6b150eda6477c0e8f2eec...dd1daf374e3730a288039c770b0fd36325fbca1a
+
+## v0.23.11
+
+
+- Hub: a quota snapshot previously marked OK becomes unknown when its observation is over an hour old; usage windows are omitted after their reset time passes.
+- App: list and composer indicators stop showing stale quota usage, while quota details identify old observations and omit windows whose reset time has passed.
+- CLI and runner: a healthy runner-collected quota remains the reported value when status-line data is available, even if its weekly window has an older observation time.
+- CLI: joining myco configures Claude Code's status line to collect account usage limits when it runs, for inbox wait or the runner to report to the Hub; an existing status line keeps working.
+- CLI: uninstalling myco's Claude Code status line restores the previously configured line.
+
+**中文**
+
+- Hub：原本标为正常的配额快照，若观测时间已超过一小时，会按未知处理；用量窗口的重置时间过后不再展示该窗口。
+- 桌面应用：列表和输入区提示不再展示过期配额用量；配额详情会指出观测数据已过期，并隐藏重置时间已过的用量窗口。
+- 命令行和任务执行器：即使每周用量窗口的观测时间较早，只要执行器采集的配额数据仍有效，就不会被状态栏数据替换。
+- 命令行：加入 myco 时会配置 Claude Code 状态栏，在其运行时采集账号用量限制，供 inbox wait 或任务执行器上报至 Hub；原有状态栏命令仍可运行。
+- 命令行：卸载 myco 的 Claude Code 状态栏配置后，会恢复此前配置的状态栏命令。
 
 ## v0.23.10
 
