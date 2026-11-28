@@ -19,6 +19,7 @@ import (
 	"io"
 	"log/slog"
 	"math/rand"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"sort"
@@ -51,6 +52,9 @@ const (
 
 // Options configure a world.
 type Options struct {
+	// RequestDelay simulates slow transport/storage in the in-process harness.
+	RequestDelay time.Duration
+	clock        *scenarioClock
 	// Dir holds the hub's database (a temporary directory).
 	Dir string
 	// Unit is how long one unit of scenario time is: scenario latencies
@@ -167,15 +171,30 @@ func NewWorld(ctx context.Context, opts Options) (*World, error) {
 	policy := app.DefaultMessagePolicy()
 	// (Build sets a few package-level things: one world at a time)
 	buildMu.Lock()
+	var serviceClock app.Clock
+	if opts.clock != nil {
+		serviceClock = opts.clock
+	}
 	h, err := hubserver.Build(hubserver.Options{DBPath: w.db, AdminToken: adminToken, Policy: policy,
 		// an agent that stopped asking for work is away after four units
-		OnlineWindow: 4 * opts.Unit, Log: slog.New(slog.NewTextHandler(logw, nil))})
+		Clock: serviceClock, OnlineWindow: 4 * opts.Unit, Log: slog.New(slog.NewTextHandler(logw, nil))})
 	buildMu.Unlock()
 	if err != nil {
 		return nil, err
 	}
 	w.hub = h
-	w.srv = httptest.NewServer(h.Handler)
+	w.srv = httptest.NewServer(http.HandlerFunc(func(out http.ResponseWriter, r *http.Request) {
+		requestCtx := r.Context()
+		if opts.clock != nil {
+			ctx, done := scenarioActorContext(context.WithValue(requestCtx, scenarioClockKey{}, opts.clock))
+			defer done()
+			r = r.WithContext(ctx)
+		}
+		if opts.RequestDelay > 0 && !sleepCtx(requestCtx, opts.RequestDelay) {
+			return
+		}
+		h.Handler.ServeHTTP(out, r)
+	}))
 	w.URL = w.srv.URL
 	if w.admin, err = client.New(w.URL, adminToken); err != nil {
 		w.Close()
@@ -204,7 +223,7 @@ func NewWorld(ctx context.Context, opts Options) (*World, error) {
 		return nil, fmt.Errorf("the coordinator: %w", err)
 	}
 	w.CoordToken = reg.Token
-	w.start = time.Now()
+	w.start = w.now()
 	return w, nil
 }
 
@@ -277,7 +296,7 @@ func (w *World) SendGoal(ctx context.Context, body, priority string) (Goal, erro
 	if err != nil {
 		return Goal{}, err
 	}
-	g := Goal{ID: res.Message.ID, Body: body, SentAt: time.Now(), Priority: priority}
+	g := Goal{ID: res.Message.ID, Body: body, SentAt: w.now(), Priority: priority}
 	w.mu.Lock()
 	w.goals = append(w.goals, g)
 	w.mu.Unlock()
@@ -328,7 +347,7 @@ func (w *World) goal(ctx context.Context, id string) (*api.Message, error) {
 }
 
 func (w *World) record(e Event) {
-	e.At = time.Now()
+	e.At = w.now()
 	w.mu.Lock()
 	w.events = append(w.events, e)
 	w.mu.Unlock()
@@ -349,23 +368,23 @@ func (w *World) Run(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	w.cancel = cancel
 	w.wg.Add(1)
-	go w.answerQuestions(ctx)
+	goScenario(ctx, w.answerQuestions)
 	if w.hub.TaskMonitor != nil {
 		w.wg.Add(1)
-		go func() {
+		goScenario(ctx, func(ctx context.Context) {
 			defer w.wg.Done()
 			for ctx.Err() == nil {
 				_ = w.hub.TaskMonitor.Tick(ctx)
 				sleepCtx(ctx, w.opts.Unit)
 			}
-		}()
+		})
 	}
 	for _, f := range w.fakes {
 		w.wg.Add(1)
-		go func(f *Fake) {
+		goScenario(ctx, func(ctx context.Context) {
 			defer w.wg.Done()
 			f.run(ctx)
-		}(f)
+		})
 	}
 }
 
@@ -435,4 +454,11 @@ func threadIDs(ctx context.Context, db *sql.DB) ([]string, error) {
 // Agents are the agents the hub knows now.
 func (w *World) Agents(ctx context.Context) ([]api.Agent, error) {
 	return w.admin.ListAgents(ctx, "", false)
+}
+
+func (w *World) now() time.Time {
+	if w.opts.clock != nil {
+		return w.opts.clock.Now()
+	}
+	return time.Now()
 }

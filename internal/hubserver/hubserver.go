@@ -47,7 +47,10 @@ type Options struct {
 	AdminToken   string
 	Policy       app.MessagePolicy
 	OnlineWindow time.Duration
-	Dispatch     app.DispatchPolicy
+	// Clock overrides service time for deterministic in-process harnesses.
+	// Production callers leave it nil to use the system clock.
+	Clock    app.Clock
+	Dispatch app.DispatchPolicy
 	// FilesDir stores attachment contents (default: <db dir>/files).
 	FilesDir string
 	// Files bounds uploads (zero value: DefaultFilePolicy).
@@ -167,7 +170,11 @@ func Build(o Options) (*Hub, error) {
 	// react to others (notices) without their code calling them.
 	bus := app.NewEventBus()
 	msgRepo := app.ObserveMessages(sqlite.NewMessageRepo(db), bus)
-	ids, clock := security.IDs{}, app.SystemClock{}
+	ids := security.IDs{}
+	var clock app.Clock = o.Clock
+	if clock == nil {
+		clock = app.SystemClock{}
+	}
 	wakers := DefaultWakers()
 	agents := app.NewAgentService(agentsRepo, security.Tokens{}, ids, clock, o.OnlineWindow, wakers)
 	agents.SetAvatarStore(agentsRepo)

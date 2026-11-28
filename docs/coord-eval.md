@@ -42,6 +42,16 @@ Times are in **units** (`-unit`, 5 s by default for a real CLI, which thinks
 between commands): latencies, deadlines and thresholds. The run of a
 scenario ends when every goal is answered, or at its deadline.
 
+Scripted baselines (including the deliberately naive one) use a scenario
+clock shared by the Hub, workers, coordinator and checker. It advances only
+when all participants are waiting; runnable work and HTTP/SQLite latency do
+not consume scenario time. Presence, delayed goals, work and deadlines use
+the same clock. Real CLI evaluations keep system time, so their elapsed-time
+scores still include command and network costs. A caller context remains an
+independent wall-clock watchdog for deadlocks, not a scoring deadline.
+`TestBaselineWithSlowTransport` adds delayed HTTP requests and can be run with
+`GOMAXPROCS=1 go test -race ./internal/coordeval -count=20` to stress a slow host.
+
 ## The scenarios
 
 | Name | Situation | Expected |

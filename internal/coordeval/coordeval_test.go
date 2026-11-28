@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// testOpts: a unit long enough for a loaded machine, twice that under the
-// race detector. The assertions below do not depend on speed anyway.
+// Baselines measure units on the scenario clock, excluding host and I/O
+// latency. Other coordinators retain real time, with room for race builds.
 func testOpts(t *testing.T) RunOptions {
 	unit := 150 * time.Millisecond
 	if raceOn {
@@ -174,5 +174,29 @@ func TestAQuestionToThePersonIsAnsweredAndCounted(t *testing.T) {
 	}
 	if !res.Correct || res.Interruptions != 1 || !hasDeduction(res, "asked the person 1 time") {
 		t.Fatalf("%+v", res)
+	}
+}
+
+// One HTTP round trip is slower than a unit. This must affect how long
+// the test takes, not whether a correct coordinator reaches an answer.
+func TestBaselineWithSlowTransport(t *testing.T) {
+	for _, name := range []string{"parallel-five", "offline-midway"} {
+		t.Run(name, func(t *testing.T) {
+			opts := testOpts(t)
+			opts.Unit = time.Millisecond
+			opts.RequestDelay = 5 * time.Millisecond
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			defer cancel()
+			res, _, err := RunScenario(ctx, ScenarioByName(name), Baseline{}, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !res.Passed {
+				t.Fatalf("slow transport: %+v", res)
+			}
+			if why := expected[name]; why != nil && why(res) != "" {
+				t.Fatalf("%s: %+v", why(res), res)
+			}
+		})
 	}
 }
