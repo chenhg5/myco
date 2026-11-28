@@ -35,12 +35,15 @@ func TestIsolatedRunUsesMemberDevicesAndValidatesTaskReplies(t *testing.T) {
 	c := testConfig(root)
 	var output bytes.Buffer
 	// This test validates a finite workload, not shared-host capacity. Keep
-	// the existing 45s total safety bound, including setup and cleanup, rather
-	// than adding a stricter 5s drain capacity gate inside that same budget.
-	// Under -race, queued housekeeping can outlive 5s after all tasks finish.
-	// Production load runs retain their configured cooldown and SLO failures.
+	// the existing 45s workload context for setup and traffic, rather than
+	// imposing separate 5s drain and short-I/O capacity gates inside it.
+	// Under -race, housekeeping can outlive 5s and overview reads can exceed
+	// 5s while the finite workload still completes within that same budget.
+	// Teardown keeps its existing independent limits. Production load runs
+	// retain their configured request timeout, cooldown and SLO failures.
 	const safetyBudget = 45 * time.Second
 	c.Cooldown = safetyBudget
+	c.RequestTimeout = safetyBudget
 	ctx, cancel := context.WithTimeout(t.Context(), safetyBudget)
 	defer cancel()
 	if e := Run(ctx, c, &output); e != nil && !errors.Is(e, errAcceptance) {

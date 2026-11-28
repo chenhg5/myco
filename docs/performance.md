@@ -145,6 +145,8 @@ Draining waits for admitted short-request jobs and task reply validation, then
 cancels empty inbox polls and joins their goroutines. Idle long polls are not
 completion dependencies. The configured cooldown remains a capacity/acceptance
 limit for the load tool, including queued housekeeping. Its functional Go test
-uses the existing total test safety budget for draining instead of imposing an
-additional five-second capacity gate on shared race-instrumented hosts; SLOs
-remain in the report and the standalone tool still fails their acceptance check.
+uses its existing 45-second workload context for setup, draining and individual
+I/O instead of additional five-second capacity gates on shared race-instrumented
+hosts. Teardown keeps its existing independent bounds. SLOs remain in the report;
+the standalone tool still uses its configured request/drain deadlines and fails
+its acceptance check.
