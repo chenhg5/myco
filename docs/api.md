@@ -1677,6 +1677,11 @@ get and overview responses resolve the agent's current account binding under
 | `checked_at` | Time of the latest actual acquisition attempt |
 | `error_code` | Safe constant reason; never a raw HTTP body, token, or process error |
 
+
+A quota window may have `status: "warning"` (normalized from Claude's
+`allowed_warning`): near its limit but still usable. It is not `rejected`
+and does not mean the window is exhausted.
+
 Windows add optional `duration_sec` and `model_scope`. `used` remains the share
 used, in `[0,1]`; remaining is `1-used`. A missing window or reset is unknown,
 not a full allowance. In particular, `primary` is not necessarily a five-hour

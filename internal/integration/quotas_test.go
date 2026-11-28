@@ -226,15 +226,15 @@ func TestSessionReportedQuotaReachesTheOwnersApp(t *testing.T) {
 	c := ctx(t)
 	h := startHub(t, filepath.Join(t.TempDir(), "hub.db"), app.DefaultMessagePolicy())
 	admin := h.admin()
-	ct, e := admin.CreateConsoleToken(c, "glenn-device")
+	ct, e := admin.CreateConsoleToken(c, "demo-device")
 	if e != nil {
 		t.Fatal(e)
 	}
 	owner := h.client(ct.Token)
-	cloudy := h.client(h.register(api.RegisterRequest{Name: "cloudy", Binding: api.Binding{Harness: "inbox"}}))
+	cloudy := h.client(h.register(api.RegisterRequest{Name: "cloudy", Binding: api.Binding{Harness: "claude-cloud"}}))
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	q := api.Quota{Source: "claude", Provider: "claude", SourceKind: "cloud_session", Status: "ok", At: now, CheckedAt: now,
-		Windows: []api.QuotaWindow{{Name: "five_hour", Used: .17, DurationSec: 18000}, {Name: "seven_day", Used: .48, DurationSec: 604800}}}
+		Windows: []api.QuotaWindow{{Name: "five_hour", Used: .17, DurationSec: 18000}, {Name: "seven_day", Used: .81, DurationSec: 604800, Status: "warning"}}}
 	if e = cloudy.ReportRuntime(c, api.Runtime{CLI: "inbox", Quota: &q}); e != nil {
 		t.Fatal(e)
 	}
@@ -244,6 +244,9 @@ func TestSessionReportedQuotaReachesTheOwnersApp(t *testing.T) {
 	}
 	if ag.Runtime == nil || ag.Runtime.Quota == nil || len(ag.Runtime.Quota.Windows) != 2 || ag.Runtime.Quota.SourceKind != "cloud_session" {
 		t.Fatalf("the owner cannot see the session's quota: %+v", ag.Runtime)
+	}
+	if got := ag.Runtime.Quota.Windows[1]; got.Status != "warning" || got.Used != .81 {
+		t.Fatalf("warning lost before reaching the App: %+v", got)
 	}
 	ov, e := owner.Overview(c, 0)
 	if e != nil {

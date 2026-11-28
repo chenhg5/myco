@@ -25,7 +25,7 @@ const built = await build({
   format: "esm",
   plugins: [stub],
 });
-const { quotaWindowLabel, quotaWindowText, quotaRemainingText, quotaSpent, quotaLiveWindows, quotaHasNumbers, quotaEffectiveStatus, quotaStatusText, quotaSummary, quotaSourceText, quotaOldNote, quotaOutNote, quotaWorst } = await import(
+const { quotaPillLevel, quotaWindowLabel, quotaWindowText, quotaRemainingText, quotaSpent, quotaLiveWindows, quotaHasNumbers, quotaEffectiveStatus, quotaStatusText, quotaSummary, quotaSourceText, quotaOldNote, quotaOutNote, quotaWorst } = await import(
   `data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`
 );
 
@@ -123,3 +123,15 @@ console.log("quota: balance and unlimited in Chinese and English passed");
 
 assert.equal(quotaWindowLabel({ name: "monthly_mcp", used: .2 }), "每月 · MCP");
 assert.equal(enQuota.quotaWindowLabel({ name: "monthly_mcp", used: .2 }), "Monthly · MCP");
+
+// Claude warns before a window is spent. Both old and normalized states
+// remain available and visible as near-limit even below the 90% fallback.
+for (const status of ["warning", "allowed_warning"]) {
+  const warning = quotaSummary({ ...two, windows: [{ ...win("seven_day", .81, now + hour), status }] }, [], now);
+  assert.equal(warning.level, "tight");
+  assert.equal(warning.short, "剩 19%");
+  assert.ok(warning.line.includes("接近上限"), warning.line);
+  assert.ok(!warning.line.includes("用完"), warning.line);
+}
+
+assert.equal(quotaPillLevel({ name: "seven_day", used: .76, status: "warning" }), "low");

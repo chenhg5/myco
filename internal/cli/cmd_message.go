@@ -156,6 +156,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 
 	reply := &Command{
 		Name:     "reply",
+		Long:     "Claude cloud sessions receive a quota_hint in JSON when their session quota is missing or over 30 minutes old.",
 		Summary:  "Answer a task (closes it)",
 		Mutating: true,
 		Examples: []string{
@@ -217,7 +218,7 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 			if dry {
 				return e.dryRun(map[string]any{"action": "reply", "reply": m})
 			}
-			return e.p.Print(map[string]any{"reply": m}, func(w io.Writer) { fmt.Fprintf(w, "replied %s -> %s\n", m.ID, m.To) })
+			return e.p.Print(e.withQuotaHint(c, map[string]any{"reply": m}), func(w io.Writer) { fmt.Fprintf(w, "replied %s -> %s\n", m.ID, m.To) })
 		}),
 	}
 
@@ -310,11 +311,15 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 
 	transition := func(verb, summary, example string) *Command {
 		flags := []Flag{idFlag}
+		long := ""
+		if verb == "done" {
+			long = "Claude cloud sessions receive a quota_hint in JSON when their session quota is missing or over 30 minutes old."
+		}
 		if verb == "hold" {
 			flags = append(flags, Flag{Name: "until", Kind: String, Help: "Task you sent to another agent; resume when it ends"})
 		}
 		return &Command{
-			Name: verb, Summary: summary, Mutating: true, Examples: []string{example}, Flags: flags,
+			Name: verb, Summary: summary, Long: long, Mutating: true, Examples: []string{example}, Flags: flags,
 			Run: handler(func(e *env) error {
 				if err := e.in.Require("id"); err != nil {
 					return err
@@ -372,7 +377,11 @@ Inside a runner, --thread defaults to the current thread so replies resume this 
 						}
 					})
 				}
-				return e.p.Print(map[string]any{"message": m}, func(w io.Writer) { fmt.Fprintf(w, "%s is now %s\n", m.ID, m.Status) })
+				out := map[string]any{"message": m}
+				if verb == "done" {
+					out = e.withQuotaHint(c, out)
+				}
+				return e.p.Print(out, func(w io.Writer) { fmt.Fprintf(w, "%s is now %s\n", m.ID, m.Status) })
 			}),
 		}
 	}
@@ -663,7 +672,9 @@ Claude Code (claude or claude-cloud) and 10m for other or unknown harnesses; use
 MYCO_WAIT_TIMEOUT or --timeout to override. Claude Code's background command limit is 2h,
 and its prompt cache lasts about 1h, so 55m lets the wait end on its own while the cache is
 warm. Exit 0 means messages are pending; exit 7 means the wait timed out or was interrupted.
-After every exit, process the inbox and run myco inbox wait again.`,
+After every exit, process the inbox and run myco inbox wait again.
+For a Claude cloud session, JSON includes quota_hint when its session quota is missing or
+over 30 minutes old; follow it to report the newest rate_limit_event.`,
 		Examples: []string{
 			"myco inbox wait",
 			"myco inbox wait --timeout 30m --format json",
@@ -705,12 +716,12 @@ After every exit, process the inbox and run myco inbox wait again.`,
 				return err
 			}
 			if len(msgs) == 0 {
-				return &Error{Code: "timeout", Message: "no messages arrived", Retryable: true, Exit: ExitTimeout}
+				return &Error{Code: "timeout", Message: "no messages arrived", Retryable: true, Exit: ExitTimeout, QuotaHint: cloudQuotaHint(e.in.Ctx, c, e.in.Getenv, time.Now(), e.cfgPath)}
 			}
 			if usage != nil {
 				usage.remember(cfg.Hub, cfg.Agent, msgs)
 			}
-			out := inboxResult{Messages: nonNilMsgs(msgs), Hint: inboxWaitHint(inboxTaskHint(msgs)), Timeout: raw}
+			out := inboxResult{Messages: nonNilMsgs(msgs), Hint: inboxWaitHint(inboxTaskHint(msgs)), Timeout: raw, QuotaHint: cloudQuotaHint(e.in.Ctx, c, e.in.Getenv, time.Now(), e.cfgPath)}
 			return e.p.Print(out, func(w io.Writer) {
 				fmt.Fprintf(w, "%d message(s) waiting; run: myco inbox pull\n", len(msgs))
 				if taskHint := inboxTaskHint(msgs); taskHint != "" {
@@ -725,9 +736,10 @@ After every exit, process the inbox and run myco inbox wait again.`,
 
 // inboxResult adds a CLI-only hint without changing the Hub's message-list API.
 type inboxResult struct {
-	Messages []api.Message `json:"messages"`
-	Hint     string        `json:"hint,omitempty"`
-	Timeout  string        `json:"timeout,omitempty"`
+	QuotaHint string        `json:"quota_hint,omitempty"`
+	Messages  []api.Message `json:"messages"`
+	Hint      string        `json:"hint,omitempty"`
+	Timeout   string        `json:"timeout,omitempty"`
 	// Open are tasks this agent acked earlier and has not closed (not the
 	// ones just pulled): until it replies, fails or marks them done, the
 	// people who sent them see them as unfinished.

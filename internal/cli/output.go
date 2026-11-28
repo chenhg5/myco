@@ -36,6 +36,7 @@ Output: JSON on stdout when not a TTY (or --format json); logs and errors on std
 
 // Error is the CLI's structured error (printed as JSON to stderr).
 type Error struct {
+	QuotaHint  string         `json:"quota_hint,omitempty"`
 	ErrorNode  string         `json:"error_node,omitempty"`
 	Code       string         `json:"error"`
 	Message    string         `json:"message"`

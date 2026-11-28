@@ -252,9 +252,10 @@ type ownedMessage struct {
 }
 
 type inboxWaitAllResult struct {
-	Messages []api.Message `json:"messages"`
-	Hint     string        `json:"hint,omitempty"`
-	Timeout  string        `json:"timeout,omitempty"`
+	QuotaHint string        `json:"quota_hint,omitempty"`
+	Messages  []api.Message `json:"messages"`
+	Hint      string        `json:"hint,omitempty"`
+	Timeout   string        `json:"timeout,omitempty"`
 	// For: the identity these messages came to (the others may have some too:
 	// myco inbox pull takes them all).
 	For        *messageOwner   `json:"for"`
@@ -329,7 +330,7 @@ func (e *env) inboxWaitAll(ids []config.Profile) error {
 		rememberMessageOwners(e.defaultPath, ids[r.i].Path, mids)
 		usage.remember(ids[r.i].Config.Hub, ids[r.i].Config.Agent, r.msgs)
 		out := inboxWaitAllResult{Messages: nonNilMsgs(r.msgs), Hint: inboxWaitHint(inboxTaskHint(r.msgs)), Timeout: raw,
-			For: all[r.i], Identities: all}
+			For: all[r.i], Identities: all, QuotaHint: cloudQuotaHint(e.in.Ctx, clients[r.i], e.in.Getenv, time.Now(), ids[r.i].Path)}
 		return e.p.Print(out, func(w io.Writer) {
 			fmt.Fprintf(w, "%d message(s) waiting for %s; run: myco inbox pull (it takes every workspace's)\n", len(r.msgs), labels[r.i])
 			if taskHint := inboxTaskHint(r.msgs); taskHint != "" {
@@ -343,7 +344,8 @@ func (e *env) inboxWaitAll(ids []config.Profile) error {
 			Retryable: true, Exit: ExitTimeout}
 	}
 	_ = firstErr // said on stderr as it happened; the others timed out
-	return &Error{Code: "timeout", Message: "no messages arrived", Retryable: true, Exit: ExitTimeout}
+	c, _ := e.agentClient()
+	return &Error{Code: "timeout", Message: "no messages arrived", Retryable: true, Exit: ExitTimeout, QuotaHint: cloudQuotaHint(e.in.Ctx, c, e.in.Getenv, time.Now(), e.cfgPath)}
 }
 
 type inboxPullAllResult struct {

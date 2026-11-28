@@ -708,3 +708,8 @@ OpenRouter uses the existing quota rows and member/composer tags. Details show
 “余额”, “剩 $17.50”, “不限额”. A balance has no window/reset countdown. Preserve
 existing stale/failure notes. UI smoke: “成员 · OpenRouter 余额额度”, both widths
 and themes, checks finite balance details, composer and unlimited member tag.
+
+Quota windows that Claude marks `allowed_warning` (normalized as `warning`)
+remain usable: show the remaining percentage in amber and “接近上限” / “Near
+limit” in the window details and summary. Do not show “Out of quota” until a
+window is refused or its measured use reaches 100%.
