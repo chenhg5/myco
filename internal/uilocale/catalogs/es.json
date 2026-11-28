@@ -3435,5 +3435,8 @@
   "Online · waiting for you to claim it": "Conectado · esperando que lo reclames",
   "Send this line to the bot in a direct message in {0} to become its owner (then what others write to it reaches {1}):": "Envía esta línea al bot por mensaje directo en {0} para convertirte en su propietario; así, lo que otros le escriban llegará a {1}:",
   "Live · port {0}": "En vivo · puerto {0}",
-  "Back to {0} and {1}": "Volver a {0} y {1}"
+  "Back to {0} and {1}": "Volver a {0} y {1}",
+  "Project files": "Archivos del proyecto",
+  "How many files each project may keep, and how much space. Only a workspace's owner and admins can change it.": "Cuántos archivos puede guardar cada proyecto y cuánto espacio. Solo el propietario y los administradores del espacio de trabajo pueden cambiarlo.",
+  "You don't own or administer a workspace, so there is nothing to change here.": "No eres propietario ni administrador de ningún espacio de trabajo, así que aquí no hay nada que cambiar."
 }

@@ -9428,7 +9428,11 @@ async function runMatrix(browser, size, scheme) {
 
     await step("设置 · 项目文件额度", async () => {
       await go(page,"设置",narrow);
+      // Its own entry in Settings, not under 工作区.
       await clickVisible(page,page.locator(".app-settings-tab",{hasText:"工作区"}));
+      await page.locator(".app-settings-head h2",{hasText:"工作区"}).waitFor();
+      if(await page.locator('[data-setting="project-storage"]').count())throw Error("项目文件额度不该再放在「工作区」里");
+      await clickVisible(page,page.locator(".app-settings-tab",{hasText:"项目文件"}));
       const card=page.locator('[data-setting="project-storage"][data-hub="hub_studio"]');
       await card.locator("select").selectOption("website");
       const files=card.getByRole("spinbutton",{name:"文件数上限",exact:true});

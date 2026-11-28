@@ -3435,5 +3435,8 @@
   "Online · waiting for you to claim it": "온라인 · 소유자 등록 대기 중",
   "Send this line to the bot in a direct message in {0} to become its owner (then what others write to it reaches {1}):": "{0}에서 봇에게 다음 줄을 개인 메시지로 보내면 소유자가 됩니다. 이후 다른 사람이 봇에게 보낸 메시지가 {1}에게 전달됩니다:",
   "Live · port {0}": "실시간 · 포트 {0}",
-  "Back to {0} and {1}": "{0}와(과) {1}의 대화로 돌아가기"
+  "Back to {0} and {1}": "{0}와(과) {1}의 대화로 돌아가기",
+  "Project files": "프로젝트 파일",
+  "How many files each project may keep, and how much space. Only a workspace's owner and admins can change it.": "각 프로젝트에 둘 수 있는 파일 수와 용량입니다. 워크스페이스 소유자와 관리자만 바꿀 수 있습니다.",
+  "You don't own or administer a workspace, so there is nothing to change here.": "소유하거나 관리하는 워크스페이스가 없어 여기서 바꿀 수 있는 것이 없습니다."
 }
