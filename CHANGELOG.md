@@ -4,6 +4,20 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.11
+
+Brief release notes, generated from commit titles. Formal notes will follow.
+- App, CLI, Hub: ` Quota older than an hour reads as unknown, not ok ` (5cd636e3)
+- CLI: ` Status line keeps Claude Code's usage limits for quota ` (7f0ab0a4)
+
+**中文**
+
+简要说明，直接列出提交原标题；正式说明稍后补充。
+- 桌面应用、命令行、Hub：` Quota older than an hour reads as unknown, not ok ` (5cd636e3)
+- 命令行：` Status line keeps Claude Code's usage limits for quota ` (7f0ab0a4)
+
+https://github.com/myco-ai/myco/compare/fb680da6831d8d75ec670e9b2186cfa3f72d6d61...6e3f68e266a54d8b42f6b150eda6477c0e8f2eec
+
 ## v0.23.10
 
 Brief release notes, generated from commit titles. Formal notes will follow.
