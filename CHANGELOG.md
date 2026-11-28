@@ -4,43 +4,64 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
-## v0.23.9
+## v0.23.10
 
 Brief release notes, generated from commit titles. Formal notes will follow.
-- App: ` App: a chat's head opens its profile; its open work is settled in the chat ` (a1d7e274)
-- App: ` App: a workflow step's failure is said once, with a touch of red ` (bbabe3c3)
-- App: ` App: a workflow card's row has no tag or failure; the card says it ` (2a683e59)
-- App: ` App: a workflow card's time row no longer lies over what follows it ` (9eda3eea)
-- App: ` App: a workflow card's time and buttons at its right, on hover ` (baa04a54)
-- App: ` App: workflow messages are the workspace's; a failed task is a quiet line ` (8f4d086f)
-- App: ` App: a workflow's steps in a chat read as themselves, quietly ` (c72b27e0)
-- App: ` App: a workflow's end, in a chat, is a card with a way to its run ` (3359b678)
-- Hub: ` Replace stalled shared hub transports after bounded no-response timeouts ` (3aad16cf)
-- App, CLI, Hub: ` Allow lists: add and remove senders instead of silently replacing the list ` (c2bf5082)
-- Runner, CLI, Hub: ` Allow exec node owners to run commands from their console ` (f01abd4b)
-- CLI: ` Publish machine health without racing runtime discovery ` (5b57ff22)
+- App, Runner, CLI, Hub: ` Runner concurrency: default 10, changed live from the App or CLI ` (fb680da6)
+- App: ` App: a question is answered for the task it was asked on, and shows in time ` (7d7b9e6d)
+- App: ` App: help pictures load in the desktop App; English names; loading kept ` (e287db29)
+- App: ` Docs: a machine's access limit applies to running agents within seconds; web dist ` (f18eda55)
+- App: ` App: after Allow, Full is selectable once the runner says so; older runners say restart ` (2335385c)
+- Runner, CLI: ` Runner: the machine's access limit is read live, every run ` (84d50621)
+- App: ` Remove ellipsis from the set-goal menu label ` (4ee01acc)
+- Hub: ` Preserve original console sender permissions during reassignment ` (c0ffcb0b)
+- Hub: ` Prevent forwarding hidden private tasks through reassignment ` (a2869836)
+- App, Runner, CLI, Hub: ` Add task trees and atomic queued-task reassignment ` (187b7bcc)
+- CLI: ` Preserve fork batch recovery keys on network errors ` (7becf2ad)
+- App, Runner, CLI, Hub: ` Add managed agent session forks and safe retirement ` (6b1c727f)
 
 2 additional production commits are listed in the comparison below.
 
 **中文**
 
 简要说明，直接列出提交原标题；正式说明稍后补充。
-- 桌面应用：` App: a chat's head opens its profile; its open work is settled in the chat ` (a1d7e274)
-- 桌面应用：` App: a workflow step's failure is said once, with a touch of red ` (bbabe3c3)
-- 桌面应用：` App: a workflow card's row has no tag or failure; the card says it ` (2a683e59)
-- 桌面应用：` App: a workflow card's time row no longer lies over what follows it ` (9eda3eea)
-- 桌面应用：` App: a workflow card's time and buttons at its right, on hover ` (baa04a54)
-- 桌面应用：` App: workflow messages are the workspace's; a failed task is a quiet line ` (8f4d086f)
-- 桌面应用：` App: a workflow's steps in a chat read as themselves, quietly ` (c72b27e0)
-- 桌面应用：` App: a workflow's end, in a chat, is a card with a way to its run ` (3359b678)
-- Hub：` Replace stalled shared hub transports after bounded no-response timeouts ` (3aad16cf)
-- 桌面应用、命令行、Hub：` Allow lists: add and remove senders instead of silently replacing the list ` (c2bf5082)
-- 任务执行器、命令行、Hub：` Allow exec node owners to run commands from their console ` (f01abd4b)
-- 命令行：` Publish machine health without racing runtime discovery ` (5b57ff22)
+- 桌面应用、任务执行器、命令行、Hub：` Runner concurrency: default 10, changed live from the App or CLI ` (fb680da6)
+- 桌面应用：` App: a question is answered for the task it was asked on, and shows in time ` (7d7b9e6d)
+- 桌面应用：` App: help pictures load in the desktop App; English names; loading kept ` (e287db29)
+- 桌面应用：` Docs: a machine's access limit applies to running agents within seconds; web dist ` (f18eda55)
+- 桌面应用：` App: after Allow, Full is selectable once the runner says so; older runners say restart ` (2335385c)
+- 任务执行器、命令行：` Runner: the machine's access limit is read live, every run ` (84d50621)
+- 桌面应用：` Remove ellipsis from the set-goal menu label ` (4ee01acc)
+- Hub：` Preserve original console sender permissions during reassignment ` (c0ffcb0b)
+- Hub：` Prevent forwarding hidden private tasks through reassignment ` (a2869836)
+- 桌面应用、任务执行器、命令行、Hub：` Add task trees and atomic queued-task reassignment ` (187b7bcc)
+- 命令行：` Preserve fork batch recovery keys on network errors ` (7becf2ad)
+- 桌面应用、任务执行器、命令行、Hub：` Add managed agent session forks and safe retirement ` (6b1c727f)
 
 另有 2 条生产提交，见下方完整比较。
 
-https://github.com/myco-ai/myco/compare/09b238382f1f5c63c3cab4c297d9ab6ffd085428...a1d7e27440a5abd4415cafc884d9e403d51b4dce
+https://github.com/myco-ai/myco/compare/a1d7e27440a5abd4415cafc884d9e403d51b4dce...fb680da6831d8d75ec670e9b2186cfa3f72d6d61
+
+## v0.23.9
+
+
+- App: clicking the face or name at the top of a chat opens the agent's profile over the page you are on, and its unfinished work from elsewhere is handled from the chat.
+- App: a workflow's steps in a chat are recognised and shown quietly as the workspace's: a failed step is said once, with a touch of red, instead of a red box and a repeated failure line, and the card's time and buttons sit at its right edge on hover without covering what follows.
+- App: when a workflow run ends, the note to whoever started it is a card with the workflow's name and how it ended, and the reason when there is one.
+- CLI and Hub: `myco alias set` gains --allow-add and --allow-remove to add or remove only the named senders (with a current Hub), and --allow-from now needs --replace to confirm it may remove existing exec-node senders.
+- Runner: an exec node that already has an allow list also accepts commands from its owner's console; a node with an empty list still needs the existing exec setup.
+- Runner and App: runners keep the processes they start within their own scope and report the machine's health and pressure; the machine's owner can end a runner's processes after the hub verifies ownership.
+- CLI and runner: a connection to the hub that stops answering is replaced after two no-response timeouts within five minutes, so requests no longer keep hanging on it; requests already in progress are not cut off.
+
+**中文**
+
+- 桌面应用：点对话顶部的头像或名字，会在当前页面上打开这个 agent 的资料；它在别处还没做完的任务，直接在对话里处理。
+- 桌面应用：对话里的工作流步骤会被识别出来，安静地显示为工作区发出的消息；失败的步骤只说一次、带一点红色，不再有红框和重复的失败说明；卡片的时间和按钮悬停时出现在右侧，不再压住下面的内容。
+- 桌面应用：工作流运行结束时，发给发起人的通知变成一张卡片，写明工作流名称和结束状态，有原因时也写出原因。
+- 命令行与 Hub：`myco alias set` 新增 --allow-add 和 --allow-remove，只增加或移除指定的发送者（需要较新的 Hub）；--allow-from 可能删掉执行节点已有的发送者时，需要加 --replace 确认。
+- 任务执行器：已经设置了允许列表的执行节点，也会接受其所有者从控制台发来的命令；允许列表为空的节点仍需按原来的方式开启执行。
+- 任务执行器与桌面应用：runner 把自己启动的进程限定在自己的范围内，并上报电脑的健康和负载情况；经 Hub 核实所有权后，电脑的所有者可以结束 runner 的进程。
+- 命令行与任务执行器：与 Hub 的连接若在五分钟内两次超时无响应，会被换成新连接，请求不再一直卡在旧连接上；正在进行的请求不受影响。
 
 ## v0.23.8
 
