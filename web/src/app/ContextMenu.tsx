@@ -68,15 +68,23 @@ export function useContextMenu(className?: string): {
     const onScroll = (e: Event) => {
       if (e.target instanceof Node && e.target.contains(anchor.current)) close();
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // Consume Escape before a parent dialog's listener runs. Closing the
+      // menu can synchronously remove its DOM, so a later listener cannot
+      // reliably detect that this key belonged to a menu.
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    };
     window.addEventListener("mousedown", close);
-    window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     window.addEventListener("blur", close);
     window.addEventListener("resize", close);
     document.addEventListener("scroll", onScroll, true);
     return () => {
       window.removeEventListener("mousedown", close);
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("blur", close);
       window.removeEventListener("resize", close);
       document.removeEventListener("scroll", onScroll, true);

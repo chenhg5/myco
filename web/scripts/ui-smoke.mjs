@@ -726,6 +726,9 @@ async function runMatrix(browser, size, scheme) {
         if(message.type()==="error" && !expectedPack503)errors.push(`${message.text()} (${message.location().url||"unknown resource"})`);
       });
       check.on("request", request => { if (!request.url().startsWith(r.base) && !request.url().startsWith("data:")) outbound.push(request.url()); });
+      // Exercise durable language preferences independently of the optional
+      // conversation cache, whose unload writes WebKit can cancel noisily.
+      await preview.route(/\/app\/cache\?kind=(?:pages|traces)$/,route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({enabled:false,entries:[]})}));
       // Focus reporting is unrelated to localization. WebKit blocks a fetch
       // started by unload blur even with route.fulfill; stub only that bridge
       // so deliberate reloads do not produce unload-policy console errors.
@@ -767,7 +770,9 @@ async function runMatrix(browser, size, scheme) {
           await selectLanguage(check,language);
           await check.waitForFunction(l=>document.documentElement.lang===l, language==="zh"?"zh-CN":language);
           await check.locator(".app-settings-tab.active").filter({hasText:expected[language]}).waitFor();
-          if(await check.getByTestId("language-select").getAttribute("data-value")!==language) throw new Error("The selected language was not retained");
+          // The global HTML language updates before React commits the field.
+          // Wait for the actual selected state, without repeating the action.
+          await check.waitForFunction(l=>document.querySelector('[data-testid="language-select"]')?.getAttribute("data-value")===l,language);
           await check.waitForFunction(l=>localStorage.getItem("myco-lang")===l,language);
           // WebKit includes clipped screen-reader text behind the dialog in
           // document.scrollWidth. Check the visible translated pane itself.
