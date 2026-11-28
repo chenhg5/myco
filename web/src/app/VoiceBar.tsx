@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { AudioLines, Mic, MicOff, PhoneOff } from "lucide-react";
 import { appApi, type VoiceLine, type VoiceState } from "@/appapi";
 import { ErrorText } from "@/app/dialogs";
-import { L, lang } from "@/lib/i18n";
+import { L, lang, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { Agent } from "@/api";
 import { Avatar } from "@/app/persona";
@@ -173,12 +173,12 @@ export function VoiceBar({ agent }: { agent?: Agent }) {
   // The talk, last few lines: what you said, what it said, what it did.
   const shown = l.lines.filter((x) => x.kind !== "notice" || x === l.lines[l.lines.length - 1]).slice(-3);
   return (
-    <div className="vc-bar" role="region" aria-label={L(`和 ${c.agentName} 语音聊天`, `Voice chat with ${c.agentName}`)}
+    <div className="vc-bar" role="region" aria-label={L(E`和 ${c.agentName} 语音聊天`, E`Voice chat with ${c.agentName}`)}
       onKeyDown={(e) => { if (e.key === "Escape") endCall(); }}>
       <div className="vc-bar-head">
         <span className={cn("vc-dot", `is-${l.on ? l.state : "idle"}`, l.muted && "is-muted")} aria-hidden />
         <span className="vc-bar-state" aria-live="polite">{stateText(l)}</span>
-        <span className="vc-bar-who">{L(`和 ${c.agentName} 语音聊天`, `Voice chat with ${c.agentName}`)}</span>
+        <span className="vc-bar-who">{L(E`和 ${c.agentName} 语音聊天`, E`Voice chat with ${c.agentName}`)}</span>
         <CallButtons l={l} />
       </div>
       <div className="vc-bar-lines">
@@ -203,7 +203,7 @@ export function VoiceBar({ agent }: { agent?: Agent }) {
             <span>{x.corrected && heardAsIs.has(x.id) ? x.corrected : x.text || "…"}
             {x.corrected && (
               <button type="button" className={cn("vc-fixed", heardAsIs.has(x.id) && "is-off")}
-                title={heardAsIs.has(x.id) ? L("显示纠正后的", "Show the corrected line") : L(`听到的是：${x.corrected}`, `Heard as: ${x.corrected}`)}
+                title={heardAsIs.has(x.id) ? L("显示纠正后的", "Show the corrected line") : L(E`听到的是：${x.corrected}`, E`Heard as: ${x.corrected}`)}
                 onClick={() => setHeardAsIs((s) => { const n = new Set(s); if (n.has(x.id)) n.delete(x.id); else n.add(x.id); return n; })}>
                 {heardAsIs.has(x.id) ? L("原话", "As heard") : L("已纠正", "Corrected")}
               </button>
@@ -238,9 +238,9 @@ function CallButtons({ l }: { l: Live }) {
 export function VoiceChip() {
   const { call: c, live: l, barsShown: shown } = useVoiceCall();
   if (!c || shown > 0) return null;
-  const back = L(`回到和 ${c.agentName} 的对话`, `Back to the chat with ${c.agentName}`);
+  const back = L(E`回到和 ${c.agentName} 的对话`, E`Back to the chat with ${c.agentName}`);
   return (
-    <div className="vc-chip" role="region" aria-label={L(`和 ${c.agentName} 语音聊天`, `Voice chat with ${c.agentName}`)}>
+    <div className="vc-chip" role="region" aria-label={L(E`和 ${c.agentName} 语音聊天`, E`Voice chat with ${c.agentName}`)}>
       <button type="button" className="vc-chip-main" title={back} aria-label={back}
         onClick={() => window.dispatchEvent(new CustomEvent("myco-voice-open", { detail: { hubId: c.hubId, agent: c.agent } }))}>
         <span className={cn("vc-dot", `is-${l.on ? l.state : "idle"}`, l.muted && "is-muted")} aria-hidden />
@@ -277,7 +277,7 @@ export function viaVoice(body: string): { text: string; heard: string } | null {
 
 export function VoiceMark({ heard }: { heard: string }) {
   return (
-    <span className="conv-tag neutral conv-voice-tag" title={heard ? L(`经语音转述。原话：${heard}`, `Passed on by voice. As said: ${heard}`) : L("经语音转述", "Passed on by voice")}>
+    <span className="conv-tag neutral conv-voice-tag" title={heard ? L(E`经语音转述。原话：${heard}`, E`Passed on by voice. As said: ${heard}`) : L("经语音转述", "Passed on by voice")}>
       <AudioLines size={11} />{L("经语音", "By voice")}
     </span>
   );

@@ -4,7 +4,7 @@ import { appApi, isOldHub } from "@/appapi";
 import type { Attachment, Message, TraceEvent, TraceStep } from "@/api";
 import { cn } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
-import { L, locale } from "@/lib/i18n";
+import { L, locale, E } from "@/lib/i18n";
 import { Elapsed, Mushroom, useVerb } from "@/app/Working";
 import { useReportsOnly } from "@/app/quietRuns";
 import { TranslatableBody } from "@/app/translate";
@@ -39,10 +39,10 @@ const processOpen = new Map<string, boolean>();
 function tookLine(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) ms = 0;
   const s = Math.round(ms / 1000);
-  if (s < 60) return L(`${s} 秒`, `${s}s`);
+  if (s < 60) return L(E`${s} 秒`, E`${s}s`);
   const m = Math.floor(s / 60);
-  if (m < 60) return L(`${m} 分钟`, `${m} min`);
-  return L(`${Math.floor(m / 60)} 小时 ${m % 60} 分`, `${Math.floor(m / 60)}h ${m % 60}m`);
+  if (m < 60) return L(E`${m} 分钟`, E`${m} min`);
+  return L(E`${Math.floor(m / 60)} 小时 ${m % 60} 分`, E`${Math.floor(m / 60)}h ${m % 60}m`);
 }
 
 /** A tool call with its result, or another step. */
@@ -235,11 +235,11 @@ function summaryOf(rows: Row[]): string {
   }
   const parts: string[] = [];
   if (rows.some((r) => r.kind === "thinking")) parts.push(L("想了一下", "thought"));
-  if (read) parts.push(L(`读了 ${read} 个文件`, `read ${read} file${read > 1 ? "s" : ""}`));
-  if (run) parts.push(L(`跑了 ${run} 条命令`, `ran ${run} command${run > 1 ? "s" : ""}`));
-  if (edit) parts.push(L(`改了 ${files.size || edit} 个文件`, `edited ${files.size || edit} file${(files.size || edit) > 1 ? "s" : ""}`));
-  if (other) parts.push(L(`另外 ${other} 次操作`, `${other} other step${other > 1 ? "s" : ""}`));
-  if (failed) parts.push(L(`${failed} 次失败`, `${failed} failed`));
+  if (read) parts.push(L(E`读了 ${read} 个文件`, E`read ${read} file${read > 1 ? "s" : ""}`));
+  if (run) parts.push(L(E`跑了 ${run} 条命令`, E`ran ${run} command${run > 1 ? "s" : ""}`));
+  if (edit) parts.push(L(E`改了 ${files.size || edit} 个文件`, E`edited ${files.size || edit} file${(files.size || edit) > 1 ? "s" : ""}`));
+  if (other) parts.push(L(E`另外 ${other} 次操作`, E`${other} other step${other > 1 ? "s" : ""}`));
+  if (failed) parts.push(L(E`${failed} 次失败`, E`${failed} failed`));
   return parts.join(L("、", ", "));
 }
 
@@ -287,10 +287,10 @@ function usageLine(u?: TraceStep): string {
   const parts: string[] = [];
   if (u.duration_ms) {
     const s = Math.round(u.duration_ms / 1000);
-    parts.push(s >= 60 ? L(`${Math.floor(s / 60)} 分 ${s % 60} 秒`, `${Math.floor(s / 60)}m ${s % 60}s`) : L(`${s} 秒`, `${s}s`));
+    parts.push(s >= 60 ? L(E`${Math.floor(s / 60)} 分 ${s % 60} 秒`, E`${Math.floor(s / 60)}m ${s % 60}s`) : L(E`${s} 秒`, E`${s}s`));
   }
   const tokens = (u.input_tokens || 0) + (u.output_tokens || 0);
-  if (tokens) parts.push(tokens >= 10000 ? L(`${(tokens / 10000).toFixed(1)} 万 token`, `${(tokens / 1000).toFixed(1)}k tokens`) : `${tokens} token${tokens > 1 ? "s" : ""}`);
+  if (tokens) parts.push(tokens >= 10000 ? L(E`${(tokens / 10000).toFixed(1)} 万 token`, E`${(tokens / 1000).toFixed(1)}k tokens`) : `${tokens} token${tokens > 1 ? "s" : ""}`);
   if (u.cost_usd) parts.push(`$${u.cost_usd.toFixed(2)}`);
   return parts.join(" · ");
 }
@@ -841,7 +841,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   return (
     <div className={cn("trace is-flow", movingHere && !asking && "is-live")} ref={body}>
       {mark}
-      {carryOn && <div className="trace-carry">{L(`接着做上一件：${borrow!.label}`, `Still on the one before: ${borrow!.label}`)}</div>}
+      {carryOn && <div className="trace-carry">{L(E`接着做上一件：${borrow!.label}`, E`Still on the one before: ${borrow!.label}`)}</div>}
       {/* The plan is not part of the process: it stays at the top, always
           out, whether the steps below it are folded or not. */}
       {plan && <PlanCard items={plan.items} live={moving} />}
@@ -859,8 +859,8 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
           {/* Folded, its own line shows it is still working; open, the steps do. */}
           {movingHere && !asking && !open ? <Mushroom /> : <ChevronRight className="trace-chev" />}
           <span className="trace-title">{stepCount > 0
-            ? L(`过程 · ${stepCount} 步 · ${took}`, `Steps · ${stepCount} · ${took}`)
-            : L(`过程 · ${took}`, `Steps · ${took}`)}</span>
+            ? L(E`过程 · ${stepCount} 步 · ${took}`, E`Steps · ${stepCount} · ${took}`)
+            : L(E`过程 · ${took}`, E`Steps · ${took}`)}</span>
         </button>
       )}
       {!open && waitAsk.map((seg) => (
@@ -872,7 +872,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
           {hidden > 0 && (
             <button type="button" className="trace-head trace-more" onClick={() => setShowAll(true)} aria-expanded={false}>
               <ChevronRight className="trace-chev" />
-              <span className="trace-title">{L(`更早的 ${hidden} 段`, `${hidden} earlier`)}</span>
+              <span className="trace-title">{L(E`更早的 ${hidden} 段`, E`${hidden} earlier`)}</span>
             </button>
           )}
           {after.map((seg, i) => (!keep || keep.has(i)) && renderSeg(seg, i === after.length - 1))}
@@ -950,7 +950,7 @@ function EarlierSteps({ steps, took, waiting, children }: {
       {steps > 0 && (
         <button type="button" className="trace-head trace-fold" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           <ChevronRight className="trace-chev" />
-          <span className="trace-title">{L(`过程 · ${steps} 步 · ${took}`, `Steps · ${steps} · ${took}`)}</span>
+          <span className="trace-title">{L(E`过程 · ${steps} 步 · ${took}`, E`Steps · ${steps} · ${took}`)}</span>
         </button>
       )}
       {(open || steps === 0) ? segs : waiting}
@@ -1064,7 +1064,7 @@ export function PlanCard({ items, live }: { items: PlanItem[]; live: boolean }) 
     <div className="trace-plan">
       <div className="trace-plan-head">
         <span>{L("计划", "Plan")}</span>
-        <span className="trace-plan-count">{L(`${done} / ${items.length} 完成`, `${done} of ${items.length} done`)}</span>
+        <span className="trace-plan-count">{L(E`${done} / ${items.length} 完成`, E`${done} of ${items.length} done`)}</span>
       </div>
       <ul className="trace-plan-list">
         {items.map((x, i) => (

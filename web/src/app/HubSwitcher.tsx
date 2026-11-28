@@ -4,7 +4,7 @@ import {
 } from "lucide-react";
 import type { Hub, HubOverview } from "@/appapi";
 import { useHubLooks, type HubLook } from "@/app/hubLooks";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /** The switcher sits at the sidebar bottom ("sidebar") or, when the sidebar
@@ -192,11 +192,11 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
   const sub = selected
     ? selected.ok
       ? L(
-        `已连上${count === undefined ? "" : ` · ${count} 个成员`}`,
-        `Connected${count === undefined ? "" : ` · ${count} node${count === 1 ? "" : "s"}`}`,
+        E`已连上${count === undefined ? "" : ` · ${count} 个成员`}`,
+        E`Connected${count === undefined ? "" : ` · ${count} node${count === 1 ? "" : "s"}`}`,
       )
       : L("连不上", "Unreachable")
-    : L(`${hubs.length} 个工作区 · ${connected} 个已连上`, `${hubs.length} workspace${hubs.length === 1 ? "" : "s"} · ${connected} connected`);
+    : L(E`${hubs.length} 个工作区 · ${connected} 个已连上`, E`${hubs.length} workspace${hubs.length === 1 ? "" : "s"} · ${connected} connected`);
 
   const dotClass = selected
     ? selected.ok ? "working" : "down"
@@ -215,8 +215,8 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
         )}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={L(`切换工作区：${label}`, `Switch workspace: ${label}`)}
-        title={selected ? (selected.ok ? selected.url : L(`${selected.url}（连不上）`, `${selected.url} (unreachable)`)) : undefined}
+        aria-label={L(E`切换工作区：${label}`, E`Switch workspace: ${label}`)}
+        title={selected ? (selected.ok ? selected.url : L(E`${selected.url}（连不上）`, E`${selected.url} (unreachable)`)) : undefined}
         onClick={toggle}
       >
         <Avatar name={selected?.name} id={selected?.id} />
@@ -259,7 +259,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                   )}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => pick(e.hub.id)}
-                  title={e.hub.ok ? e.hub.url : L(`${e.hub.url}（连不上）`, `${e.hub.url} (unreachable)`)}
+                  title={e.hub.ok ? e.hub.url : L(E`${e.hub.url}（连不上）`, E`${e.hub.url} (unreachable)`)}
                 >
                   <Avatar name={e.hub.name} id={e.hub.id} />
                   <span className="app-hub-menu-name">{e.hub.name}</span>
@@ -292,7 +292,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                       : e.kind === "newLocal"
                         ? L("在这台电脑上新建工作区", "New workspace on this computer")
                         : e.kind === "newOnServer"
-                          ? (serverName ? L(`在 ${serverName} 上新建工作区`, `New workspace on ${serverName}`) : L("在这台服务器上新建工作区", "New workspace on this server"))
+                          ? (serverName ? L(E`在 ${serverName} 上新建工作区`, E`New workspace on ${serverName}`) : L("在这台服务器上新建工作区", "New workspace on this server"))
                           : e.kind === "superagent"
                             ? "superagent"
                             : e.kind === "usage"
@@ -301,7 +301,7 @@ export function HubSwitcher({ hubs, hubsOv, value, onChange, onAdd, onNewLocal, 
                   </span>
                   {e.kind === "superagent" && superagentKey && !superagent?.pending && <span className="app-hub-menu-key">{superagentKey}</span>}
                   {e.kind === "superagent" && !!superagent?.pending && (
-                    <span className="app-hub-menu-badge" title={L(`${superagent.pending} 件事等你点头`, `${superagent.pending} waiting for you`)}>{superagent.pending}</span>
+                    <span className="app-hub-menu-badge" title={L(E`${superagent.pending} 件事等你点头`, E`${superagent.pending} waiting for you`)}>{superagent.pending}</span>
                   )}
                 </button>
               </Fragment>

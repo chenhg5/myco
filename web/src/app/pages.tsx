@@ -9,7 +9,7 @@ import { DockPanel } from "@/app/preview";
 import { looksOf, MushroomFace } from "@/app/persona";
 import { Modal } from "@/app/dialogs";
 import { openOutside, setInAppLinks } from "@/app/links";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { BrowserProfileSettingsDetails, browserSettingsReview, type BrowserSettingsReview } from "./browser-profile-settings";
 import { answerProjectFiles, projectFileScope } from "./page-project-files";
 import { answerPageFiles, pageFileScope, pageFilesUpgrade } from "./page-files";
@@ -141,7 +141,7 @@ function publishPanel(next: PanelState) {
 export function PageToggle() {
   const st = useSyncExternalStore((f) => { panelSubs.add(f); return () => { panelSubs.delete(f); }; }, () => panelState);
   if (!st.count) return null;
-  const label = st.open ? L("收起网页面板", "Tuck the pages away") : L(`展开网页面板：${st.title}${st.count > 1 ? ` 等 ${st.count} 个` : ""}`, `Show the pages: ${st.title}${st.count > 1 ? ` and ${st.count - 1} more` : ""}`);
+  const label = st.open ? L("收起网页面板", "Tuck the pages away") : L(E`展开网页面板：${st.title}${st.count > 1 ? ` 等 ${st.count} 个` : ""}`, E`Show the pages: ${st.title}${st.count > 1 ? ` and ${st.count - 1} more` : ""}`);
   return (
     <button type="button" className={cn("pg-toggle", st.open && "is-on")} aria-pressed={st.open} title={label} aria-label={label}
       onClick={() => window.dispatchEvent(new Event("myco-pages-toggle"))}>
@@ -191,8 +191,8 @@ export function PageCard({ hubId, id, url }: { hubId: string; id: string; url: s
   if (gone) return null;
   const who = page ? nameOf(hubId, page.publisher) : "";
   const about = !page ? ""
-    : page.live ? L(`${who} 电脑上的 ${page.port} 端口`, `Port ${page.port} on ${who}'s computer`)
-      : [page.version > 1 ? L(`第 ${page.version} 版`, `Version ${page.version}`) : "", L(`${who} 发布`, `by ${who}`), timeAgo(page.updated_at),
+    : page.live ? L(E`${who} 电脑上的 ${page.port} 端口`, E`Port ${page.port} on ${who}'s computer`)
+      : [page.version > 1 ? L(E`第 ${page.version} 版`, E`Version ${page.version}`) : "", L(E`${who} 发布`, E`by ${who}`), timeAgo(page.updated_at),
         page.editors === "managers" ? (page.read_only ? L("你只能看", "View only for you") : L("只有管理者能改", "Only managers edit")) : ""].filter(Boolean).join(" · ");
   // Right-click: open, pin it above the conversation (or unpin), copy its link.
   const pinned = !!pins?.pinned(id);
@@ -360,7 +360,7 @@ export function PageHost() {
   return (
     <>
     <DockPanel open={open} onOpenChange={setPanel} onClose={closeAll} keepMounted keepOpenOn=".pg-recovery-menu, .pg-recovery-dialog"
-      closeLabel={tabs.length > 1 ? L(`关闭全部 ${tabs.length} 个网页`, `Close all ${tabs.length} pages`) : L("关闭", "Close")}
+      closeLabel={tabs.length > 1 ? L(E`关闭全部 ${tabs.length} 个网页`, E`Close all ${tabs.length} pages`) : L("关闭", "Close")}
       title={m.title || L("网页", "Page")} titleHint={recoverable ? recoveryLabel() : undefined} about={m.about} className="pg-panel" bodyClass="is-page pg-body"
       tools={(
         <>
@@ -392,7 +392,7 @@ export function PageHost() {
                 <span className="pg-tab-name">{x.meta.title || L("正在打开…", "Opening…")}</span>
               </button>
               <button type="button" className="pg-tab-close" onClick={() => close(x.key)}
-                title={L("关闭这个标签", "Close this tab")} aria-label={L(`关闭 ${x.meta.title || "这个标签"}`, `Close ${x.meta.title || "this tab"}`)}><X /></button>
+                title={L("关闭这个标签", "Close this tab")} aria-label={L(E`关闭 ${x.meta.title || "这个标签"}`, E`Close ${x.meta.title || "this tab"}`)}><X /></button>
             </div>
           ))}
         </div>
@@ -599,7 +599,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           sends.set(k, [...recent, Date.now()]);
           const name = o?.name || p?.name || L("网页", "a page");
           const m = await appApi.sendMessage(t.hubId, {
-            to, body: `${text}\n\n${L(`（来自网页「${name}」${p?.url || ""}，状态第 ${known.current} 版）`, `(from the page "${name}" ${p?.url || ""}, state version ${known.current})`)}`,
+            to, body: `${text}\n\n${L(E`（来自网页「${name}」${p?.url || ""}，状态第 ${known.current} 版）`, E`(from the page "${name}" ${p?.url || ""}, state version ${known.current})`)}`,
             ...(p?.project ? { project: p.project } : {}),
           });
           return { id: m.id };
@@ -633,7 +633,7 @@ function PageView({ target, open, active, reload, onMeta }: {
             const status = await withConsent(who, () => appApi.browserCall<BrowserStatus>(t.hubId, t.id, remoteInstance, "status"));
             const profile = status.profiles.find(item => item.id === String(input.id || ""));
             if (!profile) throw Object.assign(new Error(L("找不到这个浏览器资料", "Browser profile not found")), { code: "not_found" });
-            text = L(`允许 agent 在当前工作区申请使用「${profile.name}」浏览器资料？它们仍需你批准短期授权，并且只能运行你在本机批准的脚本版本。`, `Allow agents in this workspace to request access to “${profile.name}”? They still need your approval for a short-lived grant and can run only script versions you approved on this computer.`);
+            text = L(E`允许 agent 在当前工作区申请使用「${profile.name}」浏览器资料？它们仍需你批准短期授权，并且只能运行你在本机批准的脚本版本。`, E`Allow agents in this workspace to request access to “${profile.name}”? They still need your approval for a short-lived grant and can run only script versions you approved on this computer.`);
           }
           if (action === "profiles.remove") {
             const status = await withConsent(who, () => appApi.browserCall<BrowserStatus>(t.hubId,t.id,remoteInstance,"status"));
@@ -641,7 +641,7 @@ function PageView({ target, open, active, reload, onMeta }: {
             if (!profile) throw Object.assign(new Error(L("找不到这个浏览器资料","Browser profile not found")),{code:"not_found"});
             if (profile.running) throw Object.assign(new Error(L("请先关闭这个 profile 的浏览器窗口或停止运行","Close this profile’s browser window or stop its run first")),{code:"busy"});
             if (!status.features?.includes("profile_delete")) throw Object.assign(new Error(L("请先更新浏览器组件","Update the browser component first")),{code:"unsupported"});
-            text=L(`永久删除「${profile.name}」？这会删除它的登录状态、本机下载和所有工作区中的脚本授权，不能恢复。`,`Permanently delete “${profile.name}”? This removes its sign-ins, local downloads and script approvals in every workspace. This cannot be undone.`);
+            text=L(E`永久删除「${profile.name}」？这会删除它的登录状态、本机下载和所有工作区中的脚本授权，不能恢复。`,E`Permanently delete “${profile.name}”? This removes its sign-ins, local downloads and script approvals in every workspace. This cannot be undone.`);
           }
           if (action === "profiles.configure") {
             const status = await withConsent(who, () => appApi.browserCall<BrowserStatus>(t.hubId, t.id, remoteInstance, "status"));
@@ -690,8 +690,8 @@ function PageView({ target, open, active, reload, onMeta }: {
           if(!device) throw new Error(L("这台电脑已停止共享，请刷新后重试", "This computer stopped sharing. Refresh and try again."));
           const mode = remoteArgs.offer && (remoteArgs.offer as {control?:boolean}).control;
           explanations.connect = mode
-            ? L(`连接到「${device.name}」，查看它的画面并操作键盘和鼠标。`, `Connect to “${device.name}”, view its screen and use its keyboard and mouse.`)
-            : L(`连接到「${device.name}」，仅查看画面，不操作键鼠。`, `Connect to “${device.name}” to view its screen, without keyboard or mouse control.`);
+            ? L(E`连接到「${device.name}」，查看它的画面并操作键盘和鼠标。`, E`Connect to “${device.name}”, view its screen and use its keyboard and mouse.`)
+            : L(E`连接到「${device.name}」，仅查看画面，不操作键鼠。`, E`Connect to “${device.name}” to view its screen, without keyboard or mouse control.`);
         }
         if (explanations[action]) {
           if (remoteConsent.current) throw new Error(L("请先处理当前的授权请求", "Finish the current permission request first"));
@@ -728,7 +728,7 @@ function PageView({ target, open, active, reload, onMeta }: {
       // From hubs that say so, what an app does not declare it may not use
       // (they do not for pages of myco's own apps kept from before declarations).
       if (tp.declares)
-        throw Object.assign(new Error(L(`这个应用没有在 myco.json 的 "permissions" 里写 "${perm}"，不能用`, `This app does not declare "${perm}" in myco.json's "permissions"`)), { code: "permission_denied" });
+        throw Object.assign(new Error(L(E`这个应用没有在 myco.json 的 "permissions" 里写 "${perm}"，不能用`, E`This app does not declare "${perm}" in myco.json's "permissions"`)), { code: "permission_denied" });
       if (warned.has(perm)) return;
       warned.add(perm);
       toPage({ myco: "warn", text: `myco: this app uses ${perm} without declaring it in myco.json ("permissions": ["${perm}"]); a later myco App will refuse it` });
@@ -877,11 +877,11 @@ function PageView({ target, open, active, reload, onMeta }: {
     frame.current.contentWindow.postMessage({myco:"preferences", preferences},new URL(src).origin);
   };
   useEffect(sendPreferences,[preferences.language,preferences.theme,src]);
-  const title = local ? L(`这台电脑 · ${local.port || (local.protocol === "https:" ? "443" : "80")} 端口`, `This computer · port ${local.port || 80}`)
+  const title = local ? L(E`这台电脑 · ${local.port || (local.protocol === "https:" ? "443" : "80")} 端口`, E`This computer · port ${local.port || 80}`)
     : opened?.name || page?.name || L("网页", "Page");
   const about = local ? local.host + local.pathname.replace(/\/$/, "")
-    : opened?.live && target.kind === "page" ? L(`实时 · ${page ? nameOf(target.hubId, page.publisher) : ""} 电脑上的 ${opened.port || page?.port || ""} 端口`, `Live · port ${opened.port || page?.port || ""} on ${page ? nameOf(target.hubId, page.publisher) : ""}'s computer`)
-    : opened ? [opened.latest > 1 || opened.version > 1 ? L(`第 ${opened.version} 版`, `Version ${opened.version}`) : "", page && target.kind === "page" ? L(`${nameOf(target.hubId, page.publisher)} 发布`, `by ${nameOf(target.hubId, page.publisher)}`) : "", page ? timeAgo(page.versions.find((v) => v.n === opened.version)?.at || page.updated_at) : ""].filter(Boolean).join(" · ")
+    : opened?.live && target.kind === "page" ? L(E`实时 · ${page ? nameOf(target.hubId, page.publisher) : ""} 电脑上的 ${opened.port || page?.port || ""} 端口`, E`Live · port ${opened.port || page?.port || ""} on ${page ? nameOf(target.hubId, page.publisher) : ""}'s computer`)
+    : opened ? [opened.latest > 1 || opened.version > 1 ? L(E`第 ${opened.version} 版`, E`Version ${opened.version}`) : "", page && target.kind === "page" ? L(E`${nameOf(target.hubId, page.publisher)} 发布`, E`by ${nameOf(target.hubId, page.publisher)}`) : "", page ? timeAgo(page.versions.find((v) => v.n === opened.version)?.at || page.updated_at) : ""].filter(Boolean).join(" · ")
       : "";
   const newer = opened && page && page.version > opened.version ? page.version : 0;
   // Until the page has loaded: a loading scene over it, not a blank frame.
@@ -897,13 +897,13 @@ function PageView({ target, open, active, reload, onMeta }: {
     <div className={cn("pg-view", !active && "is-hidden")} role="tabpanel" aria-hidden={!active}>
       {newer > 0 && (
         <div className="pg-new" role="status">
-          <span>{L(`有新版本：第 ${newer} 版`, `A new version: version ${newer}`)}</span>
+          <span>{L(E`有新版本：第 ${newer} 版`, E`A new version: version ${newer}`)}</span>
           <button type="button" className="app-btn app-btn-small" onClick={() => void load()}>{L("看新版本", "Show it")}</button>
         </div>
       )}
       {!newer && page?.template?.latest && page.can_manage && target.kind === "page" && (
         <div className="pg-new" role="status">
-          <span>{L(`「${page.template.name}」有新版本 ${page.template.latest}（现在是 ${page.template.version}），升级后数据不变`, `${page.template.name} has a new version ${page.template.latest} (this is ${page.template.version}); your data stays`)}</span>
+          <span>{L(E`「${page.template.name}」有新版本 ${page.template.latest}（现在是 ${page.template.version}），升级后数据不变`, E`${page.template.name} has a new version ${page.template.latest} (this is ${page.template.version}); your data stays`)}</span>
           <button type="button" className="app-btn app-btn-small" disabled={upgrading} onClick={() => {
             setUpgrading(true);
             appApi.upgradePage(target.hubId, target.id).then(() => load(), (e) => setError(e instanceof Error ? e.message : String(e))).finally(() => setUpgrading(false));
@@ -924,7 +924,7 @@ function PageView({ target, open, active, reload, onMeta }: {
         </div>
       )}
     <Modal className={cn("pg-remote-ask", remoteAsking?.settingsReview && "pg-browser-settings-dialog")} wide={!!remoteAsking?.review || !!remoteAsking?.settingsReview} open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
-      title={remoteAsking?.title || L(`允许「${opened?.name || page?.name || "此应用"}」使用远程桌面？`, `Allow “${opened?.name || page?.name || "this app"}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
+      title={remoteAsking?.title || L(E`允许「${opened?.name || page?.name || "此应用"}」使用远程桌面？`, E`Allow “${opened?.name || page?.name || "this app"}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
       {remoteAsking?.review && <BrowserApprovalDetails review={remoteAsking.review} />}
       {remoteAsking?.settingsReview && <BrowserProfileSettingsDetails review={remoteAsking.settingsReview} onRead={setSettingsRead} />}
       {remoteAsking?.settingsReview && <p className="pg-browser-settings-hint" style={{visibility: settingsRead === remoteAsking.settingsReview ? "hidden" : undefined}} role="status">{L("请滚动查看完整设置，再允许。", "Scroll through all settings before allowing.")}</p>}
@@ -934,7 +934,7 @@ function PageView({ target, open, active, reload, onMeta }: {
       </div>
     </Modal>
     <Modal open={!!consent} onOpenChange={(o) => { if (!o) consent?.answer("deny"); }} className="pg-ask"
-      title={consent ? L(`允许「${consent.name || "这个应用"}」${osWant(consent.group, consent.host).zh}吗？`, `Let "${consent.name || "this app"}" ${osWant(consent.group, consent.host).en}?`) : ""}
+      title={consent ? L(E`允许「${consent.name || "这个应用"}」${osWant(consent.group, consent.host).zh}吗？`, E`Let "${consent.name || "this app"}" ${osWant(consent.group, consent.host).en}?`) : ""}
       description={consent ? [
         consent.declared ? "" : L("这个应用没有在说明里声明要用这一项。", "This app does not declare that it uses this."),
         consent.once_only ? osOnceWhy(consent.group) : L("选「始终允许」，以后这个应用不再问（升级后也不问，只问新版本新加的）；可以在设置 → 应用权限里收回。", "With \"Always allow\", this app won't ask again, not even after an update (only for what a new version adds). You can take it back in Settings → App permissions."),
@@ -946,7 +946,7 @@ function PageView({ target, open, active, reload, onMeta }: {
       </div>
     </Modal>
     <Modal open={!!asking} onOpenChange={(o) => { if (!o) asking?.answer(false); }} className="pg-ask"
-      title={L(`允许这个网页以你的名义给 ${asking?.to || ""} 发消息吗？`, `Let this page message ${asking?.to || ""} as you?`)}
+      title={L(E`允许这个网页以你的名义给 ${asking?.to || ""} 发消息吗？`, E`Let this page message ${asking?.to || ""} as you?`)}
       description={L("网页是 agent 写的。允许后，这次打开 App 期间它可以直接发，一分钟最多 5 条；发出的消息在你和它的对话里。", "An agent wrote this page. If you allow it, it may send messages until you quit the App, at most 5 a minute; they show in your chat with the agent.")}>
       <blockquote className="pg-ask-text">{asking?.text}</blockquote>
       <div className="app-modal-actions">
@@ -973,7 +973,7 @@ function PageLoading({ name, seed, who }: { name: string; seed: string; who: str
   }, []);
   const tips = [
     L("正在把网页搬过来…", "Bringing the page over…"),
-    who ? L(`${who} 做的，马上就好`, `Made by ${who}; nearly there`) : L("马上就好", "Nearly there"),
+    who ? L(E`${who} 做的，马上就好`, E`Made by ${who}; nearly there`) : L("马上就好", "Nearly there"),
     L("第一次打开会慢一点", "The first time takes a little longer"),
   ];
   const tip = t > 15_000 ? L("还没打开？可以点右上角的刷新再试一次", "Still not here? Try reload at the top right")
@@ -985,7 +985,7 @@ function PageLoading({ name, seed, who }: { name: string; seed: string; who: str
         <span className="pg-loading-mush" style={{ ["--av-cap" as string]: looksOf(seed).cap }}><MushroomFace seed={seed} /></span>
         <span className="pg-loading-shadow" />
       </div>
-      <b className="pg-loading-name">{L(`正在打开「${name}」`, `Opening "${name}"`)}</b>
+      <b className="pg-loading-name">{L(E`正在打开「${name}」`, E`Opening "${name}"`)}</b>
       <span key={tip} className="pg-loading-tip">{tip}</span>
       <span className="pg-loading-bar" aria-hidden><i /></span>
     </div>

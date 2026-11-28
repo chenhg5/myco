@@ -5,7 +5,7 @@ import type { AgentRow } from "@/app/types";
 import { agentKind, nodeName } from "@/app/nodes";
 import { CopyButton } from "@/app/copy";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const PLATFORM: Record<string, () => string> = {
@@ -87,20 +87,20 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
           {bridges && !has("slack") && <button type="button" className="app-kv-link" onClick={() => setAdding("slack")}>{L("绑定 Slack", "Bind Slack")}</button>}
         </span>
         <span className="app-kv-help">
-          {L(`给它一个飞书、Lark 或 Slack 机器人：机器人就是 ${name} 本人，在聊天软件里跟它说话就行，进度和结果都回到聊天里。（预览）机器人跑在这台电脑上，电脑睡眠时它会离线。`,
-            `Give it a Feishu, Lark or Slack bot: the bot is ${name} itself; talk to it in the chat app, and its progress and answers come back there. (Preview) The bot runs on this computer, and is offline while it sleeps.`)}
+          {L(E`给它一个飞书、Lark 或 Slack 机器人：机器人就是 ${name} 本人，在聊天软件里跟它说话就行，进度和结果都回到聊天里。（预览）机器人跑在这台电脑上，电脑睡眠时它会离线。`,
+            E`Give it a Feishu, Lark or Slack bot: the bot is ${name} itself; talk to it in the chat app, and its progress and answers come back there. (Preview) The bot runs on this computer, and is offline while it sleeps.`)}
           {bridges?.some((b) => !b.desk) && L("在 设置 › 语音 配好模型后，它会像语音聊天一样：能答的马上答，要动手的再去做。",
             " Once a model is set in Settings › Voice, it works as in voice chats: it answers what it can at once and does the rest.")}
         </span>
         {bridges?.filter((b) => b.claim).map((b) => (
           <span key={b.name} className="im-claim">
-            {L(`${label(b)}${sp(b)}机器人还没有主人：私聊机器人发这一行，就成为它的主人：`, `The ${label(b)} bot has no owner yet: send it this line in a direct message to become its owner:`)}
+            {L(E`${label(b)}${sp(b)}机器人还没有主人：私聊机器人发这一行，就成为它的主人：`, E`The ${label(b)} bot has no owner yet: send it this line in a direct message to become its owner:`)}
             <span className="app-command"><code>/claim {b.claim}</code><CopyButton value={`/claim ${b.claim}`} /></span>
           </span>
         ))}
         {bridges?.filter((b) => b.claim_expired).map((b) => (
           <span key={b.name} className="im-claim">
-            {L(`${label(b)}${sp(b)}机器人还没有主人，认领码已经失效（过期或错太多次）。`, `The ${label(b)} bot has no owner yet, and its claim code no longer works (it expired, or was mistyped too often). `)}
+            {L(E`${label(b)}${sp(b)}机器人还没有主人，认领码已经失效（过期或错太多次）。`, E`The ${label(b)} bot has no owner yet, and its claim code no longer works (it expired, or was mistyped too often). `)}
             <button type="button" className="app-kv-link" disabled={busy} onClick={() => void renew(b)}>{L("重新生成认领码", "New claim code")}</button>
           </span>
         ))}
@@ -108,9 +108,9 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
       </div>
 
       <Modal open={adding !== ""} onOpenChange={(o) => !o && setAdding("")}
-        title={adding === "slack" ? L(`给 ${name} 绑定 Slack 机器人`, `A Slack bot for ${name}`)
-          : adding === "lark" ? L(`给 ${name} 绑定 Lark 机器人`, `A Lark bot for ${name}`)
-          : L(`给 ${name} 绑定飞书机器人`, `A Feishu bot for ${name}`)}
+        title={adding === "slack" ? L(E`给 ${name} 绑定 Slack 机器人`, E`A Slack bot for ${name}`)
+          : adding === "lark" ? L(E`给 ${name} 绑定 Lark 机器人`, E`A Lark bot for ${name}`)
+          : L(E`给 ${name} 绑定飞书机器人`, E`A Feishu bot for ${name}`)}
         description={adding === "slack"
           ? L("在 Slack 里建一个应用（设置都已填好），装到你的工作区，再把两个令牌粘到这里。", "Make an app in Slack (its settings are filled in), install it to your workspace, and paste its two tokens here.")
           : adding === "lark"
@@ -121,7 +121,7 @@ export function ChatAppsRow({ row, mayManage }: { row: AgentRow; mayManage: bool
       </Modal>
 
       <Modal open={!!editing} onOpenChange={(o) => !o && setEditing(null)}
-        title={editing ? L(`${label(editing)}${sp(editing)}机器人的接待设定`, `Instructions for the ${label(editing)} bot`) : ""}
+        title={editing ? L(E`${label(editing)}${sp(editing)}机器人的接待设定`, E`Instructions for the ${label(editing)} bot`) : ""}
         description={L("写给接待它的模型：对谁怎么说话、能答什么、不能做什么。只对这个机器人生效，和语音聊天分开。", "For the model that answers as the bot: how to talk, what it may answer, what it must not do. This bot only; voice chats have their own.")}>
         {editing && <PromptForm bridge={editing} onDone={() => { setEditing(null); void load(); }} onCancel={() => setEditing(null)} />}
       </Modal>

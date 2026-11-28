@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic } from "lucide-react";
 import { appApi } from "@/appapi";
-import { L, lang } from "@/lib/i18n";
+import { L, lang, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
@@ -232,7 +232,7 @@ export function DictateButton({ input, value, onText, disabled }: {
   const holdKeyEn = holdKey === "⌥空格" ? "⌥Space" : "Ctrl+M";
   const title = note
     || (listening ? L("正在听…再点一下停止", "Listening… click to stop")
-      : L(`语音输入（${lang() === "zh" ? "中文" : "English"}，跟 App 的语言；按住 ${holdKey} 说话）`, `Dictate (${lang() === "zh" ? "Chinese" : "English"}, the app's language; hold ${holdKeyEn} to talk)`));
+      : L(E`语音输入（${lang() === "zh" ? "中文" : "English"}，跟 App 的语言；按住 ${holdKey} 说话）`, E`Dictate (${lang() === "zh" ? "Chinese" : "English"}, the app's language; hold ${holdKeyEn} to talk)`));
   return (
     <>
     {fixed && (

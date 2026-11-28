@@ -3,7 +3,7 @@ import { Check, CircleHelp, CornerDownLeft } from "lucide-react";
 import type { Message } from "@/api";
 import { MessageContent } from "@/app/Markdown";
 import { MessageAttachments } from "@/app/attachments";
-import { L, locale } from "@/lib/i18n";
+import { L, locale, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
@@ -103,7 +103,7 @@ export function AskCard({ hubId, ask, answer, open, canAnswer, onAnswer }: {
         <div className="ask-answer">
           <Check />
           <span className="ask-answer-text">
-            {chosen >= 0 ? L(`你选了：${options[chosen].label}`, `You chose: ${options[chosen].label}`) : L(`你回答：${answer.body.trim()}`, `You answered: ${answer.body.trim()}`)}
+            {chosen >= 0 ? L(E`你选了：${options[chosen].label}`, E`You chose: ${options[chosen].label}`) : L(E`你回答：${answer.body.trim()}`, E`You answered: ${answer.body.trim()}`)}
           </span>
           <time className="ask-time" dateTime={answer.created_at}>{clock(answer.created_at)}</time>
         </div>

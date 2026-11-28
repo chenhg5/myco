@@ -30,7 +30,7 @@ import type { TextSize, ThemeMode } from "@/lib/theme";
 import { setReportsOnly, useReportsOnly } from "@/app/quietRuns";
 import { appTo, setAutoTranslate, setTranslateReady, useAutoTranslate, useTranslateReady } from "@/app/translate";
 import type { TranslateConfig } from "@/appapi";
-import { L, lang, type LangChoice } from "@/lib/i18n";
+import { L, lang, type LangChoice, E } from "@/lib/i18n";
 import { bytes, cn } from "@/lib/utils";
 import { ChatBgDialog } from "@/app/ChatBgDialog";
 import { ShortcutsSection } from "@/app/Shortcuts";
@@ -77,10 +77,10 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
       status = <span className="app-about-status"><span className="app-spinner" />{L("正在检查…", "Checking…")}</span>;
       break;
     case "installing":
-      status = <span className="app-about-status"><span className="app-spinner" />{L(`正在下载 ${st.latest}…`, `Downloading ${st.latest}…`)}</span>;
+      status = <span className="app-about-status"><span className="app-spinner" />{L(E`正在下载 ${st.latest}…`, E`Downloading ${st.latest}…`)}</span>;
       break;
     case "relaunching":
-      status = <span className="app-about-status ok">{L(`已安装 ${st.latest}，正在重新打开…`, `Installed ${st.latest}, reopening…`)}</span>;
+      status = <span className="app-about-status ok">{L(E`已安装 ${st.latest}，正在重新打开…`, E`Installed ${st.latest}, reopening…`)}</span>;
       break;
     case "failed":
       status = <span className="app-about-status bad">{st.u ? L("更新失败", "Update failed") : L("检查失败", "Check failed")}</span>;
@@ -92,10 +92,10 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
         status = <span className="app-about-status bad">{L("连不上 GitHub 或 Gitee", "Can’t reach GitHub or Gitee")}</span>;
         action = <button type="button" className="app-btn" onClick={() => void check()}>{L("重试", "Retry")}</button>;
       } else if (u.available && u.can_install) {
-        status = <span className="app-about-status new">{L(`有新版本 ${u.latest}`, `New version ${u.latest}`)}</span>;
+        status = <span className="app-about-status new">{L(E`有新版本 ${u.latest}`, E`New version ${u.latest}`)}</span>;
         action = <button type="button" className="app-btn app-btn-primary" onClick={() => void install(u)}>{L("更新并重新打开", "Update and reopen")}</button>;
       } else if (u.available) {
-        status = <span className="app-about-status new">{L(`有新版本 ${u.latest}，请到 GitHub 或 Gitee 下载`, `New version ${u.latest} — download it from GitHub or Gitee`)}</span>;
+        status = <span className="app-about-status new">{L(E`有新版本 ${u.latest}，请到 GitHub 或 Gitee 下载`, E`New version ${u.latest} — download it from GitHub or Gitee`)}</span>;
       } else {
         status = <span className="app-about-status ok"><Check />{L("已是最新", "Up to date")}</span>;
         action = <button type="button" className="app-btn" onClick={() => void check()}>{L("再检查一次", "Check again")}</button>;
@@ -894,7 +894,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
             const on = !renameLook.pic && (renameLook.color ?? colorIndex(renameTarget?.id || "")) === i;
             return (
               <button key={i} type="button" role="radio" aria-checked={on} className={cn("av-color app-hub-avatar", `c${i}`, on && "is-on")}
-                aria-label={L(`颜色 ${i + 1}`, `Colour ${i + 1}`)} onClick={() => setRenameLook({ color: i })}>
+                aria-label={L(E`颜色 ${i + 1}`, E`Colour ${i + 1}`)} onClick={() => setRenameLook({ color: i })}>
                 {on && <Check />}
               </button>
             );
@@ -941,7 +941,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
       <ConfirmDialog
         open={!!removeTarget}
         onOpenChange={(o) => !o && setRemoveTarget(null)}
-        title={removeTarget ? L(`移除 ${removeTarget.name}？`, `Remove ${removeTarget.name}?`) : L("移除工作区", "Remove Hub")}
+        title={removeTarget ? L(E`移除 ${removeTarget.name}？`, E`Remove ${removeTarget.name}?`) : L("移除工作区", "Remove Hub")}
         description={L("只会从这个 App 里移除。工作区本身和它上面的 agent 都不受影响，仍在照常运行。", "Removes it from this app only. The Hub and its agents aren’t affected and keep running.")}
         consequences={<p>{L("你将看不到这个工作区的 agent，之后只能凭 App 连接链接重新添加。", "You won’t see this Hub’s nodes. To add it back later, you’ll need its app link.")}</p>}
         confirmLabel={L("移除工作区", "Remove Hub")}
@@ -1080,7 +1080,7 @@ export function PublicAccessDialog({ open, onOpenChange, local, name, onDone }: 
               <div className="pub-progress-head">
                 <span className="app-spinner" />
                 <b>{choice === 2 ? L("正在用 Tailscale Funnel 开放…", "Opening with Tailscale Funnel…") : L("正在用 Cloudflare 开放…", "Opening with Cloudflare…")}</b>
-                <span className="pub-progress-time">{L(`${waited} 秒`, `${waited}s`)}</span>
+                <span className="pub-progress-time">{L(E`${waited} 秒`, E`${waited}s`)}</span>
               </div>
               <div className="pub-bar" aria-hidden><i /></div>
               <ol className="pub-steps">
@@ -1400,7 +1400,7 @@ function ProxySection({ hubsOv }: { hubsOv?: HubOverview[] }) {
       const hubUrl = target ? (await appApi.hubs().catch(() => [])).find((h) => h.id === target)?.url : undefined;
       const r = await appApi.testProxy({ ...input(), url: hubUrl });
       setTried(r.ok
-        ? { ok: true, text: L(`连通了，用时 ${r.ms} 毫秒`, `Connected in ${r.ms} ms`) }
+        ? { ok: true, text: L(E`连通了，用时 ${r.ms} 毫秒`, E`Connected in ${r.ms} ms`) }
         : { ok: false, text: (r.reason && reasons[r.reason]) || r.error || L("连不上", "Could not connect") });
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
@@ -1654,7 +1654,7 @@ function VoiceSection() {
         <div className="app-setting-line tr-fields">
           <label>{L("API Key", "API key")}
             <input className="app-input mono" type="password" value={ttsKey} onChange={(e) => setTtsKey(e.target.value)} autoComplete="off" spellCheck={false}
-              placeholder={hasTtsKey ? L("已保存在系统钥匙串里（不显示）", "Kept in the system keychain (not shown)") : L(`粘贴${svcName}的 API Key`, `Paste the ${svcName} API key`)} />
+              placeholder={hasTtsKey ? L("已保存在系统钥匙串里（不显示）", "Kept in the system keychain (not shown)") : L(E`粘贴${svcName}的 API Key`, E`Paste the ${svcName} API key`)} />
           </label>
           {hasTtsKey && <button type="button" className="app-btn app-btn-quiet" disabled={busy} onClick={() => void save({ clear_tts_key: true })}>{L("删掉密钥", "Remove the key")}</button>}
         </div>
@@ -1702,9 +1702,9 @@ function VoiceSection() {
               "With this on, the settings above and their keys are kept on the workspaces (hubs) you are signed in to, so your phone and other computers need not be set up again; the device that changed them last wins. The keys are handed only to your own devices, but whoever administers a hub's machine can read its database: turn this off for a hub that is not yours, if that matters.")}</span>
             {share && sync.length > 0 && (
               <span className="vs-sync" data-testid="voice-sync">
-                {kept.length > 0 && L(`已存到：${kept.map((h) => h.name).join("、")}。`, `Kept on: ${kept.map((h) => h.name).join(", ")}. `)}
-                {behind.length > 0 && L(`${behind.map((h) => h.name).join("、")} 的 Hub 版本太旧，还不能存，升级它的 myco 就可以。`, `${behind.map((h) => h.name).join(", ")}: the hub is too old to keep them; update its myco. `)}
-                {away.length > 0 && L(`${away.map((h) => h.name).join("、")} 现在连不上，下次再试。`, `${away.map((h) => h.name).join(", ")}: not reachable now; tried again next time.`)}
+                {kept.length > 0 && L(E`已存到：${kept.map((h) => h.name).join("、")}。`, E`Kept on: ${kept.map((h) => h.name).join(", ")}. `)}
+                {behind.length > 0 && L(E`${behind.map((h) => h.name).join("、")} 的 Hub 版本太旧，还不能存，升级它的 myco 就可以。`, E`${behind.map((h) => h.name).join(", ")}: the hub is too old to keep them; update its myco. `)}
+                {away.length > 0 && L(E`${away.map((h) => h.name).join("、")} 现在连不上，下次再试。`, E`${away.map((h) => h.name).join(", ")}: not reachable now; tried again next time.`)}
               </span>
             )}
           </div>

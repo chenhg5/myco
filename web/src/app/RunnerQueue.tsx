@@ -1,5 +1,5 @@
 import type { Agent, RunnerSlots } from "@/api";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 // A stopped/crashed process must not leave a task labelled queued forever.
 export function currentSlots(
@@ -36,11 +36,11 @@ export function runnerQueueText(
   const limit = limitOf(s);
   return s.in_use >= limit
     ? L(
-        `在排队：这台电脑同时最多跑 ${limit} 个，现在都在忙。它排第 ${q.position}，轮到就开始。`,
-        `Waiting its turn: this computer runs up to ${limit} at once and all are busy. It is number ${q.position} in line.`,
+        E`在排队：这台电脑同时最多跑 ${limit} 个，现在都在忙。它排第 ${q.position}，轮到就开始。`,
+        E`Waiting its turn: this computer runs up to ${limit} at once and all are busy. It is number ${q.position} in line.`,
       )
     : L(
-        `在排队：排第 ${q.position}，马上开始。`,
-        `Waiting its turn: number ${q.position} in line, starting shortly.`,
+        E`在排队：排第 ${q.position}，马上开始。`,
+        E`Waiting its turn: number ${q.position} in line, starting shortly.`,
       );
 }

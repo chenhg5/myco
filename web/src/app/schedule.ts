@@ -1,4 +1,4 @@
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /**
  * Schedules as people say them, and the cron the hub keeps. The editor
@@ -51,12 +51,12 @@ const hm = (h: number, m: number) => `${String(h).padStart(2, "0")}:${String(m).
 export function describe(cron: string): string {
   const e = fromCron(cron);
   switch (e.kind) {
-    case "daily": return L(`每天 ${hm(e.hour, e.minute)}`, `Every day at ${hm(e.hour, e.minute)}`);
-    case "weekdays": return L(`工作日 ${hm(e.hour, e.minute)}`, `Weekdays at ${hm(e.hour, e.minute)}`);
-    case "weekly": return L(`每${DAYS_ZH[e.day]} ${hm(e.hour, e.minute)}`, `Every ${DAYS_EN[e.day]} at ${hm(e.hour, e.minute)}`);
+    case "daily": return L(E`每天 ${hm(e.hour, e.minute)}`, E`Every day at ${hm(e.hour, e.minute)}`);
+    case "weekdays": return L(E`工作日 ${hm(e.hour, e.minute)}`, E`Weekdays at ${hm(e.hour, e.minute)}`);
+    case "weekly": return L(E`每${DAYS_ZH[e.day]} ${hm(e.hour, e.minute)}`, E`Every ${DAYS_EN[e.day]} at ${hm(e.hour, e.minute)}`);
     case "hours": return e.every === 1
-      ? L(`每小时（第 ${e.minute} 分）`, `Every hour at :${String(e.minute).padStart(2, "0")}`)
-      : L(`每 ${e.every} 小时（第 ${e.minute} 分）`, `Every ${e.every} hours at :${String(e.minute).padStart(2, "0")}`);
+      ? L(E`每小时（第 ${e.minute} 分）`, E`Every hour at :${String(e.minute).padStart(2, "0")}`)
+      : L(E`每 ${e.every} 小时（第 ${e.minute} 分）`, E`Every ${e.every} hours at :${String(e.minute).padStart(2, "0")}`);
     case "cron": return `cron ${e.cron}`;
   }
 }
@@ -94,11 +94,11 @@ export function soonLabel(at: Date, now: Date): string {
   const time = hm(at.getHours(), at.getMinutes());
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const days = Math.round((day(at) - day(now)) / 86400e3);
-  if (days === 0) return L(`今天 ${time}`, `today ${time}`);
-  if (days === 1) return L(`明天 ${time}`, `tomorrow ${time}`);
-  if (days === -1) return L(`昨天 ${time}`, `yesterday ${time}`);
-  if (days > 1 && days < 7) return L(`${DAYS_ZH[at.getDay()]} ${time}`, `${DAYS_EN[at.getDay()].slice(0, 3)} ${time}`);
-  return L(`${at.getMonth() + 1}月${at.getDate()}日 ${time}`, `${at.toLocaleDateString("en", { month: "short", day: "numeric" })} ${time}`);
+  if (days === 0) return L(E`今天 ${time}`, E`today ${time}`);
+  if (days === 1) return L(E`明天 ${time}`, E`tomorrow ${time}`);
+  if (days === -1) return L(E`昨天 ${time}`, E`yesterday ${time}`);
+  if (days > 1 && days < 7) return L(E`${DAYS_ZH[at.getDay()]} ${time}`, E`${DAYS_EN[at.getDay()].slice(0, 3)} ${time}`);
+  return L(E`${at.getMonth() + 1}月${at.getDate()}日 ${time}`, E`${at.toLocaleDateString("en", { month: "short", day: "numeric" })} ${time}`);
 }
 
 /** The short day names for a row of chips (周一 first, as a week is read here). */

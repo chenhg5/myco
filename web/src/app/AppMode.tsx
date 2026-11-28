@@ -49,7 +49,7 @@ import type { Notice } from "@/api";
 import { useSortable } from "@/app/sortable";
 import { useTextSize, useThemeMode } from "@/lib/theme";
 import { ErrorText } from "@/app/dialogs";
-import { L, lang, setLangChoice, storedLangChoice, type LangChoice } from "@/lib/i18n";
+import { L, lang, setLangChoice, storedLangChoice, type LangChoice, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { setSystemDictation } from "@/app/Dictate";
 import { setSystemPicker } from "@/app/AvatarPicker";
@@ -160,9 +160,8 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [textSize, setTextSize] = useTextSize();
   const simple = useSimpleMode();
   const [langChoice, setLangChoiceState] = useState<LangChoice>(storedLangChoice());
-  const chooseLang = (choice: LangChoice) => {
-    setLangChoice(choice);
-    setLangChoiceState(choice);
+  const chooseLang = async (choice: LangChoice) => {
+    if (await setLangChoice(choice)) setLangChoiceState(choice);
   };
   const hubNames = useHubNames();
   const [info, setInfo] = useState<AppInfo | null>(initialInfo);
@@ -476,7 +475,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     if (hubNames[h.id]) return hubNames[h.id];
     const m = /^(.*?)\s*(本机 Hub|Local Hub)$/.exec(h.name);
     if (!m) return h.name;
-    return m[1] ? L(`${m[1]} 的工作区`, `${m[1]}'s workspace`) : L("我的工作区", "My workspace");
+    return m[1] ? L(E`${m[1]} 的工作区`, E`${m[1]}'s workspace`) : L("我的工作区", "My workspace");
   }, [hubNames]);
   const namedHubs = useMemo(() => hubs.map((h) => ({ ...h, name: nameOf(h) })), [hubs, nameOf]);
   const hubsRef = useRef(namedHubs);
@@ -1128,7 +1127,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
   const [navHidden, setNavHidden] = useNavHidden();
   const shows = (e: NavEntry) => !navHidden.has(e);
   const navEntryMenu = (e: React.MouseEvent, entry: NavEntry) => navMenu.open(e, [
-    { label: L(`在侧栏隐藏「${navEntryLabel(entry)}」`, `Hide "${navEntryLabel(entry)}" from the sidebar`), onSelect: () => setNavHidden(entry, true) },
+    { label: L(E`在侧栏隐藏「${navEntryLabel(entry)}」`, E`Hide "${navEntryLabel(entry)}" from the sidebar`), onSelect: () => setNavHidden(entry, true) },
     { label: L("侧栏显示哪些…", "Choose what the sidebar shows…"), onSelect: () => { openSettingsSection("appearance"); setPage("settings"); } },
   ]);
 
@@ -1283,7 +1282,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-notices", noticesOpen && "active")} data-testid="nav-notices"
                   onClick={() => setNoticesOpen(true)}>
                   <Bell /><span className="app-nav-label">{L("待处理", "Needs you")}</span>
-                  {noticeCount > 0 && <span className="wf-nav-badge" title={L(`${noticeCount} 件事在等你`, `${noticeCount} things wait for you`)}>{noticeCount}</span>}
+                  {noticeCount > 0 && <span className="wf-nav-badge" title={L(E`${noticeCount} 件事在等你`, E`${noticeCount} things wait for you`)}>{noticeCount}</span>}
                 </button>
               )}
               {shows("automations") && <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-auto", page === "automations" && "active")} aria-current={page === "automations" ? "page" : undefined}
@@ -1293,7 +1292,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
               {shows("workflows") && <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-workflows", page === "workflows" && "active")} aria-current={page === "workflows" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("workflows"); }} onContextMenu={(e) => navEntryMenu(e, "workflows")}>
                 <Workflow /><span className="app-nav-label">{L("工作流", "Workflows")}</span>
-                {decisionCount > 0 && <span className="wf-nav-badge" title={L(`${decisionCount} 个决定在等你`, `${decisionCount} decisions wait for you`)}>{decisionCount}</span>}
+                {decisionCount > 0 && <span className="wf-nav-badge" title={L(E`${decisionCount} 个决定在等你`, E`${decisionCount} decisions wait for you`)}>{decisionCount}</span>}
               </button>}
               {shows("templates") && <button type="button" className={cn("app-nav-item sp-nav-top sp-nav-templates", page === "templates" && "active")} aria-current={page === "templates" ? "page" : undefined}
                 onClick={() => { setNavChat(null); toPage("templates"); }} onContextMenu={(e) => navEntryMenu(e, "templates")}>
@@ -1420,7 +1419,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                       <button type="button" {...computerSort.bind(r.st.agent.name)}
                         className={cn("app-nav-item sp-nav sp-nav-pc", r.st.state === "offline" && "is-away", computerSort.dragging === r.st.agent.name && "is-dragging")}
                         onClick={() => chatWithMember(r)} onContextMenu={(e) => navMenu.open(e, menu)}
-                        title={L(`打开终端 · ${whereOf(r)}`, `Open the terminal · ${whereOf(r)}`)}>
+                        title={L(E`打开终端 · ${whereOf(r)}`, E`Open the terminal · ${whereOf(r)}`)}>
                         <Avatar agent={r.st.agent} size={20} badge={false} />
                         <span className="app-nav-label">{nodeName(r.st.agent, r.hub)}</span>
                         {dot && (
@@ -1428,7 +1427,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                             title={dot === "asking" ? L("有 agent 在等你决定", "Someone needs your decision") : dot === "stuck" ? L("可能卡住", "May be stuck") : dot === "open" ? L("有命令没收尾", "Commands left open") : L("正在跑命令", "Running a command")} />
                         )}
                       </button>
-                      <button type="button" className="sp-nav-more" aria-label={L(`${nodeName(r.st.agent, r.hub)}：设置`, `${nodeName(r.st.agent, r.hub)}: settings`)}
+                      <button type="button" className="sp-nav-more" aria-label={L(E`${nodeName(r.st.agent, r.hub)}：设置`, E`${nodeName(r.st.agent, r.hub)}: settings`)}
                         title={L("谁能用、项目、移除", "Who can use it, projects, remove")} onClick={(e) => navMenu.openUnder(e.currentTarget, menu)}>
                         <MoreHorizontal />
                       </button>
@@ -1437,7 +1436,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
                 })}
                 {computers.length > NAV_COMPUTERS && (
                   <button type="button" className="app-nav-item sp-nav muted" onClick={() => setPage("computers")}>
-                    <span className="app-nav-label">{L(`全部 ${computers.length} 台`, `All ${computers.length}`)}</span>
+                    <span className="app-nav-label">{L(E`全部 ${computers.length} 台`, E`All ${computers.length}`)}</span>
                   </button>
                 )}
                 {computers.length === 0 && (
@@ -1778,7 +1777,7 @@ function NavHead({ label, active, className, title, onOpen, folded, onFold, coun
         {label}{folded && count ? <span className="sp-nav-head-count">{count}</span> : null}
       </button>
       {onFold && (
-        <button type="button" className="sp-nav-fold" aria-expanded={!folded} aria-label={folded ? L(`展开${label}`, `Show ${label}`) : L(`收起${label}`, `Hide ${label}`)}
+        <button type="button" className="sp-nav-fold" aria-expanded={!folded} aria-label={folded ? L(E`展开${label}`, E`Show ${label}`) : L(E`收起${label}`, E`Hide ${label}`)}
           onClick={onFold}><ChevronRight className={cn(!folded && "is-open")} /></button>
       )}
       {children && <span className="sp-nav-head-tools">{children}</span>}
@@ -1826,9 +1825,9 @@ function NavArrows() {
   return (
     <span className="app-nav-arrows" data-testid="nav-arrows">
       <button type="button" className="app-btn app-btn-plain" onClick={navBack} disabled={!back}
-        aria-label={L("后退", "Back")} title={L(`后退（${mod}[）`, `Back (${mod}[)`)}><ChevronLeft /></button>
+        aria-label={L("后退", "Back")} title={L(E`后退（${mod}[）`, E`Back (${mod}[)`)}><ChevronLeft /></button>
       <button type="button" className="app-btn app-btn-plain" onClick={navForward} disabled={!forward}
-        aria-label={L("前进", "Forward")} title={L(`前进（${mod}]）`, `Forward (${mod}])`)}><ChevronRight /></button>
+        aria-label={L("前进", "Forward")} title={L(E`前进（${mod}]）`, E`Forward (${mod}])`)}><ChevronRight /></button>
     </span>
   );
 }

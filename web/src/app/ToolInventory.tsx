@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { MCPServer, ToolPlugin, ToolSkill } from "@/api";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type ToolLists = {
@@ -41,7 +41,7 @@ export function ToolInventory({ tools, mcpBlocked = false }: { tools: ToolLists;
           note={mcpBlocked ? L("在工作区权限下用不了：到「设置」里打开「允许 MCP 工具」。", "Not available with workspace access: turn on Allow MCP tools in Settings.") : undefined}
           rows={mcp.map((m, i) => (
             <Row key={`m-${i}`} name={m.name}
-              meta={[m.transport === "stdio" ? L("本地", "Local") : L(`远程${m.host ? ` · ${m.host}` : ""}`, `Remote${m.host ? ` · ${m.host}` : ""}`), scope(m.scope)].join(" · ")}
+              meta={[m.transport === "stdio" ? L("本地", "Local") : L(E`远程${m.host ? ` · ${m.host}` : ""}`, E`Remote${m.host ? ` · ${m.host}` : ""}`), scope(m.scope)].join(" · ")}
               tag={m.enabled === false ? L("未启用", "Disabled") : undefined} off={m.enabled === false} />
           ))} />
       )}
@@ -61,7 +61,7 @@ export function ToolInventory({ tools, mcpBlocked = false }: { tools: ToolLists;
       )}
       {!!tools.tool_warnings?.length && (
         <div className="ti-warn" title={tools.tool_warnings.join("\n")}>
-          {L(`有 ${tools.tool_warnings.length} 个配置文件没读懂，里面的工具没列出来。`, `${tools.tool_warnings.length} configuration files could not be read; their tools are not listed.`)}
+          {L(E`有 ${tools.tool_warnings.length} 个配置文件没读懂，里面的工具没列出来。`, E`${tools.tool_warnings.length} configuration files could not be read; their tools are not listed.`)}
         </div>
       )}
     </div>
@@ -88,7 +88,7 @@ function Group({ title, count, kind, rows, note }: { title: string; count: numbe
       {all || more <= 1 ? rows : rows.slice(0, FIRST)}
       {more > 1 && (
         <button type="button" className={cn("ti-more", all && "is-open")} onClick={() => setAll((v) => !v)} aria-expanded={all}>
-          {all ? L("收起", "Show fewer") : L(`再显示 ${more} 个`, `Show ${more} more`)}<ChevronDown />
+          {all ? L("收起", "Show fewer") : L(E`再显示 ${more} 个`, E`Show ${more} more`)}<ChevronDown />
         </button>
       )}
     </div>

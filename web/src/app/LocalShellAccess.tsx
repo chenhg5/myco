@@ -6,7 +6,7 @@ import { ErrorText } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
 import { ALLOW_SHELL_COMMAND, DENY_SHELL_COMMAND, thisComputerId } from "@/app/nodes";
 import type { AgentRow } from "@/app/types";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /**
  * Shell nodes and full-access sessions need the machine to allow them in its
@@ -133,8 +133,8 @@ export function LocalShellAccess({ machine, hub, what, onlyLocal, onChange, shel
       return (
         <div className="app-small-note app-full-pending" style={{ marginTop: 6 }} data-testid="full-access-pending">
           <span className="app-spinner" aria-hidden />
-          {L(`已允许。${agent.name} 正在换上新的权限，几秒后这里就能选「完全放开」。`,
-            `Allowed. ${agent.name} is picking up the new limit; Full can be chosen here in a few seconds.`)}
+          {L(E`已允许。${agent.name} 正在换上新的权限，几秒后这里就能选「完全放开」。`,
+            E`Allowed. ${agent.name} is picking up the new limit; Full can be chosen here in a few seconds.`)}
         </div>
       );
     }
@@ -143,12 +143,12 @@ export function LocalShellAccess({ machine, hub, what, onlyLocal, onChange, shel
         <ShieldCheck />
         <div style={{ flex: 1, minWidth: 0 }}>
           <span>{restarting === "done"
-            ? L(`已重启这台电脑上的 myco，${agent.name} 重新上线后就能选「完全放开」。`, `myco restarted on this computer; Full can be chosen once ${agent.name} is back online.`)
+            ? L(E`已重启这台电脑上的 myco，${agent.name} 重新上线后就能选「完全放开」。`, E`myco restarted on this computer; Full can be chosen once ${agent.name} is back online.`)
             : agent.live
-              ? L(`已允许，但 ${agent.name} 还没换上新的权限。重启这台电脑上的 myco 后台就能生效：`,
-                `Allowed, but ${agent.name} has not picked up the new limit yet. Restart myco on this computer to apply it:`)
-              : L(`已允许，但 ${agent.name} 用的 myco 版本要重启后才生效。重启这台电脑上的 myco 后台：`,
-                `Allowed, but ${agent.name}'s myco applies it only after a restart. Restart myco on this computer:`)}</span>
+              ? L(E`已允许，但 ${agent.name} 还没换上新的权限。重启这台电脑上的 myco 后台就能生效：`,
+                E`Allowed, but ${agent.name} has not picked up the new limit yet. Restart myco on this computer to apply it:`)
+              : L(E`已允许，但 ${agent.name} 用的 myco 版本要重启后才生效。重启这台电脑上的 myco 后台：`,
+                E`Allowed, but ${agent.name}'s myco applies it only after a restart. Restart myco on this computer:`)}</span>
           {restarting !== "done" && (
             <>
               <div style={{ marginTop: 8 }}>

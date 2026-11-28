@@ -28,6 +28,7 @@ window.addEventListener("wails:runtime-config-ready", wailsReady);
 wailsReady();
 async function start() {
   await initializePreferences();
+  await (await import("@/lib/i18n")).initializeLanguage();
   applyUiStyle();
   const root = ReactDOM.createRoot(document.getElementById("root")!);
   // The Mac app's notch island is its own little window with its own page;

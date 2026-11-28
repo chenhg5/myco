@@ -3,7 +3,7 @@ import { Check } from "lucide-react";
 import type { Agent } from "@/api";
 import { agentKind, nodeIcon, nodeName } from "@/app/nodes";
 import { cn } from "@/lib/utils";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 const NAME = /^[a-z0-9][a-z0-9._-]*$/;
 
@@ -42,7 +42,7 @@ export function NodePicker({ nodes, value, onChange, disabled, emptyPlaceholder,
         {value.map((name) => (
           <span key={name} className="app-label editable" title={name}>
             {label(name)}
-            <button type="button" aria-label={L(`去掉 ${name}`, `Remove ${name}`)} onClick={() => toggle(name)} disabled={disabled}>×</button>
+            <button type="button" aria-label={L(E`去掉 ${name}`, E`Remove ${name}`)} onClick={() => toggle(name)} disabled={disabled}>×</button>
           </span>
         ))}
         <input
@@ -61,7 +61,7 @@ export function NodePicker({ nodes, value, onChange, disabled, emptyPlaceholder,
       <div className="app-picker-list" role="listbox" aria-multiselectable="true">
         {list.length === 0 && (
           <div className="app-picker-empty">
-            {!listedOnly && NAME.test(query) ? L(`按回车添加「${query}」`, `Press Return to add “${query}”`) : L("没有匹配的节点", "No matching nodes")}
+            {!listedOnly && NAME.test(query) ? L(E`按回车添加「${query}」`, E`Press Return to add “${query}”`) : L("没有匹配的节点", "No matching nodes")}
           </div>
         )}
         {list.map((n) => {

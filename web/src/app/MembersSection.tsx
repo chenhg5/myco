@@ -5,7 +5,7 @@ import { appApi, type HubOverview } from "@/appapi";
 import type { AuditEntry, Device, Member, MemberRole } from "@/api";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
-import { L, locale } from "@/lib/i18n";
+import { L, locale, E } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 import { RowsSkeleton } from "@/app/Skeleton";
 
@@ -100,7 +100,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
       <div className="app-members-head">
         <HubPicker hubs={hubs} value={hub.id} onChange={setHubId} />
         <span className="app-small-note">
-          {me.member ? L(`你是 ${me.member.display_name || me.member.name}（${roleLabel(me.member.role)}）`, `You are ${me.member.display_name || me.member.name} (${roleLabel(me.member.role)})`) : L("你用的是工作区的管理员令牌", "You are using the Hub’s admin token")}
+          {me.member ? L(E`你是 ${me.member.display_name || me.member.name}（${roleLabel(me.member.role)}）`, E`You are ${me.member.display_name || me.member.name} (${roleLabel(me.member.role)})`) : L("你用的是工作区的管理员令牌", "You are using the Hub’s admin token")}
         </span>
         {manages && (
           <button type="button" className="app-btn app-btn-quiet app-members-invite" onClick={() => { setForm({ name: "", display_name: "", role: "member" }); setLink(null); setFormError(null); setInviteOpen(true); }}>
@@ -117,7 +117,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
             <span className="app-member-avatar">{(m.display_name || m.name).slice(0, 1).toUpperCase()}</span>
             <div className="app-member-name">
               <b>{m.display_name || m.name}{iAm(m) && <span className="app-member-you">{L("你", "You")}</span>}</b>
-              <small>@{m.name} · {L(`${timeAgo(m.created_at, Date.now())}加入`, `joined ${timeAgo(m.created_at, Date.now())}`)}</small>
+              <small>@{m.name} · {L(E`${timeAgo(m.created_at, Date.now())}加入`, E`joined ${timeAgo(m.created_at, Date.now())}`)}</small>
             </div>
             {manages && m.role !== "owner" && !iAm(m) ? (
               <select className="app-select-field app-member-role" value={m.role} disabled={busy} onChange={(e) => setRole(m, e.target.value as MemberRole)}>
@@ -153,7 +153,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
         description={link ? undefined : L("对方用这个链接以自己的身份加入这个工作区：可以让自己的 agent 执行一条命令，不用装 App；也可以在 myco App 里打开。", "They join this Hub as themselves with the link: their agent runs one command, no app needed; or they open it in the myco app.")}>
         {link ? (
           <>
-            <p className="app-modal-note">{L(`私下发给 ${link.name}，二选一：`, `Send this privately to ${link.name}; either way works:`)}</p>
+            <p className="app-modal-note">{L(E`私下发给 ${link.name}，二选一：`, E`Send this privately to ${link.name}; either way works:`)}</p>
             <div className="app-field-label" style={{ marginTop: 12 }}>{L("不用装 App：让对方的 agent （Claude Code、Codex）执行", "No app: their agent (Claude Code, Codex) runs")}</div>
             <div className="app-command"><code>{link.command}</code><CopyButton value={link.command} /></div>
             <div className="app-field-label" style={{ marginTop: 12 }}>{L("或者在 myco App 里「添加工作区」时粘贴", "Or paste it under “Add Hub” in the myco app")}</div>
@@ -211,7 +211,7 @@ export function MembersSection({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; 
       <ConfirmDialog
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}
-        title={L(`移除 ${removing?.display_name || removing?.name || ""}？`, `Remove ${removing?.display_name || removing?.name || ""}?`)}
+        title={L(E`移除 ${removing?.display_name || removing?.name || ""}？`, E`Remove ${removing?.display_name || removing?.name || ""}?`)}
         description={L("对方的 App 和命令行凭据会立即失效。对方加进来的 agent 和电脑会保留，可以在 agent 详情里转给别人。", "Their app and command-line credentials stop working right away. The nodes and machines they added stay; you can give them to someone else in the node details.")}
         confirmLabel={L("移除", "Remove")}
         busy={busy}
@@ -382,7 +382,7 @@ function DevicesCard({ hubId, currentId }: { hubId: string; currentId?: string }
           <div key={d.id} className="app-member-row">
             <div className="app-member-name">
               <b>{d.name}{d.id === currentId && <span className="app-member-you">{L("这台设备", "This device")}</span>}</b>
-              <small>{L(`添加于 ${fmt(d.created_at)} · 最近使用 ${fmt(d.last_used_at)}`, `added ${fmt(d.created_at)} · last used ${fmt(d.last_used_at)}`)}</small>
+              <small>{L(E`添加于 ${fmt(d.created_at)} · 最近使用 ${fmt(d.last_used_at)}`, E`added ${fmt(d.created_at)} · last used ${fmt(d.last_used_at)}`)}</small>
             </div>
             <div className="app-member-actions">
               <button type="button" className="app-btn app-btn-plain app-btn-small app-danger-text" onClick={() => setRemoving(d)}>{L("移除", "Remove")}</button>
@@ -410,7 +410,7 @@ function DevicesCard({ hubId, currentId }: { hubId: string; currentId?: string }
       <ConfirmDialog
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}
-        title={L(`移除「${removing?.name || ""}」？`, `Remove “${removing?.name || ""}”?`)}
+        title={L(E`移除「${removing?.name || ""}」？`, E`Remove “${removing?.name || ""}”?`)}
         description={removing?.id === currentId
           ? L("这就是你现在用的这台设备：移除后这个 App 会立即连不上这个工作区，要用新的链接重新添加。", "This is the device you are using: this app loses access to this Hub right away, and you need a new link to add it again.")
           : L("那台设备上的 App 会立即连不上这个工作区。", "The app on that device loses access to this Hub right away.")}

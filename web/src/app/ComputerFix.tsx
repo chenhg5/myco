@@ -5,7 +5,7 @@ import type { Machine } from "@/api";
 import { ErrorText } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
 import { machineTellsInfo } from "@/app/hubVersion";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /**
  * Why a computer cannot list its sessions or start one, and the fix done
@@ -36,7 +36,7 @@ export function ComputerFix({ hubId, machine, here }: { hubId: string; machine: 
       if (here) {
         const r = await appApi.upgradeMyco();
         setDone(r.from && r.from !== r.version
-          ? L(`已升级到 ${r.version} 并重启，半分钟内就能用。`, `Upgraded to ${r.version} and restarted; ready within half a minute.`)
+          ? L(E`已升级到 ${r.version} 并重启，半分钟内就能用。`, E`Upgraded to ${r.version} and restarted; ready within half a minute.`)
           : L("已重启，半分钟内就能用。", "Restarted; ready within half a minute."));
       } else {
         const r = await appApi.fixMachine(hubId, machine.id, old ? "upgrade" : "restart");
@@ -53,10 +53,10 @@ export function ComputerFix({ hubId, machine, here }: { hubId: string; machine: 
   const text = old
     ? here
       ? L("这台电脑上的 myco 版本太旧，列不出会话、也开不了新的。点一下升级（几分钟内完成，不用打开终端）：", "This computer's myco is too old to list sessions or start one. Upgrade it here (a few minutes, no terminal):")
-      : L(`「${machine.name}」上的 myco 版本太旧，列不出会话、也开不了新的。`, `The myco on “${machine.name}” is too old to list sessions or start one.`)
+      : L(E`「${machine.name}」上的 myco 版本太旧，列不出会话、也开不了新的。`, E`The myco on “${machine.name}” is too old to list sessions or start one.`)
     : here
       ? L("这台电脑上负责开会话的 myco 后台没连上工作区。点一下修复，会把 myco 升到最新并重启它：", "The part of myco that starts sessions on this computer is not connected. Fix it here: myco is brought up to date and restarted:")
-      : L(`「${machine.name}」上负责开会话的 myco 后台没连上工作区。`, `The part of myco that starts sessions on “${machine.name}” is not connected.`);
+      : L(E`「${machine.name}」上负责开会话的 myco 后台没连上工作区。`, E`The part of myco that starts sessions on “${machine.name}” is not connected.`);
   const canFix = here || !!route;
   const command = old ? "myco upgrade" : "myco runner service restart";
   return (

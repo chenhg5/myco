@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { appApi } from "@/appapi";
 import { ErrorText } from "@/app/dialogs";
 import { MessageContent } from "@/app/Markdown";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
@@ -134,16 +134,16 @@ export function WorkflowNoteCard({ hubId, note }: { hubId: string; note: Workflo
   const bad = note.steps.filter((s) => badLine(s.line)).length;
   return (
     <div className={cn("wfn", `is-${note.status}`)} data-testid="workflow-note">
-      <Head hubId={hubId} runId={note.runId} words={L(`工作流 · ${note.name}`, `Workflow · ${note.name}`)} />
+      <Head hubId={hubId} runId={note.runId} words={L(E`工作流 · ${note.name}`, E`Workflow · ${note.name}`)} />
       <div className="wfn-outcome">
-        {L(`「${note.name}」`, `“${note.name}” `)}<b className="wfn-word">{outcome(note.status)}</b>
-        {note.why && <span className="wfn-why">{L(`：${note.why}`, `: ${note.why}`)}</span>}
+        {L(E`「${note.name}」`, E`“${note.name}” `)}<b className="wfn-word">{outcome(note.status)}</b>
+        {note.why && <span className="wfn-why">{L(E`：${note.why}`, E`: ${note.why}`)}</span>}
       </div>
       {note.steps.length > 0 && (
         <>
           <Fold open={open} onToggle={() => setOpen((o) => !o)} testId="workflow-note-steps">
-            <span>{L(`${note.steps.length} 步`, `${note.steps.length} steps`)}</span>
-            {bad > 0 && <span className="wfn-bad">{L(` · ${bad} 步没顺利完成`, ` · ${bad} did not go well`)}</span>}
+            <span>{L(E`${note.steps.length} 步`, E`${note.steps.length} steps`)}</span>
+            {bad > 0 && <span className="wfn-bad">{L(E` · ${bad} 步没顺利完成`, E` · ${bad} did not go well`)}</span>}
           </Fold>
           {open && (
             <ol className="wfn-steps">
@@ -168,13 +168,13 @@ export function WorkflowStepCard({ hubId, runId, step, failed }: { hubId: string
   /** why this try was not done, when it was not (said in the card, in grey) */
   failed?: string }) {
   const [open, setOpen] = useState(false);
-  const words = [L(`工作流 · ${step.name}`, `Workflow · ${step.name}`), L(`第 ${step.n} 步 ${step.label}`, `step ${step.n}, ${step.label}`),
-    step.attempt > 1 ? L(`第 ${step.attempt} 次`, `try ${step.attempt}`) : ""].filter(Boolean).join(" · ");
+  const words = [L(E`工作流 · ${step.name}`, E`Workflow · ${step.name}`), L(E`第 ${step.n} 步 ${step.label}`, E`step ${step.n}, ${step.label}`),
+    step.attempt > 1 ? L(E`第 ${step.attempt} 次`, E`try ${step.attempt}`) : ""].filter(Boolean).join(" · ");
   return (
     <div className="wfn wfn-step" data-testid="workflow-step">
       <Head hubId={hubId} runId={runId} words={words} />
       {step.prompt && <div className="wfn-prompt"><MessageContent body={step.prompt} /></div>}
-      {failed && <div className="wfn-failed" data-testid="workflow-step-failed"><b>{L("这一步没完成", "Not done")}</b>{L(`：${failed}`, `: ${failed}`)}</div>}
+      {failed && <div className="wfn-failed" data-testid="workflow-step-failed"><b>{L("这一步没完成", "Not done")}</b>{L(E`：${failed}`, E`: ${failed}`)}</div>}
       {step.rest && (
         <>
           <Fold open={open} onToggle={() => setOpen((o) => !o)} testId="workflow-step-more">

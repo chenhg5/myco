@@ -4,7 +4,7 @@ import { ApiError, appApi, type HubOverview, type ModelProviderInput } from "@/a
 import type { ModelProvider, ModelProviderTestResponse } from "@/api";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { recall, remember } from "@/lib/memo";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 /** The vendors the App knows (internal/provider's catalogue): their two
@@ -54,8 +54,8 @@ function testResultText(result: ModelProviderTestResponse) {
   const ms = result.models;
   const names = ms.slice(0, 4).map((m) => m.id);
   return result.models_source === "catalog"
-    ? L(`对话验证通过，可选 ${ms.length} 个预设模型：${names.join("、")}`, `Completion verified; ${ms.length} preset models: ${names.join(", ")}`)
-    : L(`读到 ${ms.length} 个模型：${names.join("、")}${ms.length > 4 ? " 等" : ""}`, `${ms.length} models: ${names.join(", ")}${ms.length > 4 ? " and more" : ""}`);
+    ? L(E`对话验证通过，可选 ${ms.length} 个预设模型：${names.join("、")}`, E`Completion verified; ${ms.length} preset models: ${names.join(", ")}`)
+    : L(E`读到 ${ms.length} 个模型：${names.join("、")}${ms.length > 4 ? " 等" : ""}`, E`${ms.length} models: ${names.join(", ")}${ms.length > 4 ? " and more" : ""}`);
 }
 function providerErrorSummary(error: unknown) {
   return error instanceof ApiError && error.code === "provider_region_or_key" ? {
@@ -124,7 +124,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
     setNote("");
     try {
       const r = await appApi.testModelProvider(hub.id, p.id);
-      setNote(r.models_source === "catalog" ? testResultText(r) : L(`「${p.name}」读到 ${r.models.length} 个模型。`, `“${p.name}”: ${r.models.length} models listed.`));
+      setNote(r.models_source === "catalog" ? testResultText(r) : L(E`「${p.name}」读到 ${r.models.length} 个模型。`, E`“${p.name}”: ${r.models.length} models listed.`));
       await load();
     } catch (e) {
       setActionError(e);
@@ -139,8 +139,8 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
     try {
       const r = await appApi.pushModelProvider(hub.id, p.id);
       setNote(r.failed.length
-        ? L(`新 key 已发给 ${r.pushed.length} 个 agent；${r.failed.map((f) => f.agent).join("、")} 没发成：${r.failed[0].error}`, `The new key went to ${r.pushed.length} agents; not to ${r.failed.map((f) => f.agent).join(", ")}: ${r.failed[0].error}`)
-        : L(`新 key 已发给 ${r.pushed.length} 个 agent，它们从下一条消息开始用。`, `The new key went to ${r.pushed.length} agents; they use it from their next message.`));
+        ? L(E`新 key 已发给 ${r.pushed.length} 个 agent；${r.failed.map((f) => f.agent).join("、")} 没发成：${r.failed[0].error}`, E`The new key went to ${r.pushed.length} agents; not to ${r.failed.map((f) => f.agent).join(", ")}: ${r.failed[0].error}`)
+        : L(E`新 key 已发给 ${r.pushed.length} 个 agent，它们从下一条消息开始用。`, E`The new key went to ${r.pushed.length} agents; they use it from their next message.`));
       await onRefresh();
     } catch (e) {
       setActionError(e);
@@ -185,7 +185,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
       <div className="app-members-head pv-head">
         <span className="app-group-title">
           <span className="name">{L("我的模型供应商", "My model providers")}</span>
-          {providers.length > 0 && <span className="app-group-note">{L(` · ${providers.length} 个`, ` · ${providers.length}`)}</span>}
+          {providers.length > 0 && <span className="app-group-note">{L(E` · ${providers.length} 个`, E` · ${providers.length}`)}</span>}
         </span>
         {hubs.length > 1 && (
           <select className="app-select-field pv-hub" value={hub.id} onChange={(e) => setHubId(e.target.value)} aria-label={L("工作区", "Workspace")} title={L("存在哪个工作区", "Which workspace keeps them")}>
@@ -234,10 +234,10 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
                 <small>
                   {[vendorName(p.vendor), hostOf(p.anthropic_base || p.openai_base),
                     p.key_lost ? L("key 已丢失", "key lost")
-                      : p.key_readable ? (p.key_hint ? L(`key ···${p.key_hint}`, `key ···${p.key_hint}`) : L("key 已保存", "key saved")) : L("这台设备还解不开 key", "This device cannot open the key yet"),
+                      : p.key_readable ? (p.key_hint ? L(E`key ···${p.key_hint}`, E`key ···${p.key_hint}`) : L("key 已保存", "key saved")) : L("这台设备还解不开 key", "This device cannot open the key yet"),
                     p.custody === "hub" ? L("Hub 保管", "Kept by the hub") : L("端到端加密", "End-to-end encrypted"),
-                    users.all.length ? L(`${users.all.length} 个 agent 在用`, `${users.all.length} agents use it`) : "",
-                    p.models?.length && p.models_at ? L(`${p.models.length} 个模型 · ${timeAgo(p.models_at, Date.now())}`, `${p.models.length} models · ${timeAgo(p.models_at, Date.now())}`) : ""]
+                    users.all.length ? L(E`${users.all.length} 个 agent 在用`, E`${users.all.length} agents use it`) : "",
+                    p.models?.length && p.models_at ? L(E`${p.models.length} 个模型 · ${timeAgo(p.models_at, Date.now())}`, E`${p.models.length} models · ${timeAgo(p.models_at, Date.now())}`) : ""]
                     .filter(Boolean).join(" · ")}
                 </small>
                 {p.key_lost ? (
@@ -256,7 +256,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
               <div className="app-member-actions">
                 {users.behind.length > 0 && p.key_readable && (
                   <button type="button" className={cn("app-btn app-btn-small")} disabled={!!busy} onClick={() => void push(p)} data-testid="provider-push">
-                    {L(`推送新 key（${users.behind.length}）`, `Push new key (${users.behind.length})`)}
+                    {L(E`推送新 key（${users.behind.length}）`, E`Push new key (${users.behind.length})`)}
                   </button>
                 )}
                 {p.move_to_hub && p.key_readable && (
@@ -287,7 +287,7 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
       <ConfirmDialog
         open={!!moving}
         onOpenChange={(o) => !o && setMoving(null)}
-        title={L(`把「${moving?.name || ""}」交给 Hub 保管？`, `Hand “${moving?.name || ""}” to the hub?`)}
+        title={L(E`把「${moving?.name || ""}」交给 Hub 保管？`, E`Hand “${moving?.name || ""}” to the hub?`)}
         description={L("key 会在这台电脑上解开，交给 Hub 保存。Hub 管理员能看到它。以后打开端到端加密，会再改回只有你的设备能解开。", "The key is opened on this computer and given to the hub to keep. The hub's administrator could see it. Turn end-to-end encryption on later, and it is encrypted for your devices alone again.")}
         confirmLabel={L("交给 Hub", "Hand it over")}
         busy={!!busy}
@@ -296,9 +296,9 @@ export function ModelProvidersSection({ hubsOv, onRefresh, onOpenWorkspaces }: {
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
-        title={L(`删除「${deleting?.name || ""}」？`, `Delete “${deleting?.name || ""}”?`)}
+        title={L(E`删除「${deleting?.name || ""}」？`, E`Delete “${deleting?.name || ""}”?`)}
         description={deletingUsers
-          ? L(`${deletingUsers} 个 agent 在用它。它们会照常用各自电脑上已经写好的那份，App 上会提示改选或者清掉。`, `${deletingUsers} agents use it. They keep using what is written on their computers; the App asks you to pick another or clear it.`)
+          ? L(E`${deletingUsers} 个 agent 在用它。它们会照常用各自电脑上已经写好的那份，App 上会提示改选或者清掉。`, E`${deletingUsers} agents use it. They keep using what is written on their computers; the App asks you to pick another or clear it.`)
           : L("没有 agent 在用它。", "No agent uses it.")}
         confirmLabel={L("删除", "Delete")}
         busy={!!busy}
@@ -479,8 +479,8 @@ export function ModelSource({ hubId, cli, machineName, value, onChange, model, o
         <label className={cn("app-provider-opt", !value && !adding && "picked")}>
           <input type="radio" name="model-source" checked={!value && !adding} onChange={() => { onChange(""); onModel(""); setAdding(false); }} disabled={busy} />
           <span>
-            <b>{L(`「${machineName}」上的登录或设置`, `“${machineName}”'s own sign-in or settings`)}</b>
-            <small>{L(`用那台电脑上 ${program} 自己的账号`, `${program}'s own account on that computer`)}</small>
+            <b>{L(E`「${machineName}」上的登录或设置`, E`“${machineName}”'s own sign-in or settings`)}</b>
+            <small>{L(E`用那台电脑上 ${program} 自己的账号`, E`${program}'s own account on that computer`)}</small>
           </span>
         </label>
         {usable.map((p) => (
@@ -488,7 +488,7 @@ export function ModelSource({ hubId, cli, machineName, value, onChange, model, o
             <input type="radio" name="model-source" checked={value === p.id && !adding} onChange={() => { onChange(p.id); onModel(""); setAdding(false); }} disabled={busy} />
             <span>
               <b>{p.name}</b>
-              <small>{[vendorName(p.vendor), p.models?.length ? L(`${p.models.length} 个模型`, `${p.models.length} models`) : "", p.key_hint ? `key ···${p.key_hint}` : ""].filter(Boolean).join(" · ")}</small>
+              <small>{[vendorName(p.vendor), p.models?.length ? L(E`${p.models.length} 个模型`, E`${p.models.length} models`) : "", p.key_hint ? `key ···${p.key_hint}` : ""].filter(Boolean).join(" · ")}</small>
             </span>
           </label>
         ))}

@@ -16,7 +16,7 @@ import { RowsSkeleton, TextSkeleton } from "@/app/Skeleton";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
 import { Avatar } from "@/app/persona";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 export interface ProjectRef { hubId: string; name: string }
 
@@ -89,7 +89,7 @@ const FOLD_H = 220;
 function MoreRow({ open, total, what, onToggle }: { open: boolean; total: number; what: string; onToggle: () => void }) {
   return (
     <button type="button" className="app-row pp-more" onClick={onToggle} aria-expanded={open}>
-      <span className="app-row-main"><span className="app-row-sub">{open ? L("收起", "Show fewer") : L(`全部 ${total} ${what}`, `All ${total}${what}`)}</span></span>
+      <span className="app-row-main"><span className="app-row-sub">{open ? L("收起", "Show fewer") : L(E`全部 ${total} ${what}`, E`All ${total}${what}`)}</span></span>
       <ChevronDown className={cn("pp-more-chev", open && "is-open")} />
     </button>
   );
@@ -255,7 +255,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           <p className="pcd-sub">
             <span className="mono">{p.name}</span>
             <span>{hubName}</span>
-            {p.owner && <span>{L(`${p.owner} 创建`, `by ${p.owner}`)}</span>}
+            {p.owner && <span>{L(E`${p.owner} 创建`, E`by ${p.owner}`)}</span>}
             <span className="app-project-vis">
               {p.visibility === "members" ? <><Lock />{L("参与者可见", "Participants")}</> : <><Users />{L("团队可见", "Team")}</>}
             </span>
@@ -318,7 +318,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
           {uploading !== null && (
             <div className="app-row app-row-static app-project-uploading">
               <span className="app-spinner" />
-              <span className="app-row-main"><span className="app-row-sub">{L(`正在上传 ${uploading}…`, `Uploading ${uploading}…`)}</span></span>
+              <span className="app-row-main"><span className="app-row-sub">{L(E`正在上传 ${uploading}…`, E`Uploading ${uploading}…`)}</span></span>
             </div>
           )}
           {uploadError !== null && <div className="app-project-upload-error"><ErrorText error={uploadError} /></div>}
@@ -365,7 +365,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
       {tab === "members" && (<>
       <section className="app-group">
         <div className="app-group-title">
-          <span className="name">{L(`成员 ${p.members.length}`, `Members ${p.members.length}`)}{coordinators > 0 && <span className="app-group-note">{L(` · ${coordinators} 个协调者`, ` · ${coordinators} coordinating`)}</span>}</span>
+          <span className="name">{L(E`成员 ${p.members.length}`, E`Members ${p.members.length}`)}{coordinators > 0 && <span className="app-group-note">{L(E` · ${coordinators} 个协调者`, E` · ${coordinators} coordinating`)}</span>}</span>
           <span className="app-group-actions">
             <button
               type="button"
@@ -417,7 +417,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
                   const h = onHand(m.name);
                   return (h.working > 0 || h.queued > 0) ? (
                     <span className="app-project-onhand">
-                      {[h.working ? L(`处理中 ${h.working}`, `${h.working} working`) : "", h.queued ? L(`排队 ${h.queued}`, `${h.queued} queued`) : ""].filter(Boolean).join(" · ")}
+                      {[h.working ? L(E`处理中 ${h.working}`, E`${h.working} working`) : "", h.queued ? L(E`排队 ${h.queued}`, E`${h.queued} queued`) : ""].filter(Boolean).join(" · ")}
                     </span>
                   ) : null;
                 })()}
@@ -554,7 +554,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
       <ConfirmDialog
         open={dialog?.kind === "delete"}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={L(`删除项目 ${p.title || p.name}`, `Delete ${p.title || p.name}`)}
+        title={L(E`删除项目 ${p.title || p.name}`, E`Delete ${p.title || p.name}`)}
         description={L("项目的成员关系、说明、文档和链接都会删除； agent 本身和它们的对话不受影响。", "Its members, brief, documents and links are deleted; the nodes and their conversations stay.")}
         confirmLabel={L("删除", "Delete")}
         busy={busy}
@@ -741,7 +741,7 @@ function ProjectMachines({ project, machines, busy, onSet }: {
             : L("还没有。协调者可以向项目主人申请（myco project machine request）。", "None yet. A coordinator can ask the project's owner (myco project machine request).")}</div>
         ) : shown.map((m) => {
           const on = allowed.has(m.id);
-          const label = on ? L(`不让项目在「${m.name}」上开 agent`, `Stop starting agents on “${m.name}”`) : L(`让项目在「${m.name}」上开 agent`, `Let it start agents on “${m.name}”`);
+          const label = on ? L(E`不让项目在「${m.name}」上开 agent`, E`Stop starting agents on “${m.name}”`) : L(E`让项目在「${m.name}」上开 agent`, E`Let it start agents on “${m.name}”`);
           return (
             <div className="app-row" key={m.id}>
               <span className="app-row-icon"><Monitor /></span>
@@ -819,7 +819,7 @@ function FileDialog({ hubId, project, doc, busy, error, onClose, onDelete }: {
   const markdown = !doc.binary && (!doc.content_type || /markdown|text\/plain/.test(doc.content_type) || /\.(md|markdown|txt)$/i.test(doc.name));
   return (
     <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={doc.name} wide
-      description={[doc.updated_by && L(`${doc.updated_by} 上传`, `by ${doc.updated_by}`), fileSize(doc.size)].filter(Boolean).join(" · ")}>
+      description={[doc.updated_by && L(E`${doc.updated_by} 上传`, E`by ${doc.updated_by}`), fileSize(doc.size)].filter(Boolean).join(" · ")}>
       {!doc.binary && !full && !loadError && <RowsSkeleton rows={3} className="is-flat" />}
       <ErrorText error={loadError} />
       {full && (markdown
@@ -827,7 +827,7 @@ function FileDialog({ hubId, project, doc, busy, error, onClose, onDelete }: {
         : <pre className="app-project-doc-body app-project-doc-code">{full.body}</pre>)}
       {image && <div className="app-project-preview"><img src={appApi.projectFileURL(hubId, project.name, doc.name)} alt={doc.name} /></div>}
       {doc.binary && !image && <div className="app-empty-note">{L("这个文件不能在这里预览，下载后用对应的应用打开。", "This file can't be previewed here; download it and open it in its app.")}</div>}
-      {saved && <div className="app-success"><Check /><span>{L(`已保存到 ${saved}`, `Saved to ${saved}`)}</span></div>}
+      {saved && <div className="app-success"><Check /><span>{L(E`已保存到 ${saved}`, E`Saved to ${saved}`)}</span></div>}
       <ErrorText error={saveError ?? error} />
       <div className="app-modal-actions">
         <button type="button" className="app-btn app-btn-danger" onClick={() => onDelete(doc.name)} disabled={busy} style={{ marginRight: "auto" }}>{L("删除", "Delete")}</button>

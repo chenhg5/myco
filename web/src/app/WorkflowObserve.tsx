@@ -6,7 +6,7 @@ import { MessageAttachments } from "@/app/attachments";
 import { SectionHead } from "@/app/PageHero";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { ErrorText, Modal } from "@/app/dialogs";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 /**
@@ -22,13 +22,13 @@ import { cn, timeAgo } from "@/lib/utils";
 /** A duration in ms for people: 820 毫秒, 12 秒, 3 分 20 秒, 1 小时 5 分. */
 export function msWords(ms?: number): string {
   if (!ms || ms <= 0) return "—";
-  if (ms < 1000) return L(`${Math.round(ms)} 毫秒`, `${Math.round(ms)}ms`);
+  if (ms < 1000) return L(E`${Math.round(ms)} 毫秒`, E`${Math.round(ms)}ms`);
   const s = Math.round(ms / 1000);
-  if (s < 60) return L(`${s} 秒`, `${s}s`);
+  if (s < 60) return L(E`${s} 秒`, E`${s}s`);
   const m = Math.floor(s / 60);
-  if (m < 60) return s % 60 && m < 10 ? L(`${m} 分 ${s % 60} 秒`, `${m}m ${s % 60}s`) : L(`${m} 分钟`, `${m} min`);
+  if (m < 60) return s % 60 && m < 10 ? L(E`${m} 分 ${s % 60} 秒`, E`${m}m ${s % 60}s`) : L(E`${m} 分钟`, E`${m} min`);
   const h = Math.floor(m / 60);
-  return L(`${h} 小时${m % 60 ? ` ${m % 60} 分` : ""}`, `${h}h${m % 60 ? ` ${m % 60}m` : ""}`);
+  return L(E`${h} 小时${m % 60 ? ` ${m % 60} 分` : ""}`, E`${h}h${m % 60 ? ` ${m % 60}m` : ""}`);
 }
 
 const count = (n?: number) => !n ? "0" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
@@ -41,7 +41,7 @@ export function costWords(u?: Usage): string {
   return t ? `${count(t)} tokens` : "—";
 }
 const tokenWords = (u?: Usage) => u && ((u.input_tokens || 0) + (u.output_tokens || 0)) > 0
-  ? L(`输入 ${count(u.input_tokens)} · 输出 ${count(u.output_tokens)} tokens`, `${count(u.input_tokens)} in · ${count(u.output_tokens)} out tokens`) : "";
+  ? L(E`输入 ${count(u.input_tokens)} · 输出 ${count(u.output_tokens)} tokens`, E`${count(u.input_tokens)} in · ${count(u.output_tokens)} out tokens`) : "";
 
 const statusWords = (s: RunStatus) => s === "running" ? L("在跑", "running") : s === "waiting" ? L("等人决定", "waiting")
   : s === "succeeded" ? L("完成了", "done") : s === "failed" ? L("失败了", "failed") : L("取消了", "cancelled");
@@ -102,23 +102,23 @@ export function WorkflowStatsSection({ hubId, wf, stamp, now, onOpenRun }: {
             <button type="button" role="tab" aria-selected={!version} className={cn("seg-btn", !version && "active")} onClick={() => setVersion(0)}>{L("全部", "All")}</button>
             {stats.versions.slice(0, 4).map((v) => (
               <button key={v.version} type="button" role="tab" aria-selected={version === v.version} className={cn("seg-btn", version === v.version && "active")}
-                onClick={() => setVersion(v.version)}>{L(`第 ${v.version} 版`, `v${v.version}`)}</button>
+                onClick={() => setVersion(v.version)}>{L(E`第 ${v.version} 版`, E`v${v.version}`)}</button>
             ))}
           </div>
         )}
       </SectionHead>
       <div className="au-stats wfo-stats" data-testid="workflow-stats">
         <div className="au-stat"><span>{L("跑了", "Runs")}</span><b>{stats.total}</b>
-          <small className="wfo-foot">{L(`完成 ${by.succeeded || 0} · 失败 ${by.failed || 0}${by.cancelled ? ` · 取消 ${by.cancelled}` : ""}`, `${by.succeeded || 0} done · ${by.failed || 0} failed${by.cancelled ? ` · ${by.cancelled} cancelled` : ""}`)}</small></div>
+          <small className="wfo-foot">{L(E`完成 ${by.succeeded || 0} · 失败 ${by.failed || 0}${by.cancelled ? ` · 取消 ${by.cancelled}` : ""}`, E`${by.succeeded || 0} done · ${by.failed || 0} failed${by.cancelled ? ` · ${by.cancelled} cancelled` : ""}`)}</small></div>
         <div className="au-stat"><span>{L("成功率", "Success rate")}</span><b className={cn(!ended && "is-quiet")}>{ended ? `${Math.round(stats.success_rate * 100)}%` : "—"}</b>
-          <small className="wfo-foot">{L(`${ended} 次跑完的里面`, `of ${ended} ended`)}</small></div>
+          <small className="wfo-foot">{L(E`${ended} 次跑完的里面`, E`of ${ended} ended`)}</small></div>
         <div className="au-stat"><span>{L("用时（中位）", "Time (median)")}</span><b className={cn(!stats.duration_ms.n && "is-quiet")}>{msWords(stats.duration_ms.p50)}</b>
-          <small className="wfo-foot">{stats.duration_ms.n > 1 ? L(`慢的时候（p95）${msWords(stats.duration_ms.p95)}`, `slow (p95) ${msWords(stats.duration_ms.p95)}`) : " "}</small></div>
+          <small className="wfo-foot">{stats.duration_ms.n > 1 ? L(E`慢的时候（p95）${msWords(stats.duration_ms.p95)}`, E`slow (p95) ${msWords(stats.duration_ms.p95)}`) : " "}</small></div>
         <div className="au-stat"><span>{L("每次花费", "Cost a run")}</span><b className={cn(!stats.usage && "is-quiet")}>{stats.usage ? costWords({ cost_usd: stats.cost_per_run, ...(stats.cost_per_run ? {} : stats.usage) }) : "—"}</b>
-          <small className="wfo-foot" title={tokenWords(stats.usage)}>{stats.usage ? L(`一共 ${costWords(stats.usage)}`, `${costWords(stats.usage)} in all`) : L("agent 没报用量", "no usage reported")}</small></div>
+          <small className="wfo-foot" title={tokenWords(stats.usage)}>{stats.usage ? L(E`一共 ${costWords(stats.usage)}`, E`${costWords(stats.usage)} in all`) : L("agent 没报用量", "no usage reported")}</small></div>
       </div>
       {stats.waiting_ms.n > 0 && stats.waiting_ms.p50 > 0 && (
-        <p className="app-small-note wfo-note">{L(`其中干活 ${msWords(stats.active_ms.p50)}，等人决定 ${msWords(stats.waiting_ms.p50)}（中位数）。`, `Of which at work ${msWords(stats.active_ms.p50)}, waiting for decisions ${msWords(stats.waiting_ms.p50)} (median).`)}</p>
+        <p className="app-small-note wfo-note">{L(E`其中干活 ${msWords(stats.active_ms.p50)}，等人决定 ${msWords(stats.waiting_ms.p50)}（中位数）。`, E`Of which at work ${msWords(stats.active_ms.p50)}, waiting for decisions ${msWords(stats.waiting_ms.p50)} (median).`)}</p>
       )}
 
       {stats.recent.length > 1 && <RecentRuns points={stats.recent} now={now} onOpenRun={onOpenRun} />}
@@ -165,16 +165,16 @@ export function WorkflowStatsSection({ hubId, wf, stamp, now, onOpenRun }: {
                 <span className="wfo-score-name"><Star /><b className="mono">{e.name}</b>{e.direction && <small>{e.direction === "higher" ? L("越高越好", "higher is better") : L("越低越好", "lower is better")}</small>}</span>
                 <span className="wfo-score-avg">{L("平均", "avg")} <b>{score(e.values.avg, e.unit)}</b></span>
                 <span className="wfo-score-range">{score(e.values.min, e.unit)} – {score(e.values.max, e.unit)}</span>
-                <span className="wfo-score-n">{L(`${e.values.n} 次`, `${e.values.n} runs`)}</span>
-                <button type="button" className="app-btn app-btn-quiet app-btn-small" onClick={() => onOpenRun(e.last_run)}>{L(`最近 ${score(e.last, e.unit)}`, `last ${score(e.last, e.unit)}`)}</button>
+                <span className="wfo-score-n">{L(E`${e.values.n} 次`, E`${e.values.n} runs`)}</span>
+                <button type="button" className="app-btn app-btn-quiet app-btn-small" onClick={() => onOpenRun(e.last_run)}>{L(E`最近 ${score(e.last, e.unit)}`, E`last ${score(e.last, e.unit)}`)}</button>
               </div>
             ))}
           </div>
         </>
       )}
       <p className="app-small-note wfo-note">{stats.version
-        ? L(`用时和每一步按第 ${stats.version} 版最近 ${stats.sample} 次算。`, `Times and steps: the last ${stats.sample} runs of version ${stats.version}.`)
-        : L(`次数和成功率算全部运行；用时、每一步和花费按最近 ${stats.sample} 次算。`, `Counts and success rate cover every run; times, steps and cost the last ${stats.sample}.`)}</p>
+        ? L(E`用时和每一步按第 ${stats.version} 版最近 ${stats.sample} 次算。`, E`Times and steps: the last ${stats.sample} runs of version ${stats.version}.`)
+        : L(E`次数和成功率算全部运行；用时、每一步和花费按最近 ${stats.sample} 次算。`, E`Counts and success rate cover every run; times, steps and cost the last ${stats.sample}.`)}</p>
     </>
   );
 }
@@ -186,7 +186,7 @@ function RecentRuns({ points, now, onOpenRun }: { points: WorkflowStats["recent"
   return (
     <div className="aud-card wfo-recent" data-testid="workflow-recent">
       <div className="wfo-recent-head">
-        <span>{L(`最近 ${list.length} 次用时`, `Time of the last ${list.length} runs`)}</span>
+        <span>{L(E`最近 ${list.length} 次用时`, E`Time of the last ${list.length} runs`)}</span>
         <span className="wfo-recent-max">{msWords(max)}</span>
       </div>
       <div className="wfo-bars" role="list">
@@ -223,15 +223,15 @@ export type { RunsFilter };
 export function RunMetricsStrip({ run }: { run: WorkflowRun }) {
   const m = run.metrics;
   if (!m) return null;
-  const extra = [m.retries ? L(`重发 ${m.retries}`, `${m.retries} retried`) : "", m.bounces ? L(`退回 ${m.bounces}`, `${m.bounces} sent back`) : ""].filter(Boolean).join(" · ");
+  const extra = [m.retries ? L(E`重发 ${m.retries}`, E`${m.retries} retried`) : "", m.bounces ? L(E`退回 ${m.bounces}`, E`${m.bounces} sent back`) : ""].filter(Boolean).join(" · ");
   return (
     <div className="au-stats wfo-stats wfo-run-stats" data-testid="workflow-run-metrics">
       <div className="au-stat"><span>{L("总用时", "Took")}</span><b>{msWords(m.duration_ms)}</b>
         <small className="wfo-foot">{run.ended_at ? L("从开始到结束", "start to end") : L("到现在，还在跑", "so far")}</small></div>
       <div className="au-stat"><span>{L("干活", "At work")}</span><b>{msWords(m.active_ms)}</b>
-        <small className="wfo-foot">{m.waiting_ms ? L(`等人决定 ${msWords(m.waiting_ms)}`, `waiting ${msWords(m.waiting_ms)}`) : L("没有等人", "no waiting")}</small></div>
+        <small className="wfo-foot">{m.waiting_ms ? L(E`等人决定 ${msWords(m.waiting_ms)}`, E`waiting ${msWords(m.waiting_ms)}`) : L("没有等人", "no waiting")}</small></div>
       <div className="au-stat"><span>{L("走了几步", "Steps")}</span><b>{m.steps}</b>
-        <small className="wfo-foot">{L(`发了 ${m.attempts} 个任务`, `${m.attempts} tasks sent`)}{extra && ` · ${extra}`}</small></div>
+        <small className="wfo-foot">{L(E`发了 ${m.attempts} 个任务`, E`${m.attempts} tasks sent`)}{extra && ` · ${extra}`}</small></div>
       <div className="au-stat"><span>{L("花费", "Cost")}</span><b className={cn(!m.usage && "is-quiet")}>{costWords(m.usage)}</b>
         <small className="wfo-foot" title={tokenWords(m.usage)}>{m.usage ? `${count((m.usage.input_tokens || 0) + (m.usage.output_tokens || 0))} tokens` : L("agent 没报用量", "no usage reported")}</small></div>
     </div>
@@ -253,7 +253,7 @@ export function RunTimeline({ run, now, onPick }: { run: WorkflowRun; now: numbe
         const tone = s.status === "waiting" || (s.kind === "human" && s.status === "done") ? "is-wait" : runTone(s.status);
         return (
           <button key={s.id} type="button" className="wfo-tl-row" onClick={() => onPick?.(s)}
-            title={`${s.title || s.step}${s.target ? ` · ${s.target}` : ""} · ${msWords(len)}${s.attempts && s.attempts > 1 ? L(` · 发了 ${s.attempts} 次`, ` · sent ${s.attempts} times`) : ""}`}>
+            title={`${s.title || s.step}${s.target ? ` · ${s.target}` : ""} · ${msWords(len)}${s.attempts && s.attempts > 1 ? L(E` · 发了 ${s.attempts} 次`, E` · sent ${s.attempts} times`) : ""}`}>
             <span className="wfo-tl-name">{s.title || s.step}{s.attempt > 1 && <small>#{s.attempt}</small>}</span>
             <span className="wfo-tl-track">
               <i className={cn("wfo-tl-bar", tone, s.kind === "human" && "is-human")}
@@ -287,13 +287,13 @@ export function RunArtifacts({ hubId, run }: { hubId: string; run: WorkflowRun }
       <div className="aud-card wfo-artifacts" data-testid="workflow-artifacts">
         {bySteps.map((g) => (
           <div key={g.key} className="wfo-art-group">
-            <span className="wf-step-label">{title(g.step)}<small>{L(` · ${g.items[0].from} 交回的`, ` · from ${g.items[0].from}`)}</small></span>
+            <span className="wf-step-label">{title(g.step)}<small>{L(E` · ${g.items[0].from} 交回的`, E` · from ${g.items[0].from}`)}</small></span>
             <MessageAttachments hubId={hubId} items={g.items.map((a) => ({ file_id: a.file_id, name: a.name, size: a.size, sha256: "", content_type: a.content_type }))} />
           </div>
         ))}
         {result && Object.keys(result).length > 0 && last && (
           <div className="wfo-art-group">
-            <span className="wf-step-label">{L(`最后交回的结果 · ${title(last.step)}`, `Last result · ${title(last.step)}`)}</span>
+            <span className="wf-step-label">{L(E`最后交回的结果 · ${title(last.step)}`, E`Last result · ${title(last.step)}`)}</span>
             <div className="aud-call-body"><pre>{JSON.stringify(result, null, 2)}</pre></div>
           </div>
         )}
@@ -432,15 +432,15 @@ export function StepLogDialog({ hubId, runId, step, onClose }: { hubId: string; 
   const st = log?.step || step;
   return (
     <Modal open onOpenChange={(o) => !o && onClose()} wide className="wfo-log-modal"
-      title={L(`日志 · ${step.title || step.step}${step.attempt > 1 ? ` 第 ${step.attempt} 次` : ""}`, `Log · ${step.title || step.step}${step.attempt > 1 ? ` #${step.attempt}` : ""}`)}
-      description={[st.target, msWords(st.duration_ms), st.attempts && st.attempts > 1 ? L(`发了 ${st.attempts} 次任务`, `${st.attempts} tasks sent`) : "", costWords(st.usage) !== "—" ? costWords(st.usage) : ""].filter(Boolean).join(" · ")}>
+      title={L(E`日志 · ${step.title || step.step}${step.attempt > 1 ? ` 第 ${step.attempt} 次` : ""}`, E`Log · ${step.title || step.step}${step.attempt > 1 ? ` #${step.attempt}` : ""}`)}
+      description={[st.target, msWords(st.duration_ms), st.attempts && st.attempts > 1 ? L(E`发了 ${st.attempts} 次任务`, E`${st.attempts} tasks sent`) : "", costWords(st.usage) !== "—" ? costWords(st.usage) : ""].filter(Boolean).join(" · ")}>
       <div data-testid="workflow-step-log">
         {step.kind === "agent" && (
           <label className="app-check wfo-log-toggle"><input type="checkbox" checked={trace} onChange={(e) => setTrace(e.target.checked)} />{L("显示它做的每一步（工具、思考）", "Show what it did (tools, thinking)")}</label>
         )}
         <ErrorText error={error} />
         {!log && !error && <RowsSkeleton rows={4} className="pc-list" />}
-        {log?.clipped && <p className="app-small-note">{L(`太长了，只显示最后 ${log.entries.length} 行。`, `Too long: only the last ${log.entries.length} lines.`)}</p>}
+        {log?.clipped && <p className="app-small-note">{L(E`太长了，只显示最后 ${log.entries.length} 行。`, E`Too long: only the last ${log.entries.length} lines.`)}</p>}
         {log && entries.length === 0 && <div className="app-empty-note">{L("还没有内容。", "Nothing yet.")}</div>}
         <div className="wfo-log">
           {entries.map((e, i) => <LogLine key={i} hubId={hubId} e={e} />)}
@@ -510,7 +510,7 @@ export function CompareDialog({ hubId, run, onClose, onOpenRun }: {
     appApi.compareWorkflowRuns(hubId, other, run.id).then((c) => { if (!off) setCmp(c); }, (e) => { if (!off) setError(e); });
     return () => { off = true; };
   }, [hubId, other, run.id]);
-  const label = (r: WorkflowRun) => `${new Date(r.created_at).toLocaleString([], { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} · ${statusWords(r.status)} · ${msWords(r.duration_ms)}${r.version !== run.version ? L(` · 第 ${r.version} 版`, ` · v${r.version}`) : ""}`;
+  const label = (r: WorkflowRun) => `${new Date(r.created_at).toLocaleString([], { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} · ${statusWords(r.status)} · ${msWords(r.duration_ms)}${r.version !== run.version ? L(E` · 第 ${r.version} 版`, E` · v${r.version}`) : ""}`;
   const delta = (ms: number) => ms === 0 ? "0" : `${ms > 0 ? "+" : "−"}${msWords(Math.abs(ms))}`;
   return (
     <Modal open onOpenChange={(o) => !o && onClose()} wide className="wfo-compare-modal" title={L("和另一次对比", "Compare with another run")}
@@ -526,7 +526,7 @@ export function CompareDialog({ hubId, run, onClose, onOpenRun }: {
         {other && !cmp && !error && <RowsSkeleton rows={3} className="pc-list" />}
         {cmp && (
           <>
-            {!cmp.same_version && <p className="app-small-note">{L(`两次用的不是同一版（第 ${cmp.a.run.version} 版和第 ${cmp.b.run.version} 版）。`, `Not the same version (v${cmp.a.run.version} and v${cmp.b.run.version}).`)}</p>}
+            {!cmp.same_version && <p className="app-small-note">{L(E`两次用的不是同一版（第 ${cmp.a.run.version} 版和第 ${cmp.b.run.version} 版）。`, E`Not the same version (v${cmp.a.run.version} and v${cmp.b.run.version}).`)}</p>}
             <div className="wfo-table wfo-cmp" role="table">
               <div className="wfo-tr wfo-th" role="row"><span role="columnheader" /><span role="columnheader">A</span><span role="columnheader">B</span><span role="columnheader">{L("差（B−A）", "B − A")}</span></div>
               <div className="wfo-tr is-total" role="row">

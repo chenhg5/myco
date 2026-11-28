@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Maximize2, Minimize2, X } from "lucide-react";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
@@ -360,7 +360,7 @@ export function PaneGrid({ slots, layout, onLayout, zoom, onZoom, onClose, onDro
     if (over.open) {
       const r = alone ? WHOLE : rects.get(over.open);
       const name = slots.find((s) => s.key === over.open)?.title || "";
-      return r ? { r, why: L(`${name} 已经开着了`, `${name} is open already`), open: true } : null;
+      return r ? { r, why: L(E`${name} 已经开着了`, E`${name} is open already`), open: true } : null;
     }
     const e = over.at.edge;
     const base = over.at.key === "*" ? WHOLE : alone ? WHOLE : rects.get(over.at.key);
