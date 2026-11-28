@@ -1,4 +1,3 @@
-import { RichText } from "@/app/RichText";
 import { LanguageSelect } from "@/app/LanguageSelect";
 import { localPreferences, saveWorkspaceAppearance } from "@/lib/localPreferences";
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
@@ -145,7 +144,7 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
       <p className="app-about-note">
         {isWindows
           ? L("更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换正在运行的这个 exe，再自动重新打开；这台电脑上的 myco 命令行工具也会一起升级。", "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces this exe and reopens it; the myco command-line tool on this computer is upgraded along with it.")
-          : <RichText text={L("更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具和 runner 服务另外用 {0} 升级。", "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. Upgrade the command-line tool and the runner service separately with {0}.")} values={[<code>myco upgrade</code>]} />}
+          : L("更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具也会一起升级，runner 等任务完成后重启；升级失败可在上方重试。", "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. The command-line tool updates too; the runner restarts after tasks finish. Failed updates can be retried above.")}
       </p>
       <p className="app-about-note">{L("agent、任务和对话都由工作区提供，App 只负责显示和转发。", "Nodes, tasks and conversations come from the Hub; the app only displays and relays them.")}</p>
     </>
