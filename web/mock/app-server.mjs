@@ -1302,6 +1302,8 @@ function scheduleReply(hub, threadId, agent, taskId, restart = false) {
   if (preview && /名额排队预览|Slot queue preview/.test(preview.body)) {
     Object.assign(preview,{status:"acked",trace:[],updated_at:iso(0),active_at:iso(20*60)});
     for (const a of hub.agents) if (a.machine_id==="m_studio" || a.name===agent) {
+      // (runs on Studio Mac for this preview: its owner can raise the limit)
+      if (a.name===agent && !a.machine_id) { a.machine_id="m_studio"; a.queue_preview_machine=true; }
       a.runtime ||= {cli:"codex"};
       a.runtime.runner_slots={max_concurrent:3,in_use:3,waiting:2,at:iso(0),queue:a.name===agent?[{message_id:preview.id,position:2}]:[]};
     }
@@ -1745,6 +1747,28 @@ for (const h of state.hubs) {
 }
 let lastSpawn = null;
 let lastRunSettings = null;
+
+// How many agents Studio Mac (this computer) runs at once: its setting
+// (0: none, the runner's 3) and what its agents report (runner_slots).
+let studioLimit = 0;
+function studioConcurrency() {
+  const slots = state.hubs.flatMap((h) => h.agents || []).map((a) => a.machine_id === "m_studio" ? a.runtime?.runner_slots : null).filter(Boolean)[0];
+  const limit = studioLimit || slots?.limit || slots?.max_concurrent || 3;
+  return { limit, in_use: slots?.in_use ?? 0, waiting: slots?.waiting ?? 0, source: studioLimit ? "setting" : "flag", flag: 3, ceiling: 64 };
+}
+function setStudioLimit(n) {
+  studioLimit = n;
+  // Its runner reads it a moment later: raising starts waiting tasks.
+  setTimeout(() => {
+    for (const h of state.hubs) for (const a of h.agents || []) {
+      const s = a.machine_id === "m_studio" ? a.runtime?.runner_slots : null;
+      if (!s) continue;
+      const start = Math.max(0, Math.min(s.waiting, n - s.in_use));
+      a.runtime.runner_slots = { ...s, limit: n, max_concurrent: Math.max(n, s.in_use + start), in_use: s.in_use + start, waiting: s.waiting - start,
+        queue: start >= s.waiting ? [] : s.queue, at: iso(0) };
+    }
+  }, 800);
+}
 
 const local = {
   hostname: "Studio.local",
@@ -2369,7 +2393,11 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, {ok:true});
   }
 
+  // (the runner-queue preview sets up its own slots: a raised limit from
+  // the App starts the waiting ones)
   if (parts.join("/")==="app/mock/runner-queue" && method==="DELETE") {
+    studioLimit = 0;
+    for (const h of state.hubs) for (const a of h.agents) if (a.queue_preview_machine) { delete a.machine_id; delete a.queue_preview_machine; }
     for (const h of state.hubs) for (const a of h.agents) if (a.runtime?.runner_slots) {
       a.runtime.runner_slots={max_concurrent:3,in_use:2,waiting:0,queue:[],at:iso(0)};
     }
@@ -3297,6 +3325,14 @@ const server = http.createServer(async (req, res) => {
 
   if (parts[0] === "app" && parts[1] === "local") {
     if (parts.length === 2 && method === "GET") return send(res, 200, local);
+    if (parts.length === 3 && parts[2] === "concurrency") {
+      if (method === "POST") {
+        const n = Number((await readBody(req))?.max_concurrent);
+        if (!Number.isInteger(n) || n < 1 || n > 64) return fail(res, 400, "invalid_argument", "the limit must be between 1 and 64");
+        setStudioLimit(n);
+      }
+      return send(res, 200, { setting: studioLimit, runner: studioConcurrency(), default: 10, ceiling: 64, joined: true });
+    }
     if (parts.length === 3 && parts[2] === "shell-access" && method === "POST") {
       const body = await readBody(req);
       local.shell_allowed = !!body.allow;
@@ -4912,6 +4948,18 @@ const server = http.createServer(async (req, res) => {
     }
 
     // /app/hubs/{id}/machines/{mid}/info — what a computer allows and has.
+    // …/machines/{mid}/concurrency: Studio Mac is this computer; Bench
+    // Linux's myco is too old to say.
+    if (parts.length === 6 && parts[3] === "machines" && parts[5] === "concurrency") {
+      if (parts[4] === "m_bench") return fail(res, 409, "too_old", "that computer's myco is too old to change how many agent CLIs it runs at once");
+      if (method === "POST") {
+        const n = Number((await readBody(req))?.max_concurrent);
+        if (!Number.isInteger(n) || n < 1 || n > 64) return fail(res, 400, "invalid_argument", "the limit must be between 1 and 64");
+        if (parts[4] === "m_studio") setStudioLimit(n);
+        return send(res, 200, parts[4] === "m_studio" ? { ...studioConcurrency(), limit: n, source: "setting" } : { limit: n, in_use: 0, waiting: 0, source: "setting", ceiling: 64 });
+      }
+      return send(res, 200, parts[4] === "m_studio" ? studioConcurrency() : { limit: 10, in_use: 0, waiting: 0, source: "default", ceiling: 64 });
+    }
     if (parts.length === 6 && parts[3] === "machines" && parts[5] === "info" && method === "GET") {
       if (!hub.ok) return fail(res, 502, "hub_unreachable", hub.error || "Hub 连不上");
       const machine = (hub.machines || []).find((m) => m.id === parts[4]);
