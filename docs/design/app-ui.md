@@ -722,3 +722,7 @@ the same account X ago”. Use existing muted quota notes; no donor name or mach
 is displayed. A recipient's login/key failure remains actionable while the shared
 numbers stay visible. Smoke: “成员 · 同账号共享额度”, all widths/themes, plus
 isolated Chinese/English 2x captures with the shared note scrolled into view.
+
+A shared usage observation must not hide this agent's sign-in problem: the
+composer pill, like the member tag, prioritizes “Sign in again” / “需重新登录”
+while keeping the shared windows available in its details.

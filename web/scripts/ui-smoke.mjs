@@ -6729,6 +6729,11 @@ async function runMatrix(browser, size, scheme) {
         const pane = page.locator(".conv-detail", { has: page.locator(".conv-head", { hasText: "Release (Claude 云端)" }) }).last();
         const pill = pane.locator("[data-testid=quota-pill]"); await pill.waitFor();
         if (!(await pill.getAttribute("title")).includes("同账号的另一个 agent")) throw Error("输入框额度 tooltip 缺少匿名共享来源");
+        await openMember(page, narrow, "聊天", "MCP Claude");
+        const authPane = page.locator(".conv-detail", { has: page.locator(".conv-head", { hasText: "MCP Claude" }) }).last();
+        const authPill = authPane.locator("[data-testid=quota-pill]");
+        await authPill.filter({ hasText: "需重新登录" }).waitFor();
+        if (!(await authPill.getAttribute("title")).includes("同账号的另一个 agent")) throw Error("登录问题不得隐藏共享用量来源");
       } finally { await page.unroute(routeURL, handler); await page.reload({ waitUntil: "domcontentloaded" }); await page.locator(".app-shell").waitFor(); }
     });
 

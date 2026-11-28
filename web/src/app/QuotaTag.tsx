@@ -48,7 +48,7 @@ export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
   const worst = has ? quotaWorst(quota, now) : undefined;
   const old = !!worst && quotaEffectiveStatus(quota, now) === "unknown";
   const action = quota.status === "auth_required" || quota.status === "no_credentials";
-  const level = worst ? (old ? "old" : quotaPillLevel(worst)) : action ? "low" : "unknown";
+  const level = action ? "low" : worst ? (old ? "old" : quotaPillLevel(worst)) : "unknown";
   const status = quotaStatusText(quota, now);
   const stale = quotaStaleNote(quota, now);
   const source = quotaSourceText(quota, machinesOfHub(row.hub));
@@ -59,7 +59,10 @@ export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
   const shared = quotaSharedNote(quota, now);
   let label: string;
   let title: string;
-  if (worst) {
+  if (action) {
+    label = summary.short;
+    title = L(E`${summary.line}（点开看全部）`, E`${summary.line} (click for all)`);
+  } else if (worst) {
     const text = worst.balance ? quotaRemainingText(worst) : quotaSpent(worst) ? L("已用完", "out") : quotaRemainingText(worst);
     label = [quotaWindowShort(worst), text].filter(Boolean).join(" ");
     if (old) label += ` · ${timeAgo(quotaObservedAt(quota), now)}`;
