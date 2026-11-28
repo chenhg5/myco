@@ -3474,5 +3474,12 @@
   "Unlimited": "無制限",
   "Balance": "残高",
   "{0} left": "残り {0}",
-  "Reported by another agent on the same account {0}": "同じアカウントの別の agent が{0}報告"
+  "Reported by another agent on the same account {0}": "同じアカウントの別の agent が{0}報告",
+  "Allowed paths": "許可されたパス",
+  "Authorize a connection": "接続を許可",
+  "Connect {0}: {1}": "{0} に接続：{1}",
+  "Credentials stay on this computer and are never given to the app page. Only reads to the following address are allowed.": "認証情報はこのコンピューターに保存され、アプリのページには渡されません。以下のアドレスへの読み取りのみ許可されます。",
+  "Server": "サーバー",
+  "use locally saved connection credentials without exposing them to the app": "認証情報をアプリに公開せず、このコンピューターに保存された接続を使用する",
+  "Verified address": "確認済みのアドレス"
 }

@@ -507,7 +507,9 @@ export interface OsList {
 /** The page that uses them (for the App's log). */
 export interface OsPage { hub: string; id: string; name: string }
 /** A page asking for a group of the computer's capabilities the person has not allowed (consent_required). */
-export interface CodeHostConfirmation { confirmation: string; provider: string; host: string; source: string; private_network: boolean }
+export interface CredentialDescriptor {name:string;origin:string;authentication:"bearer"|"token"|"private-token";paths:{path:string;prefix?:boolean}[]}
+export interface CredentialConfirmation extends CredentialDescriptor {confirmation:string;private_network:boolean;verified:boolean;sources:{id:string;cli:string;host:string;login:string;origin:string;base_path:string}[]}
+
 export interface OsConsent { group: string; host?: string; declared: boolean; once_only: boolean }
 export type OsAnswer = "once" | "always" | "deny";
 /** What the person allowed a page: always (kept), once (this run), denied, and hosts beyond its declared ones. */
@@ -1211,10 +1213,10 @@ export const appApi = {
     request<T>("POST", `app/hubs/${enc(hubId)}/browser`, { page, instance, action, args, confirmation }, undefined, (action === "install" || action === "approvals.request") ? 600_000 : action === "pick" ? 150_000 : 45_000),
   remoteCall: <T = unknown>(hubId: string, page: string, action: string, args: unknown = {}, instance: string = "") =>
     request<T>("POST", `app/hubs/${enc(hubId)}/remote`, {page, instance, action, args}, undefined, action === "install" ? 600_000 : 30_000),
-  codeHostPrepare: (page: OsPage, input: {provider: string; host: string; source: string; name: string}) =>
-    request<CodeHostConfirmation>("POST", "app/codehost/prepare", {...input, page}, undefined, 15000, {"X-Myco-Codehost-Owner": "1"}),
-  codeHostConnect: (confirmation: string, token: string, allowPrivate: boolean) =>
-    request<unknown>("POST", "app/codehost/connect", {confirmation, token, allow_private: allowPrivate}, undefined, 45000, {"X-Myco-Codehost-Owner": "1"}),
+  credentialPrepare: (page: OsPage, descriptor: CredentialDescriptor) =>
+    request<CredentialConfirmation>("POST", "app/credentials/prepare", {descriptor, page}, undefined, 45000, {"X-Myco-Credential-Owner": "1"}),
+  credentialConnect: (confirmation: string, token: string, source:string, allowPrivate: boolean) =>
+    request<unknown>("POST", "app/credentials/connect", {confirmation, token, source, allow_private: allowPrivate}, undefined, 45000, {"X-Myco-Credential-Owner": "1"}),
   osList: () => request<OsList>("GET", "app/os"),
   osCall: (name: string, args: unknown, page: OsPage) =>
     request<{ value: unknown }>("POST", "app/os/call", { name, args, page }).then((r) => r.value),

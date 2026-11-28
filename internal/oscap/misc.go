@@ -173,13 +173,16 @@ const (
 	fetchMax     = 64 << 20
 )
 
-func netFetch(ctx context.Context, _ *Env, args json.RawMessage, _ Emit) (any, error) {
+func netFetch(ctx context.Context, env *Env, args json.RawMessage, _ Emit) (any, error) {
 	var in struct {
-		URL      string            `json:"url"`
-		Method   string            `json:"method"`
-		Headers  map[string]string `json:"headers"`
-		Body     string            `json:"body"`
-		Encoding string            `json:"body_encoding"` // utf8 (default) or base64
+		URL        string            `json:"url"`
+		Credential string            `json:"credential"`
+		Path       string            `json:"path"`
+		Query      map[string]string `json:"query"`
+		Method     string            `json:"method"`
+		Headers    map[string]string `json:"headers"`
+		Body       string            `json:"body"`
+		Encoding   string            `json:"body_encoding"` // utf8 (default) or base64
 		// Response: "auto" (default: text when it is text), "text" or "base64".
 		Response  string `json:"response"`
 		TimeoutMs int64  `json:"timeout_ms"`
@@ -190,6 +193,10 @@ func netFetch(ctx context.Context, _ *Env, args json.RawMessage, _ Emit) (any, e
 	if err := decode(args, &in); err != nil {
 		return nil, err
 	}
+	if in.Credential != "" {
+		return credentialFetch(ctx, env, in.Credential, in.Path, in.Query, in.Method, in.Headers, in.URL, in.Body, in.Redirect, in.MaxBytes, in.TimeoutMs, in.Response)
+	}
+
 	if !strings.HasPrefix(in.URL, "http://") && !strings.HasPrefix(in.URL, "https://") {
 		return nil, errf(CodeInvalid, "the url must start with http:// or https://")
 	}

@@ -331,7 +331,7 @@ export interface Page {
   live?: boolean; port?: number; online?: boolean;
   /** the template it was made from (hubs from v0.20.5) */
   /** the app it was made from; latest: the app's newer version (hubs from v0.20.7) */
-  template?: { id: string; slug: string; name: string; version: string; permissions?: string[]; os?: string[]; net?: string[]; latest?: string; requires_isolation?: boolean;
+  template?: { id: string; slug: string; name: string; version: string; permissions?: string[]; os?: string[]; net?: string[]; latest?: string; requires_isolation?: boolean; host_capabilities?: string[];
     /** hubs from v0.22.9: permissions and os are all it declares (the App refuses the rest; not said for a page of myco's own apps kept from before declarations); official: one of myco's own */
     declares?: boolean; official?: boolean };
 }
@@ -344,7 +344,7 @@ export interface Template {
   category?: string;
   /** its icon, SVG markup (hubs from v0.20.7): shown as a mask, tinted */
   icon?: string;
-  official?: boolean; requires_isolation?: boolean; can_manage: boolean; guide?: string; permissions?: string[]; os?: string[]; net?: string[]; export?: string[];
+  official?: boolean; requires_isolation?: boolean; host_capabilities?: string[]; can_manage: boolean; guide?: string; permissions?: string[]; os?: string[]; net?: string[]; export?: string[];
   /** its screenshots (hubs from v0.21.5): paths in its folder, a dark one
    *  beside when there is one; a workspace's own list them when got alone */
   shots?: { src: string; dark?: string }[];

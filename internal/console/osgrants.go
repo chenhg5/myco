@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/oscap"
 )
 
 // What a page may use of this computer: the groups of myco.os capabilities
@@ -72,8 +73,8 @@ func osGroupOf(name string) string {
 		return "system"
 	case strings.HasPrefix(name, "browser."):
 		return "browser"
-	case strings.HasPrefix(name, "forge."):
-		return "codehost"
+	case strings.HasPrefix(name, "credentials."):
+		return "credentials"
 	case strings.HasPrefix(name, "db."):
 		return "database"
 	}
@@ -169,10 +170,12 @@ type osGrants struct {
 type osDecl struct {
 	// known: the hub answered (or there is no hub to ask). An unknown
 	// declaration (a slow or failed request) changes no one's allows.
-	known   bool
-	app     bool // made from an app (a template): it can declare
-	os, net []string
-	at      time.Time
+	known            bool
+	appID            string // trusted manifest identity
+	app              bool   // made from an app (a template): it can declare
+	os, net          []string
+	hostCapabilities []string
+	at               time.Time
 	// declares: the hub says os is all the app declares (hubs from v0.22.9)
 	declares bool
 	// official: one of myco's own apps (the hub says so)
@@ -315,6 +318,8 @@ func declOf(p *api.Page) osDecl {
 	d := osDecl{at: time.Now(), known: true}
 	if p.Template != nil {
 		d.app = true
+		d.appID = p.Template.ID
+		d.hostCapabilities = p.Template.HostCapabilities
 		d.os, d.net = p.Template.OS, p.Template.Net
 		d.declares, d.official = p.Template.Declares, p.Template.Official
 	}
@@ -346,6 +351,18 @@ func (b *Backend) osCheck(ctx context.Context, in osCallIn) (*osConsent, error) 
 		return nil, nil
 	}
 	d := b.declared(ctx, in.Page.Hub, in.Page.ID)
+	env, _ := b.osInit()
+	available := map[string]bool{}
+	for _, c := range oscap.List(env) {
+		if c.Available {
+			available[c.Name] = true
+		}
+	}
+	for _, cap := range d.hostCapabilities {
+		if !available[cap] {
+			return nil, &osRefusal{Code: "unsupported", Message: "Update the myco App to use this application"}
+		}
+	}
 	g := b.grants()
 	g.mu.Lock()
 	p := g.perm(in.Page.Hub, in.Page.ID)
@@ -401,15 +418,6 @@ func (b *Backend) osCheck(ctx context.Context, in osCallIn) (*osConsent, error) 
 		return nil, nil
 	}
 	host := ""
-	if group == "codehost" {
-		var a struct {
-			Provider string `json:"provider"`
-			Host     string `json:"host"`
-		}
-		if json.Unmarshal(in.Args, &a) == nil && a.Host != "" {
-			host = a.Provider + " · " + a.Host
-		}
-	}
 	return &osConsent{Error: "consent_required", Message: "ask the person first", Group: group, Host: host, Declared: declared, OnceOnly: osOnceOnly[group]}, nil
 }
 

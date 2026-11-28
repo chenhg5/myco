@@ -537,94 +537,74 @@ It removes local sign-ins/downloads and script approvals across workspaces;
 active browser windows or controlled profiles return `busy` and stay open.
 
 
-## Code hosts (desktop)
+## Local credential connections (desktop)
 
-The `codehost` OS permission group provides `forge.accounts`, `forge.query` and optional `forge.filters` / `forge.history`.
-This is a read-only page bridge, not an agent capability. An interactive page
-with an isolated origin can connect GitHub, GitLab (including self-hosted HTTPS
-servers), or Gitea / Forgejo. Credentials stay in the system credential store,
-scoped by local App profile, workspace sign-in and page. Query results stay in
-page memory and are not automatically written to shared page records.
+Applications own service API paths, pagination, platform adapters and domain
+models. The desktop supplies `credentials.http` (version 1),
+`credentials.connections`, and authenticated `net.fetch`. These are interactive
+page capabilities, never agent APIs. They require an isolated application page.
+The `credentials` permission authorizes connection management; every HTTP request
+also needs the normal `network` grant and manifest host permission.
 
-`forge.accounts` takes `action` (`list`, `discover`, `connect`, `remove`). Connect
-takes `provider` (`github`, `gitlab`, `gitea`), HTTPS origin `host`, optional `name`,
-and `source` (`token` or `cli`). Connect is intercepted by the trusted App: the token
-input is drawn in the App origin, never in the page. Raw generic OS connect calls
-are refused. CLI connection uses only fixed
-`gh auth token --hostname HOST` / `glab auth status --hostname HOST --show-token` arguments and
-copies the selected login's credential to its own private entry. Reconnect after
-rotating the provider token. Returned metadata is `{id,provider,host,login,name,source}`;
-tokens are never returned. Disconnect deletes the local entry, not the upstream
-token or the CLI login. Discovery reports whether `gh` and `glab` are installed.
+```ts
+if (!myco.credentials || !await myco.os.has("credentials.http")) {
+  throw new Error("Update the desktop myco App");
+}
+const connection = await myco.credentials.connect({
+  name: "Example service", origin: "https://api.example.com",
+  authentication: "bearer", // bearer | token | private-token
+  paths: [{path: "/user"}, {path: "/repos/", prefix: true}]
+});
+const response = await myco.os.net.fetch({
+  credential: connection.id, path: "/repos/acme/demo/issues",
+  query: {state: "open"}, method: "GET", response: "text"
+});
+```
 
-`forge.query` takes `account`, `action` (`repos`, `list`, `detail`, `comments`,
-`files`), optional `kind` (`pull`, `issue`), `repo` (`owner/repo`), `scope`
-(`created`, `assigned`, `review`, `repo`), `state` (`open`, `closed`, `all`),
-`search`, `page` (1–100), and item `number`. Repository and discussion/file pages
-return `{items,has_more,page}`; list also reports `incomplete` for incomplete
-provider searches. Each page requests up to 50 entries. Detail returns one
-normalized item. Only fixed GET endpoints are used, with verified HTTPS, no
-redirects, a 20-second deadline and a 4 MiB response cap. Provider error bodies
-and credentials are never logged or returned. Raw HTML/images in descriptions
-are not executed. Errors include `no_credentials`, `permission_denied`,
-`rate_limited`, `network_error`, `invalid_response` and `provider_error`.
+`myco.credentials.list()` returns only `{id,name,origin,authentication,paths,source}`.
+`remove(id)` revokes the local connection. There is no secret read/export API.
+A handle is bound to the local profile, workspace sign-in, page and application
+identity. A copied string cannot authorize a different caller. No connection
+metadata or secret is synchronized to a shared page or another member.
 
-Feature-detect `forge.filters` before sending an optional `filters` object on
-`forge.query` list calls. It returns `{version:1,providers:{github:[...],gitlab:[...],gitea:[...]}}`.
-GitHub/GitLab advertise `author`, `label`, `updated_after`, `draft`, `sort`,
-and `merged`; Gitea advertises `author_repo` and `updated_after`. The fields are:
+Connect opens the trusted host dialog. The host prominently displays the exact
+HTTPS origin, allowed path rules and whether the address is verified or custom.
+Only that dialog accepts a manually pasted token. A custom destination can use
+only a manually pasted token. CLI identities are discovered by the host and
+selected by the person, without changing the CLI's active account. Host-owned
+mapping fixes gh github.com credentials to https://api.github.com; gh enterprise
+host H to https://H/api/v3; and glab H to https://H/api/v4. Applications cannot
+supply CLI arguments or map a CLI secret to another address. Verification labels
+describe known destination mapping, not trust in an application or account.
 
-- `author`: exact username. In `created` scope it must match the connected login;
-  choose a repository (`scope:repo`) to view another author's items, or combine
-  the author with `assigned`/`review`. Gitea requires a repository.
-- `label`: one exact label name (at most 100 bytes, no comma); GitHub/GitLab only.
-- `updated_after`: inclusive UTC date `YYYY-MM-DD` (Gitea's `since` is exclusive).
-- `draft`: `only` or `exclude`, for GitHub/GitLab pull requests.
-- `sort`: `updated_desc`, `updated_asc`, `created_desc` or `created_asc`, for
-  GitHub/GitLab. The default is recently updated. Items include optional `created`.
+Credential requests allow only GET/HEAD, an origin-relative `path`, separate
+key/value `query`, and safe read headers (Accept, Accept-Language, If-None-Match,
+If-Modified-Since). They reject URL overrides, body, authentication/Host/Cookie
+headers and redirects. Exact path rules and segment-boundary prefixes are
+checked after normalization; dot/empty segments, backslashes, encoded dots,
+encoded separators and nested escapes are rejected. For APIs that encode a
+namespace in a segment, the application must use an equivalent numeric ID.
 
-The optional `merged` state is only available for GitHub/GitLab pull requests.
-Closed includes merged on GitHub; GitLab distinguishes closed from merged.
-Conditions are combined at the provider before 50-item pagination. Unsupported
-combinations return `filter_unavailable`; invalid fields return `invalid_argument`
-before network access. Older hosts continue to accept the baseline query without
-`filters`; do not hide a failure by filtering only the currently loaded page.
-Repository lists are paged; an exact path may be supplied even when it is not in
-the currently loaded repository list. Selecting a repository does not authorize
-access beyond the connected account's provider permissions.
+Each connection permits two concurrent requests, 60 starts per minute, responses
+up to 4 MiB and requests up to 30 seconds (applications can request less).
+Busy/rate-limited requests fail explicitly. HTTP status and selected response
+headers are returned without provider-specific interpretation. Secret echoes
+are discarded; Cookie and authentication response headers never reach the page.
 
-Feature-detect `forge.history` before using `forge.query` actions `branches` and
-`commits`. It returns `{version:1,actions:["branches","commits"]}`. Both actions
-require `account` and `repo`, and use the same 50-item pagination and fixed HTTPS
-GET policy. `commits` optionally takes `ref` (a branch name or commit SHA, at most
-255 bytes); leaving it empty selects the provider's default branch. Branches
-return `{name,sha}`. Commits return `{sha,parents,subject,message,author,date,url}`.
-No separate email fields, file contents or credentials are included. GitHub fine-grained tokens
-also need repository **Contents: read** for history. A selected branch's reachable
-history is not the entire repository/fork network; unloaded parents must remain
-visible as incomplete rather than fabricated connections. The official app caps
-loaded history and branch metadata at 500 entries each.
+DNS and private-network access are checked at approval and on every request.
+An additional checkbox is required for private addresses. Direct requests pin
+the checked IPs; the App's existing proxy/TLS settings remain in effect. A remote
+proxy can resolve the hostname itself, so its resolution is outside local DNS
+pinning; use a trusted proxy. No Hub credential or ambient cookie is attached.
 
-No merge, comment, edit, close, arbitrary HTTP, shell or agent operations are
-exposed. Reviews, inline comments and check runs can be viewed on the original
-provider site. Installing a newer template cannot add this bridge to an older
-desktop, iOS or Android App; apps must feature-detect `forge.accounts`.
+`app-credentials.jsonl` audit entries contain only destination origin, method,
+matched grant path template and HTTP status, never query values or request and
+response bodies. Cancellation and transport errors preserve the connection;
+explicit removal revokes it.
 
-The trusted App calls `POST /app/codehost/prepare` with `{page,provider,host,source,name}`
-and header `X-Myco-Codehost-Owner: 1`. This returns
-`{confirmation,provider,host,source,private_network}`. The one-use confirmation
-expires after two minutes and binds the page, workspace sign-in, provider and
-origin. `POST /app/codehost/connect` takes `{confirmation,token,allow_private}`
-with the same owner header. Neither route is exposed to iframe JavaScript.
-The host prompt names the server and requires an additional checkbox if DNS
-resolves to loopback, link-local, private or CGNAT addresses. Requests recheck
-DNS; direct connections pin the checked address. Rebinding to a private address
-requires reconnecting with explicit consent. Secrets store both the web/API
-origins and provider; a changed profile origin is refused.
-
-When using a system or environment proxy, the proxy can resolve the target
-hostname itself. The local private-address check and pinned socket apply to
-direct connections; remote proxy resolution is outside this check. HTTPS is
-still verified end to end. Use a trusted proxy. GitHub/Gitea repository paths
-contain exactly owner/name; GitLab can include nested groups. Dot path segments
-are rejected, and repository path components are URL-escaped.
+Applications may declare `requires.host_capabilities: ["credentials.http"]` in
+myco.json. The host enforces missing capabilities with an upgrade error; apps
+must also feature-detect because old hosts do not understand this declaration.
+The code-host application requires this new bridge. Its old `forge.*` business
+bridge has been removed: upgrade the application and desktop, then reconnect
+accounts. There is no legacy fallback or automatic credential migration.

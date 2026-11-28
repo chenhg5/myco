@@ -113,8 +113,9 @@ type Manifest struct {
 
 // ManifestRequires is what a template needs to run.
 type ManifestRequires struct {
-	Hub       string `json:"hub,omitempty"`
-	Isolation bool   `json:"isolation,omitempty"`
+	Hub              string   `json:"hub,omitempty"`
+	HostCapabilities []string `json:"host_capabilities,omitempty"`
+	Isolation        bool     `json:"isolation,omitempty"`
 }
 
 // MaxTemplateIcon bounds a template's icon (an SVG).
@@ -165,7 +166,7 @@ var TemplatePermissions = []string{"send", "download"}
 // files.delete, exec (commands, ending processes), screen, microphone, speech,
 // clipboard (reading it), notify, system, network (net.fetch, to the hosts in
 // "net"), ssh, database, proxy, browser (dedicated browser profiles).
-var TemplateOSGroups = []string{"files", "files.write", "files.delete", "exec", "screen", "microphone", "speech", "clipboard", "notify", "system", "network", "ssh", "database", "proxy", "browser", "codehost"}
+var TemplateOSGroups = []string{"files", "files.write", "files.delete", "exec", "screen", "microphone", "speech", "clipboard", "notify", "system", "network", "ssh", "database", "proxy", "browser", "credentials", "codehost"}
 
 // netHost is a host a manifest's "net" names: a DNS name or an IP address,
 // with a port or not, or *. and a domain for its subdomains.
@@ -275,6 +276,17 @@ func ParseManifest(raw []byte) (*Manifest, error) {
 			return bad("icon %q: an .svg file in the template", m.Icon)
 		}
 	}
+	if m.Requires != nil {
+		if len(m.Requires.HostCapabilities) > 32 {
+			return bad("requires.host_capabilities: at most 32 capabilities")
+		}
+		for _, cap := range m.Requires.HostCapabilities {
+			if !regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,79}$`).MatchString(cap) {
+				return bad("requires.host_capabilities: invalid capability %q", cap)
+			}
+		}
+	}
+
 	if m.Requires != nil && m.Requires.Hub != "" {
 		m.Requires.Hub = strings.TrimPrefix(m.Requires.Hub, "v")
 		if !semver.MatchString(m.Requires.Hub) {

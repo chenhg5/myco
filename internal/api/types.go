@@ -1955,8 +1955,9 @@ type PageTemplate struct {
 	Net []string `json:"net,omitempty"`
 	// Latest is the app's newest version, when newer than the page's
 	// (hubs from v0.20.7): POST /v1/pages/{id}/upgrade takes it.
-	Latest            string `json:"latest,omitempty"`
-	RequiresIsolation bool   `json:"requires_isolation,omitempty"`
+	Latest            string   `json:"latest,omitempty"`
+	HostCapabilities  []string `json:"host_capabilities,omitempty"`
+	RequiresIsolation bool     `json:"requires_isolation,omitempty"`
 	// Declares (hubs from v0.22.9): Permissions and OS are all the app
 	// declares; Apps refuse what they leave out. Older hubs leave it out,
 	// and Apps only warn.
@@ -2144,6 +2145,7 @@ type Template struct {
 	OS                []string `json:"os,omitempty"`
 	Net               []string `json:"net,omitempty"`
 	Export            []string `json:"export,omitempty"`
+	HostCapabilities  []string `json:"host_capabilities,omitempty"`
 	RequiresIsolation bool     `json:"requires_isolation,omitempty"`
 	// Guide is its agent's guide (agent.md): how to fill its data.
 	Guide string `json:"guide,omitempty"`

@@ -3474,5 +3474,12 @@
   "Unlimited": "Sin límite",
   "Balance": "Saldo",
   "{0} left": "Quedan {0}",
-  "Reported by another agent on the same account {0}": "Otro agent de la misma cuenta lo informó {0}"
+  "Reported by another agent on the same account {0}": "Otro agent de la misma cuenta lo informó {0}",
+  "Allowed paths": "Rutas permitidas",
+  "Authorize a connection": "Autorizar una conexión",
+  "Connect {0}: {1}": "Conectar {0}: {1}",
+  "Credentials stay on this computer and are never given to the app page. Only reads to the following address are allowed.": "Las credenciales permanecen en este equipo y nunca se entregan a la página de la aplicación. Solo se permiten lecturas en la siguiente dirección.",
+  "Server": "Servidor",
+  "use locally saved connection credentials without exposing them to the app": "usar las credenciales de conexión guardadas localmente sin exponerlas a la aplicación",
+  "Verified address": "Dirección verificada"
 }

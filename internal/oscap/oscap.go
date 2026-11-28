@@ -116,6 +116,8 @@ type Env struct {
 	Secrets Secrets
 	// Scope separates controller profiles by workspace and page.
 	Scope string
+	// CredentialAudit records no query values, concrete private paths, or secrets.
+	CredentialAudit func(origin, method, pathRule string, status int)
 	// Home is the person's home folder ("~").
 	Home string
 	// Path is the PATH commands run with (a GUI app's own is minimal: the

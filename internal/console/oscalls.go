@@ -107,36 +107,56 @@ func (b *Backend) osRoutes(m *http.ServeMux) {
 		if !decode(w, r, &in) {
 			return
 		}
-		if (in.Name == "proxy.profile" || in.Name == "proxy.control" || (strings.HasPrefix(in.Name, "db.") || strings.HasPrefix(in.Name, "forge."))) && (in.Page.ID == "" || in.Page.Hub == "") {
-			writeOSErr(w, &oscap.Error{Code: oscap.CodeInvalid, Message: "controller calls require a workspace and page"})
+		if strings.HasPrefix(in.Name, "forge.") {
+			writeOSErr(w, &oscap.Error{Code: oscap.CodeUnsupported, Message: "Upgrade this application and reconnect its accounts; the old code-host bridge was removed"})
 			return
 		}
-		if !b.osAllowed(w, r, in) {
+
+		if (in.Name == "proxy.profile" || in.Name == "proxy.control" || (strings.HasPrefix(in.Name, "db.") || strings.HasPrefix(in.Name, "credentials."))) && (in.Page.ID == "" || in.Page.Hub == "") {
+			writeOSErr(w, &oscap.Error{Code: oscap.CodeInvalid, Message: "controller calls require a workspace and page"})
 			return
 		}
 		env, _ := b.osInit()
 		start := time.Now()
 		scoped := *env
 		scoped.Scope = in.Page.Hub + "\x00" + in.Page.ID
-		if strings.HasPrefix(in.Name, "forge.") {
-			var scopeErr *oscap.Error
-			scopedEnv, scopeErr := b.codeHostEnv(in.Page)
-			if scopeErr != nil {
-				writeOSErr(w, scopeErr)
+		var auth struct {
+			Credential string `json:"credential"`
+			Path       string `json:"path"`
+		}
+		if in.Name == "net.fetch" {
+			_ = json.Unmarshal(in.Args, &auth)
+		}
+		if strings.HasPrefix(in.Name, "credentials.") || auth.Credential != "" {
+			se, err := b.credentialEnv(r.Context(), in.Page)
+			if err != nil {
+				writeOSErr(w, err)
 				return
 			}
-			scoped = *scopedEnv
-			if in.Name == "forge.accounts" {
-				var action struct {
-					Action string `json:"action"`
-				}
-				_ = json.Unmarshal(in.Args, &action)
-				if action.Action == "connect" {
-					writeOSErr(w, &oscap.Error{Code: oscap.CodePermission, Message: "account connections require the host dialog"})
-					return
-				}
+			scoped = *se
+		}
+		permissionIn := in
+		if auth.Credential != "" {
+			target, err := oscap.CredentialRequestURL(&scoped, auth.Credential, auth.Path)
+			if err != nil {
+				writeOSErr(w, oscap.AsError(err))
+				return
+			}
+			// The network checker sees the actual authorized destination, never an app URL.
+			permissionIn.Args, _ = json.Marshal(map[string]string{"url": target})
+			// Revoking the credentials group disables requests too.
+			if !b.osAllowed(w, r, osCallIn{Name: "credentials.connections", Page: in.Page, Args: json.RawMessage(`{"action":"list"}`)}) {
+				return
+			}
+			scoped.CredentialAudit = func(origin, method, rule string, status int) {
+				raw, _ := json.Marshal(map[string]any{"origin": origin, "method": method, "path_template": rule, "status": status})
+				b.osCredentialAudit(in.Page, start, raw)
 			}
 		}
+		if !b.osAllowed(w, r, permissionIn) {
+			return
+		}
+
 		v, err := oscap.Call(r.Context(), &scoped, in.Name, in.Args)
 		b.osLog(in, "", start, err)
 		if err == nil && in.Name == "ssh.profiles" && b.Local != nil && b.Store != nil {
@@ -281,4 +301,27 @@ func (b *Backend) osAllowed(w http.ResponseWriter, r *http.Request, in osCallIn)
 		return false
 	}
 	return true
+}
+
+// osCredentialAudit contains only destination, method, granted path template and status.
+func (b *Backend) osCredentialAudit(page osPage, start time.Time, record json.RawMessage) {
+	if b.Local == nil || b.Local.Home == "" {
+		return
+	}
+	b.os.logM.Lock()
+	defer b.os.logM.Unlock()
+	dir := filepath.Join(b.Local.Home, ".myco", "logs")
+	if os.MkdirAll(dir, 0700) != nil {
+		return
+	}
+	file := filepath.Join(dir, "app-credentials.jsonl")
+	if st, err := os.Stat(file); err == nil && st.Size() > 5<<20 {
+		_ = os.Rename(file, file+".1")
+	}
+	f, err := os.OpenFile(file, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_ = json.NewEncoder(f).Encode(map[string]any{"at": start.UTC().Format(time.RFC3339Nano), "request": record})
 }

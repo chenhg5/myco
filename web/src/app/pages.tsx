@@ -14,8 +14,8 @@ import { BrowserProfileSettingsDetails, browserSettingsReview, type BrowserSetti
 import { answerProjectFiles, projectFileScope } from "./page-project-files";
 import { answerPageFiles, pageFileScope, pageFilesUpgrade } from "./page-files";
 import { canRecoverTemplate, PageRecovery, recoveryLabel } from "./page-recovery";
-import { CodeHostPrompt, type CodeHostAnswer } from "./code-host-prompt";
-import type { CodeHostConfirmation } from "@/appapi";
+import { CredentialPrompt, type CredentialAnswer } from "./credential-prompt";
+import type { CredentialConfirmation, CredentialDescriptor } from "@/appapi";
 import { usePagePreferences, localizedPageURL } from "./page-preferences";
 import { parsePageLink, pageFragmentURL, type PageLink } from "@/lib/page-links";
 import { cn, timeAgo } from "@/lib/utils";
@@ -506,8 +506,8 @@ function PageView({ target, open, active, reload, onMeta }: {
   const [consent, setConsent] = useState<(OsConsent & { name: string; answer: (a: OsAnswer) => void }) | null>(null);
   const [remoteAsking, setRemoteAsking] = useState<{text:string; title?:string; review?:BrowserApprovalReview; settingsReview?:BrowserSettingsReview; answer:(ok:boolean)=>void} | null>(null);
   const [settingsRead, setSettingsRead] = useState<BrowserSettingsReview | null>(null);
-  const [codeHostPrompt, setCodeHostPrompt] = useState<{prompt:CodeHostConfirmation; answer:(value:CodeHostAnswer)=>void}|null>(null);
-  const codeHostConsent = useRef<((value:CodeHostAnswer)=>void)|null>(null);
+  const [credentialPrompt, setCredentialPrompt] = useState<{prompt:CredentialConfirmation; answer:(value:CredentialAnswer)=>void}|null>(null);
+  const credentialConsent = useRef<((value:CredentialAnswer)=>void)|null>(null);
   const remoteConsent = useRef<((ok:boolean)=>void) | null>(null);
   // (while the page is there: tucked away, it still runs and is answered,
   // and what it started on the computer goes on)
@@ -797,16 +797,16 @@ function PageView({ target, open, active, reload, onMeta }: {
           return appApi.osList();
         case "os.call": {
           const input=(args.args && typeof args.args === "object" ? args.args : {}) as Record<string,unknown>;
-          if(args.name === "forge.accounts" && input.action === "connect") {
+          if(args.name === "credentials.connections" && input.action === "connect") {
             if(!o?.isolated)throw Object.assign(new Error("Update the myco App to connect accounts"),{code:"unsupported"});
-            if(codeHostConsent.current)throw Object.assign(new Error("Finish the current permission request first"),{code:"busy"});
-            const prepared=await withConsent(who,()=>appApi.codeHostPrepare(who,{provider:String(input.provider||""),host:String(input.host||""),source:String(input.source||""),name:String(input.name||"")}));
+            if(credentialConsent.current)throw Object.assign(new Error("Finish the current permission request first"),{code:"busy"});
+            const prepared=await withConsent(who,()=>appApi.credentialPrepare(who,input.descriptor as unknown as CredentialDescriptor));
             if(closed)throw Object.assign(new Error("Page closed"),{code:"cancelled"});
-            if(codeHostConsent.current)throw Object.assign(new Error("Finish the current permission request first"),{code:"busy"});
-            const approved=await new Promise<CodeHostAnswer>(resolve=>{codeHostConsent.current=resolve;setCodeHostPrompt({prompt:prepared,answer:resolve});});
-            codeHostConsent.current=null;setCodeHostPrompt(null);
+            if(credentialConsent.current)throw Object.assign(new Error("Finish the current permission request first"),{code:"busy"});
+            const approved=await new Promise<CredentialAnswer>(resolve=>{credentialConsent.current=resolve;setCredentialPrompt({prompt:prepared,answer:resolve});});
+            credentialConsent.current=null;setCredentialPrompt(null);
             if(!approved||closed)throw Object.assign(new Error("Connection cancelled"),{code:"cancelled"});
-            return appApi.codeHostConnect(prepared.confirmation,approved.token,approved.allowPrivate);
+            return appApi.credentialConnect(prepared.confirmation,approved.token,approved.source,approved.allowPrivate);
           }
           return withConsent(who, () => appApi.osCall(String(args.name || ""), args.args ?? {}, who));
         }
@@ -828,7 +828,7 @@ function PageView({ target, open, active, reload, onMeta }: {
     return () => {
       window.removeEventListener("message", on);
       closed = true;
-      codeHostConsent.current?.(null);codeHostConsent.current=null;setCodeHostPrompt(null);
+      credentialConsent.current?.(null);credentialConsent.current=null;setCredentialPrompt(null);
       remoteConsent.current?.(false);remoteConsent.current = null;
       const t = target.kind === "page" ? target : null;
       if (t) void appApi.browserCall(t.hubId, t.id, remoteInstance, "close").catch(() => undefined);
@@ -943,7 +943,7 @@ function PageView({ target, open, active, reload, onMeta }: {
           )}
         </div>
       )}
-    {codeHostPrompt&&<CodeHostPrompt key={codeHostPrompt.prompt.confirmation} prompt={codeHostPrompt.prompt} answer={codeHostPrompt.answer}/>}
+    {credentialPrompt&&<CredentialPrompt key={credentialPrompt.prompt.confirmation} prompt={credentialPrompt.prompt} answer={credentialPrompt.answer}/>}
     <Modal className={cn("pg-remote-ask", remoteAsking?.settingsReview && "pg-browser-settings-dialog")} wide={!!remoteAsking?.review || !!remoteAsking?.settingsReview} open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
       title={remoteAsking?.title || L(E`允许「${opened?.name || page?.name || L("此应用", "this app")}」使用远程桌面？`, E`Allow “${opened?.name || page?.name || L("此应用", "this app")}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
       {remoteAsking?.review && <BrowserApprovalDetails review={remoteAsking.review} />}
@@ -957,7 +957,7 @@ function PageView({ target, open, active, reload, onMeta }: {
     <Modal open={!!consent} onOpenChange={(o) => { if (!o) consent?.answer("deny"); }} className="pg-ask"
       title={consent ? L(E`允许「${consent.name || L("这个应用", "this app")}」${osWant(consent.group, consent.host).zh}吗？`, E`Let "${consent.name || L("此应用", "this app")}" ${osWant(consent.group, consent.host).en}?`) : ""}
       description={consent ? [
-        consent.group === "codehost" && consent.host ? consent.host : "",
+        consent.group === "credentials" && consent.host ? consent.host : "",
         consent.declared ? "" : L("这个应用没有在说明里声明要用这一项。", "This app does not declare that it uses this."),
         consent.once_only ? osOnceWhy(consent.group) : L("选「始终允许」，以后这个应用不再问（升级后也不问，只问新版本新加的）；可以在设置 → 应用权限里收回。", "With \"Always allow\", this app won't ask again, not even after an update (only for what a new version adds). You can take it back in Settings → App permissions."),
       ].filter(Boolean).join(" ") : ""}>
@@ -1036,7 +1036,7 @@ export function osWant(group: string, host?: string): { zh: string; en: string }
     case "notify": return { zh: "发系统通知", en: "show system notifications" };
     case "network": return host ? { zh: `访问 ${host}`, en: `reach ${host}` } : { zh: "联网", en: "use the network" };
     case "ssh": return { zh: "连接你保存的服务器", en: "connect to servers you saved" };
-    case "codehost": return { zh: "连接本机代码托管账户，只读查看仓库、PR 和 Issue", en: "connect local code-host accounts and read repositories, pull requests and issues" };
+    case "credentials": return { zh: "使用本机保存的连接凭证，凭证不会交给应用", en: "use locally saved connection credentials without exposing them to the app" };
     case "database": return { zh: "连接你保存的数据库", en: "connect to databases you saved" };
     case "browser": return { zh: "在 myco 专用浏览器资料中录制和运行网页操作", en: "record and run web actions in dedicated myco browser profiles" };
     case "proxy": return { zh: "控制这台电脑上的代理", en: "control this computer's proxy" };

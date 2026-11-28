@@ -3474,5 +3474,12 @@
   "Unlimited": "무제한",
   "Balance": "잔액",
   "{0} left": "{0} 남음",
-  "Reported by another agent on the same account {0}": "같은 계정의 다른 agent가 {0} 보고함"
+  "Reported by another agent on the same account {0}": "같은 계정의 다른 agent가 {0} 보고함",
+  "Allowed paths": "허용된 경로",
+  "Authorize a connection": "연결 승인",
+  "Connect {0}: {1}": "{0} 연결: {1}",
+  "Credentials stay on this computer and are never given to the app page. Only reads to the following address are allowed.": "인증 정보는 이 컴퓨터에 저장되며 앱 페이지에 전달되지 않습니다. 다음 주소의 읽기 요청만 허용됩니다.",
+  "Server": "서버",
+  "use locally saved connection credentials without exposing them to the app": "인증 정보를 앱에 노출하지 않고 이 컴퓨터에 저장된 연결 사용",
+  "Verified address": "확인된 주소"
 }
