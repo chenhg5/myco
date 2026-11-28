@@ -11104,7 +11104,7 @@ html.is-focus .fp-panel.is-docked { display: none !important; }
 
 /* Seven native language names use a compact picker at both window widths. */
 .language-control { display: grid; gap: 4px; min-width: 0; }
-.app-language-select { width: 13rem; max-width: 100%; }
+.app-language-select { width: 13rem; max-width: 100%; text-align: left; }
 
 /* Localized sentences and controls share space without squeezing prose. */
 .app-setting-line { flex-wrap: wrap; }

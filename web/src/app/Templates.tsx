@@ -1,5 +1,5 @@
 import { templateDisplay } from "@/lib/template-locale";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { IntroCard, introOf } from "@/app/Onboard";
 import { FileText, KanbanSquare, LayoutTemplate, Plus, Presentation, RefreshCw, Search, Sparkles, Table2 } from "lucide-react";
@@ -74,6 +74,21 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
   const [shelf, setShelf] = useState("all");
   const [q, setQ] = useState("");
   const [allMade, setAllMade] = useState(false);
+  const [madeGrid, setMadeGrid] = useState<HTMLDivElement | null>(null);
+  const [madeLimit, setMadeLimit] = useState(6);
+  useLayoutEffect(() => {
+    if (!madeGrid) return;
+    // Follow the actual CSS grid, including sidebar and text-size changes.
+    const measure = () => {
+      const tracks = getComputedStyle(madeGrid).gridTemplateColumns;
+      const columns = tracks && tracks !== "none" ? tracks.split(/\s+/).length : 1;
+      setMadeLimit(columns * 2);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(madeGrid);
+    return () => observer.disconnect();
+  }, [madeGrid]);
   const displayList = list?.filter(t => t.slug !== "myco/poll").map(templateDisplay) ?? null;
   const match = (source: Template) => {const t=templateDisplay(source);return !q.trim() || `${source.name} ${source.description||""} ${t.name} ${t.description || ""} ${t.slug} ${Object.values(t.locales || {}).map(v => `${v.name||""} ${v.description||""}`).join(" ")}`.toLowerCase().includes(q.trim().toLowerCase());};
   const official = (displayList || []).filter((t) => t.official && match(t));
@@ -94,7 +109,7 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
     </button>
     );
   };
-  const shownMade = allMade ? made : made.slice(0, 6);
+  const shownMade = allMade ? made : made.slice(0, madeLimit);
   const nothing = !!list && !official.length && !own.length;
 
   return (
@@ -131,9 +146,9 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
           {made.length > 0 && !q && (
             <>
               <SectionHead title={L("最近建的", "Made recently")} count={made.length}>
-                {made.length > 6 && <button type="button" className="tp-more" onClick={() => setAllMade(!allMade)}>{allMade ? L("收起", "Fewer") : L("全部", "All")}</button>}
+                {made.length > madeLimit && <button type="button" className="tp-more" onClick={() => setAllMade(!allMade)}>{allMade ? L("收起", "Fewer") : L("全部", "All")}</button>}
               </SectionHead>
-              <div className="tp-made" data-testid="templates-made">
+              <div ref={setMadeGrid} className="tp-made" data-testid="templates-made">
                 {shownMade.map((p) => {
                   const t = (list || []).find((x) => x.id === p.template?.id);
                   return (

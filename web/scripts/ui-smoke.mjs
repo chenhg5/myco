@@ -525,6 +525,15 @@ async function pcMore(page, item) {
   await clickVisible(page, page.locator(".conv-menu").getByRole("menuitem", { name: item, exact: true }));
 }
 
+// Pick through the actual menu: selectOption bypasses WebKit's native popup.
+async function selectLanguage(page, language) {
+  const names = { zh: "简体中文", "zh-Hant": "繁體中文", en: "English", ja: "日本語", ko: "한국어", es: "Español", "pt-BR": "Português (Brasil)" };
+  await clickVisible(page, page.getByTestId("language-select"));
+  const items = page.locator(".language-menu [role=menuitem]");
+  if (await items.count() !== 8) throw Error("Expected System plus seven languages");
+  await clickVisible(page, language === "system" ? items.first() : page.locator(".language-menu").getByRole("menuitem", {name:names[language],exact:true}));
+}
+
 async function menuPick(page, row, item) {
   for (let i = 0; ; i++) {
     await row.scrollIntoViewIfNeeded();
@@ -648,7 +657,9 @@ async function runMatrix(browser, size, scheme) {
           // Traditional spellings are catalog-authored, not inferred from glyph rules.
           const wanted=language==="zh-Hant"?catalog["在这台电脑上开始"]:start;
           if(await check.locator(".wl-start").innerText()!==wanted)throw new Error(`Welcome action is not localized: ${language}`);
-          if(await check.getByTestId("language-select").locator("option").count()!==8)throw new Error("Missing language options on Welcome");
+          await clickVisible(check,check.getByTestId("language-select"));
+          if(await check.locator(".language-menu [role=menuitem]").count()!==8)throw new Error("Missing language options on Welcome");
+          await check.keyboard.press("Escape");
           await settle(check);
           await shot(check,size,scheme,`welcome-language-${language}`);
           await clickVisible(check,check.locator(".wl-way").first());await check.locator(".app-modal").waitFor();
@@ -693,12 +704,10 @@ async function runMatrix(browser, size, scheme) {
           // Start from Chinese navigation, then retain the open settings section.
           await go(check,"设置",narrow);
           await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
-          const picker=check.getByTestId("language-select");
-          if(await picker.locator("option").count()!==8) throw new Error("Expected System plus seven languages");
-          await picker.selectOption(language);
+          await selectLanguage(check,language);
           await check.waitForFunction(l=>document.documentElement.lang===l, language==="zh"?"zh-CN":language);
           await check.locator(".app-settings-tab.active").filter({hasText:expected[language]}).waitFor();
-          if(await check.getByTestId("language-select").inputValue()!==language) throw new Error("The selected language was not retained");
+          if(await check.getByTestId("language-select").getAttribute("data-value")!==language) throw new Error("The selected language was not retained");
           await check.waitForFunction(l=>localStorage.getItem("myco-lang")===l,language);
           const overflow=await check.evaluate(w=>document.documentElement.scrollWidth>w+1,size.width);
           if(overflow) throw new Error(`Horizontal overflow in ${language}`);
@@ -708,9 +717,23 @@ async function runMatrix(browser, size, scheme) {
           if(await check.locator(".conv-detail .md").first().innerText()!==original) throw new Error("Language selection changed the original message");
           await check.reload();await check.locator(".app-shell").waitFor();
           if(await check.locator("html").getAttribute("lang")!==(language==="zh"?"zh-CN":language))throw new Error("Language was lost after reload");
-          // Reset only this isolated profile before the next scenario.
-          durable["myco-lang"]="zh";
+          // Return through the UI, without replacing the profile or reloading
+          // first: cached packs must work in both directions too.
+          await check.keyboard.press(process.platform === "darwin" ? "Meta+," : "Control+,");
+          await clickVisible(check,check.locator(".app-settings-tab",{hasText:expected[language]}));
+          let navigated = false;
+          const onNavigate = () => { navigated = true; };
+          check.on("framenavigated", onNavigate);
+          try {
+            await selectLanguage(check,"zh");
+            await check.waitForFunction(()=>document.documentElement.lang==="zh-CN");
+            await check.locator(".app-settings-tab.active").filter({hasText:"外观"}).waitFor();
+            await saved("zh");
+            if(navigated)throw Error("Returning to Chinese reloaded the page");
+          } finally {check.off("framenavigated", onNavigate);}
+          await closeSettings(check);
           await check.reload();await check.locator(".app-shell").waitFor();
+          if(await check.locator("html").getAttribute("lang")!=="zh-CN")throw Error("Returning to Chinese was not saved");
         }
         let failPack = true;
         await check.route(/\/assets\/ko-[^/]+\.json$/, async route => {
@@ -718,7 +741,7 @@ async function runMatrix(browser, size, scheme) {
         });
         await go(check,"设置",narrow);
         await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
-        await check.getByTestId("language-select").selectOption("ko");
+        await selectLanguage(check,"ko");
         await check.getByTestId("language-error").waitFor();
         if(await check.locator("html").getAttribute("lang")!=="zh-CN")throw new Error("Failed pack replaced a working language");
         failPack=false;
@@ -729,9 +752,9 @@ async function runMatrix(browser, size, scheme) {
         await check.reload();await check.locator(".app-shell").waitFor();
         await go(check,"设置",narrow);
         await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
-        await check.getByTestId("language-select").selectOption("system");
+        await selectLanguage(check,"system");
         await check.waitForFunction(()=>document.documentElement.lang==="ja");
-        if(await check.getByTestId("language-select").inputValue()!=="system")throw new Error("System selection lost");
+        if(await check.getByTestId("language-select").getAttribute("data-value")!=="system")throw new Error("System selection lost");
         for(const l of Object.keys(expected)) if(!nativeLanguages.includes(l))throw new Error(`Native bridge missed ${l}`);
         if(errors.length)throw new Error(errors.join("\n"));
         if(outbound.length)throw new Error("UI localization made an external request: "+outbound.join(","));
