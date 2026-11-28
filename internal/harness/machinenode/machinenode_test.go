@@ -505,3 +505,40 @@ func TestProcessStopRequiresAdministratorAndDedicatedEffect(t *testing.T) {
 		t.Fatalf("identity rejection lost: %+v", got)
 	}
 }
+
+// How many agent CLIs run at once: only through the hub (which lets only
+// the machine's owner change it), and in the info the console shows.
+func TestConcurrencyRequest(t *testing.T) {
+	r := newRig(t)
+	if res := r.run(t, AdminSender, api.SpawnRequest{CLI: api.ConcurrencyCLI}); !res.Denied || !strings.Contains(res.Error, "no shared runner") {
+		t.Fatalf("a runner serving one agent: %+v", res)
+	}
+	cur := &api.MachineConcurrency{Limit: 3, InUse: 3, Waiting: 2, Source: "flag", Flag: 3, Ceiling: 64}
+	var set []int
+	r.node.Deps.Concurrency = func() *api.MachineConcurrency { return cur }
+	r.node.Deps.SetConcurrency = func(n int) (*api.MachineConcurrency, error) {
+		if n > 64 {
+			return nil, errors.New("the limit must be between 1 and 64")
+		}
+		set = append(set, n)
+		cur = &api.MachineConcurrency{Limit: n, InUse: 3, Waiting: 0, Source: "setting", Flag: 3, Ceiling: 64}
+		return cur, nil
+	}
+	if res := r.run(t, "lead", api.SpawnRequest{CLI: api.ConcurrencyCLI, MaxConcurrent: 12}); !res.Denied || len(set) != 0 {
+		t.Fatalf("an agent changed it: %+v", res)
+	}
+	res := r.run(t, AdminSender, api.SpawnRequest{CLI: api.ConcurrencyCLI})
+	if res.Concurrency == nil || res.Concurrency.Limit != 3 || res.Concurrency.Waiting != 2 || len(set) != 0 || !strings.Contains(res.Reply, `"limit":3`) {
+		t.Fatalf("read: %+v", res)
+	}
+	res = r.run(t, AdminSender, api.SpawnRequest{CLI: api.ConcurrencyCLI, MaxConcurrent: 12})
+	if res.Concurrency == nil || res.Concurrency.Limit != 12 || res.Concurrency.Source != "setting" || len(set) != 1 {
+		t.Fatalf("set: %+v", res)
+	}
+	if res := r.run(t, AdminSender, api.SpawnRequest{CLI: api.ConcurrencyCLI, MaxConcurrent: 99}); res.Error == "" || res.Concurrency != nil {
+		t.Fatalf("out of range: %+v", res)
+	}
+	if res := r.run(t, "lead", api.SpawnRequest{CLI: api.InfoCLI}); res.Info == nil || res.Info.Concurrency == nil || res.Info.Concurrency.Limit != 12 {
+		t.Fatalf("info: %+v", res.Info)
+	}
+}

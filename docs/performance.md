@@ -140,3 +140,13 @@ capacity guarantee. Those scenarios require separate follow-up measurements.
 Retain the hardware, seed, traffic schedule, build SHA and limitations with every
 result. Compare matched runs, and repeat at least three times before attributing
 a change to an optimization.
+
+Draining waits for admitted short-request jobs and task reply validation, then
+cancels empty inbox polls and joins their goroutines. Idle long polls are not
+completion dependencies. The configured cooldown remains a capacity/acceptance
+limit for the load tool, including queued housekeeping. Its functional Go test
+uses its existing 45-second workload context for setup, draining and individual
+I/O instead of additional five-second capacity gates on shared race-instrumented
+hosts. Teardown keeps its existing independent bounds. SLOs remain in the report;
+the standalone tool still uses its configured request/drain deadlines and fails
+its acceptance check.

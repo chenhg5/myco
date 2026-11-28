@@ -150,7 +150,7 @@ reached.`,
 			})
 		}),
 	}
-	return (&Command{Name: "runtime", Summary: "What you run on (model) and your account's limits, as people see them"}).Add(set, quotaCmd)
+	return (&Command{Name: "runtime", Summary: "What you run on (model) and your account's limits, as people see them"}).Add(set, quotaCmd, statusLineCommand())
 }
 
 // readJSONFile reads a flag's file ('-' = stdin), at most limit bytes.

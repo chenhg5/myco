@@ -10,6 +10,7 @@
     "test:ui": "node scripts/ui-smoke.mjs",
     "dev:app": "node mock/app-server.mjs & vite",
     "test:usage": "node scripts/usage.test.mjs",
+    "test:quota": "node scripts/quota.test.mjs",
     "test:preferences": "node scripts/preferences.test.mjs"
   },
   "dependencies": {

@@ -238,7 +238,7 @@ node right away. --allow-shell also lets agents open a terminal (shell node) her
 			return e.joinMachine(hub, tok, nil)
 		}),
 	}
-	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join, machineShellCommand(), machineDirsCommand(), machineRemoveCommand())
+	return (&Command{Name: "machine", Summary: "This machine's membership in the network"}).Add(join, machineShellCommand(), machineDirsCommand(), machineConcurrencyCommand(), machineRemoveCommand())
 }
 
 // joinMachine trades join link token tok of hub for this machine's
@@ -318,7 +318,7 @@ func (e *env) joinMachine(hub, tok string, extra func(out map[string]any) []stri
 	case e.in.Bool("no-service"):
 		notes = append(notes, "service not installed (--no-service): run `myco runner start --all` to serve this machine's agents")
 	default:
-		if sr, err := e.installService(3, "info", false); err != nil {
+		if sr, err := e.installService(0, "info", false); err != nil {
 			notes = append(notes, "could not install the background service ("+toError(err, "").Message+"); keep `myco runner start --all` running instead, e.g. in tmux")
 		} else {
 			out["service"] = sr.Plan.Manager
@@ -623,6 +623,22 @@ Safe to re-run: the same session gets the same agent back.`,
 			}
 			cloud := b.Harness == "claude-cloud" || b.Harness == "inbox"
 			out := map[string]any{"agent": res.Agent, "created": res.Created, "detected": how, "config": e.cfgPath}
+			// Claude Code can report this session's usage limits by itself:
+			// its status line gets them after each turn. Setting it here is
+			// what makes quota reporting automatic rather than something the
+			// agent has to remember.
+			var statusLineNote string
+			if b.Harness == "claude" || b.Harness == "claude-cloud" {
+				if sr, err := statusLineApply(config.Dir(e.defaultPath), e.in.Getenv, false, false); err != nil {
+					out["statusline_error"] = err.Error()
+				} else if sr.Changed {
+					out["statusline"] = map[string]any{"path": sr.Path, "chained": sr.Chained, "previous": sr.Previous}
+					statusLineNote = "Claude Code's status line now keeps this session's usage limits for myco (myco agent runtime statusline --uninstall undoes it)"
+					if sr.Chained {
+						statusLineNote += "; the line that was there still runs"
+					}
+				}
+			}
 			if len(elsewhere) > 0 {
 				out["also_in"], out["session"] = identitiesOf(elsewhere), sessionMode
 			}
@@ -690,6 +706,9 @@ Safe to re-run: the same session gets the same agent back.`,
 					fmt.Fprintln(w, inboxReceiveNote)
 				} else {
 					fmt.Fprintln(w, openSessionNote)
+				}
+				if statusLineNote != "" {
+					fmt.Fprintln(w, statusLineNote)
 				}
 				for _, p := range installedTo {
 					fmt.Fprintf(w, "installed the myco skill: %s (a running session may need a restart to load it)\n", p)

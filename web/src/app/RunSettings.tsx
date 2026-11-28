@@ -8,7 +8,7 @@ import { ChevronDown, ChevronRight, Shield, ShieldOff, TriangleAlert } from "luc
 import { hubAfter0194 } from "@/app/hubVersion";
 import { ConfirmDialog, ErrorText } from "@/app/dialogs";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
-import { quotaHasNumbers, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaTight, quotaWindowLabel, quotaWindowText } from "@/app/quota";
+import { quotaHasNumbers, quotaLiveWindows, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaTight, quotaWindowLabel, quotaWindowText } from "@/app/quota";
 import { cn, timeAgo } from "@/lib/utils";
 import { L, lang } from "@/lib/i18n";
 
@@ -661,11 +661,11 @@ export function AccessPill({ row, onRefresh }: { row: AgentRow; onRefresh: () =>
  *  as a full quota; a model's own buckets fold away. */
 function QuotaRows({ quota, row, now }: { quota: NonNullable<Runtime["quota"]>; row: AgentRow; now: number }) {
   const [more, setMore] = useState(false);
-  const has = quotaHasNumbers(quota);
-  const status = quotaStatusText(quota);
+  const has = quotaHasNumbers(quota, now);
+  const status = quotaStatusText(quota, now);
   const stale = quotaStaleNote(quota, now);
   const source = quotaSourceText(quota, machinesOfHub(row.hub));
-  const windows = has ? quota.windows : [];
+  const windows = has ? quotaLiveWindows(quota, now) : [];
   const main = windows.filter((w) => !w.model_scope);
   const scoped = windows.filter((w) => !!w.model_scope);
   const one = (w: (typeof windows)[number]) => (

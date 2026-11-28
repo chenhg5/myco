@@ -404,6 +404,9 @@ func (e *env) machineNode(hub string, me *api.Agent, c *client.Client, sh runner
 			},
 			// The console asks this machine to bring myco up to date.
 			Upgrade: e.upgradeThisMachine,
+			// How many agent CLIs run at once here (runner start --all).
+			Concurrency:    sh.limit.viewFunc(),
+			SetConcurrency: sh.limit.setFunc(),
 			// Another workspace of this server: the same machine joins it
 			// (its machine node there is served at the runner's next scan,
 			// asked for right away).

@@ -283,31 +283,8 @@ func runOne(ctx context.Context, c Config, dir string, users, repeat int) (r Rep
 	defer drainDeadline.Stop()
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
-	draining := true
-	for draining {
-		select {
-		case <-ctx.Done():
-			draining = false
-		case <-drainDeadline.C:
-			w.stop("drain_deadline")
-			draining = false
-		case <-ticker.C:
-			w.mu.Lock()
-			pending := uint64(0)
-			for _, t := range w.tasks {
-				if !t.completed && !t.failed {
-					pending++
-				}
-			}
-			w.mu.Unlock()
-			select {
-			case <-workersDone:
-				if pending == 0 {
-					draining = false
-				}
-			default:
-			}
-		}
+	if reason := w.waitDrain(ctx, workersDone, drainDeadline.C, ticker.C); reason != "" {
+		w.stop(reason)
 	}
 	stopRun()
 	workers.Wait()
@@ -372,6 +349,46 @@ func runOne(ctx context.Context, c Config, dir string, users, repeat int) (r Rep
 	}
 	return r, err
 }
+
+// Empty inbox polls are canceled by stopRun after draining. They are not
+// completion dependencies: only admitted short jobs and task validation are.
+func (w *workload) drained(workersDone <-chan struct{}) bool {
+	select {
+	case <-workersDone:
+	default:
+		return false
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, t := range w.tasks {
+		if !t.completed && !t.failed {
+			return false
+		}
+	}
+	return true
+}
+
+func (w *workload) waitDrain(ctx context.Context, workersDone <-chan struct{}, deadline, tick <-chan time.Time) string {
+	for {
+		if w.drained(workersDone) {
+			return ""
+		}
+		select {
+		case <-ctx.Done():
+			return ""
+		case <-deadline:
+			// The timer and last completion can become ready together, or
+			// completion can occur between the last 50ms check and the cutoff.
+			// Observe completion before classifying the run as unfinished.
+			if w.drained(workersDone) {
+				return ""
+			}
+			return "drain_deadline"
+		case <-tick:
+		}
+	}
+}
+
 func fileBytes(p string) int64 {
 	s, e := os.Stat(p)
 	if e != nil {

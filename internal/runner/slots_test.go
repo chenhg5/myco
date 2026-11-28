@@ -235,3 +235,49 @@ func TestStoppedWaiterIsCheckedAgainOnAdmission(t *testing.T) {
 		t.Fatal("stopped task leaked admission")
 	}
 }
+
+// The limit changes while turns run: raising it starts waiting turns at
+// once; lowering it stops new starts and leaves running ones alone.
+func TestSlotsSetMaxLive(t *testing.T) {
+	p := NewSlotPool(1)
+	a := p.Request("https://hub/w/a", "a", "m1")
+	b := p.Request("https://hub/w/a", "a", "m2")
+	c := p.Request("https://hub/w/b", "b", "m3")
+	admitted(t, a)
+	waiting(t, b)
+	waiting(t, c)
+
+	p.SetMax(3) // raised: both waiting turns start now
+	admitted(t, b)
+	admitted(t, c)
+	if s := p.Snapshot(""); s.InUse != 3 || s.MaxConcurrent != 3 || s.Limit != 3 || s.Waiting != 0 {
+		t.Fatalf("after raising: %+v", s)
+	}
+
+	p.SetMax(1) // lowered: nothing running is stopped
+	for _, tk := range []*SlotTicket{a, b, c} {
+		if tk.ended {
+			t.Fatal("lowering the limit ended a running turn")
+		}
+	}
+	d := p.Request("https://hub/w/a", "a", "m4")
+	waiting(t, d)
+	// Still reportable to hubs that refuse in_use above max_concurrent.
+	if s := p.Snapshot("a"); s.InUse != 3 || s.Limit != 1 || s.MaxConcurrent != 3 || s.Waiting != 1 {
+		t.Fatalf("while draining: %+v", s)
+	}
+	a.Done()
+	waiting(t, d) // 2 running, limit 1
+	b.Done()
+	waiting(t, d) // 1 running, limit 1
+	c.Done()
+	admitted(t, d)
+	if s := p.Snapshot(""); s.InUse != 1 || s.MaxConcurrent != 1 || s.Limit != 1 {
+		t.Fatalf("after draining: %+v", s)
+	}
+	d.Done()
+	p.SetMax(0) // never below one
+	if p.Max() != 1 {
+		t.Fatalf("max = %d", p.Max())
+	}
+}

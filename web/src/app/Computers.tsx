@@ -15,10 +15,11 @@ import { machineTellsInfo } from "@/app/hubVersion";
 import { cachedMachineInfo, fetchMachineInfo } from "@/app/machineInfoCache";
 import { hasTools, ToolInventory } from "@/app/ToolInventory";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
+import { ConcurrencyLimit, ownsMachine } from "@/app/Concurrency";
 import { MachineDirs } from "@/app/MachineDirs";
 import { ComputerCheck } from "@/app/ComputerCheck";
 import { MachineUpgrade, UpgradeAll, useLatestRelease } from "@/app/MycoUpgrade";
-import { agentQuotaHint } from "@/app/quota";
+import { agentQuotaHint, quotaLiveWindows } from "@/app/quota";
 import { Avatar, AvatarStack, isWorkspace, stateWords } from "@/app/persona";
 import { PageHero, SectionHead } from "@/app/PageHero";
 import { projectsOf } from "@/app/Members";
@@ -39,7 +40,8 @@ function computerQuotaHint(machineId: string, hubId: string, rows: AgentRow[]) {
     if (x.hub.id !== hubId || x.st.agent.machine_id !== machineId) continue;
     const h = agentQuotaHint(x.st.agent);
     if (!h) continue;
-    const used = Math.max(...(x.st.agent.runtime?.quota?.windows || []).map((w) => w.used), 0);
+    const quota = x.st.agent.runtime?.quota;
+    const used = Math.max(...(quota ? quotaLiveWindows(quota).map((w) => w.used) : []), 0);
     const rank = (h.level === "spent" ? 2 : 0) + Math.min(used, 1.99) / 2;
     if (rank > bestRank) { best = { ...h, who: nodeName(x.st.agent, x.hub) }; bestRank = rank; }
   }
@@ -204,10 +206,11 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
         </div>
 
         {tab === "work" && (<>
-          {m.online && slots && <div className="app-note" data-testid="computer-runner-slots">
-            <div>{L(`并行任务：${slots.in_use}/${slots.max_concurrent} 在忙，${slots.waiting} 个排队中`, `Parallel tasks: ${slots.in_use}/${slots.max_concurrent} in use, ${slots.waiting} waiting`)}</div>
-            <div>{L("在这台电脑上调整名额：", "Change the limit on this computer:")} <code>myco runner service install --max-concurrent N</code></div>
-          </div>}
+          {m.online && (
+            <section className="app-setting-card pcd-cc" data-testid="computer-runner-slots">
+              <ConcurrencyLimit hubId={hub.id} machine={m} here={isHere(m)} owns={ownsMachine(hub, m)} slots={slots} onChanged={onChanged} />
+            </section>
+          )}
           <SectionHead title="Agent" count={agents.length} />
           {agents.length ? <div className="pc-list">{agents.map(agentRow)}</div> : (
             <div className="pcd-empty">

@@ -100,16 +100,43 @@ export function quotaWindowText(w: QuotaWindow, now = Date.now()): string {
   return [L(`剩 ${quotaLeft(w)}%`, `${quotaLeft(w)}% left`), reset].filter(Boolean).join(" · ");
 }
 
-/** A successful read is there: numbers to show. A failure never stands
- *  for a full quota. */
-export function quotaHasNumbers(q: Quota): boolean {
-  const at = new Date(q.at).getTime();
-  return !!q.windows?.length && Number.isFinite(at) && at > Date.UTC(2000, 0, 1);
+/** The windows that still describe the account: one whose reset time has
+ *  passed is no longer the window those numbers were read for. */
+export function quotaLiveWindows(q: Quota, now = Date.now()): QuotaWindow[] {
+  return (q.windows ?? []).filter((w) => {
+    const t = w.resets_at ? new Date(w.resets_at).getTime() : NaN;
+    return !Number.isFinite(t) || t > now;
+  });
 }
 
-/** The status says the last read failed. */
-function quotaFailed(q: Quota): boolean {
-  return !!q.status && q.status !== "ok";
+/** A successful read is there: numbers to show. A failure never stands
+ *  for a full quota. */
+export function quotaHasNumbers(q: Quota, now = Date.now()): boolean {
+  const at = new Date(q.at).getTime();
+  return quotaLiveWindows(q, now).length > 0 && Number.isFinite(at) && at > Date.UTC(2000, 0, 1);
+}
+
+/** When the numbers were observed: a runner's shared snapshot may keep a
+ *  weekly window's older time on purpose, so where it has a profile the
+ *  collection time is the freshness signal; a session report carries the
+ *  time it observed. */
+function quotaObservedAt(q: Quota): number {
+  return new Date(q.profile_ref ? q.checked_at || q.at : q.at).getTime();
+}
+
+/** The status to show: a read nobody refreshed for an hour counts as
+ *  unknown, never as ok. */
+export function quotaEffectiveStatus(q: Quota, now = Date.now()): string {
+  if (q.status && q.status !== "ok") return q.status;
+  const at = quotaObservedAt(q);
+  if (!Number.isFinite(at) || now - at > 3600e3) return "unknown";
+  return q.status || "ok";
+}
+
+/** The status says the last read failed (or is too old to trust). */
+function quotaFailed(q: Quota, now = Date.now()): boolean {
+  const status = quotaEffectiveStatus(q, now);
+  return !!status && status !== "ok";
 }
 
 /** The person has to do something: sign in again, or add a key. */
@@ -118,14 +145,15 @@ function quotaNeedsAction(q: Quota): boolean {
 }
 
 /** Why there are no fresh numbers, in a few words: "需要在 CLI 重新登录". */
-export function quotaStatusText(q: Quota): string {
-  switch (q.status) {
+export function quotaStatusText(q: Quota, now = Date.now()): string {
+  switch (quotaEffectiveStatus(q, now)) {
     case "no_credentials": return L("需要配置 key", "Needs an API key");
     case "auth_required": return L("需要在 CLI 重新登录", "Sign in again in the CLI");
     case "unsupported": return q.provider === "unknown" ? L("这个连接没有能读的额度", "This connection has no usage to read") : L("这个账号不报额度", "This account doesn't report usage");
     case "throttled": return L("查得太勤，稍后再取", "Checked too often; tries again later");
     case "schema_changed": return L("额度格式变了，需要更新 myco", "The usage format changed; update myco");
     case "transient_error": return L("获取失败，稍后再试", "Couldn't fetch; tries again later");
+    case "unknown": return L("超过一小时没更新", "Not updated in over an hour");
     default:
       if (q.provider === "unknown") return L("这个连接没有能读的额度", "This connection has no usage to read");
       return q.status && q.status !== "ok" ? L("获取失败", "Couldn't fetch") : "";
@@ -140,9 +168,9 @@ function actionShort(q: Quota): string {
 /** Usage older than an hour, or kept from before a failed read: the
  *  numbers have moved on. */
 export function quotaStaleNote(quota: Quota, now: number): string | undefined {
-  if (!quotaHasNumbers(quota)) return undefined;
+  if (!quotaHasNumbers(quota, now)) return undefined;
   const at = new Date(quota.at).getTime();
-  if (!quotaFailed(quota) && now - at <= 3600e3) return undefined;
+  if (!quotaFailed(quota, now) && now - at <= 3600e3) return undefined;
   return L(`${timeAgo(quota.at, now)}取到的数据`, `data from ${timeAgo(quota.at, now)}`);
 }
 
@@ -165,14 +193,18 @@ export function quotaSourceText(q: Quota, machines: Machine[] = []): string {
   const who = providerNames[p] || p || "";
   const machine = q.machine_id ? machines.find((m) => m.id === q.machine_id)?.name : undefined;
   // (read in no computer: what its session reported, e.g. a cloud session)
-  const where = machine || (q.source_kind === "cloud_session" ? L("会话上报", "reported by its session") : "");
+  const where = machine
+    || (q.source_kind === "statusline" ? L("状态栏上报", "from its status line")
+      : q.source_kind === "cloud_session" ? L("会话上报", "reported by its session") : "");
   return [who, q.plan ? planName(q.plan) : "", where].filter(Boolean).join(" · ");
 }
 
-/** The tightest window: the one with the least left (spent first). */
-export function quotaWorst(q: Quota): QuotaWindow | undefined {
-  if (!q.windows?.length) return undefined;
-  return q.windows.reduce((x, w) => {
+/** The tightest window still describing the account: the one with the
+ *  least left (spent first). */
+export function quotaWorst(q: Quota, now = Date.now()): QuotaWindow | undefined {
+  const windows = quotaLiveWindows(q, now);
+  if (!windows.length) return undefined;
+  return windows.reduce((x, w) => {
     if (quotaSpent(w) !== quotaSpent(x)) return quotaSpent(w) ? w : x;
     return w.used > x.used ? w : x;
   });
@@ -184,8 +216,11 @@ export type QuotaLevel = "ok" | "tight" | "spent" | "action" | "failed";
  *  resets, and what is wrong. `short` fits a tag; `line` is the whole say. */
 export function quotaSummary(q: Quota, machines: Machine[] = [], now = Date.now()): { level: QuotaLevel; short: string; line: string; stale: boolean } {
   const src = quotaSourceText(q, machines);
-  const status = quotaStatusText(q);
-  const worst = quotaHasNumbers(q) ? quotaWorst(q) : undefined;
+  const status = quotaStatusText(q, now);
+  // Numbers nobody refreshed for an hour are unknown, not ok: do not show
+  // them as the account's current use.
+  const unknown = quotaEffectiveStatus(q, now) === "unknown";
+  const worst = !unknown && quotaHasNumbers(q, now) ? quotaWorst(q, now) : undefined;
   const stale = !!quotaStaleNote(q, now);
   if (!worst) {
     const why = status || L("还没有额度数据", "No usage yet");
@@ -202,7 +237,7 @@ export function quotaSummary(q: Quota, machines: Machine[] = [], now = Date.now(
     level,
     short: quotaNeedsAction(q) ? actionShort(q) : quotaSpent(worst) ? L("额度用完", "Out of quota") : L(`剩 ${quotaLeft(worst)}%`, `${quotaLeft(worst)}% left`),
     line,
-    stale: stale || quotaFailed(q),
+    stale: stale || quotaFailed(q, now),
   };
 }
 
@@ -241,8 +276,8 @@ export function quotaPillLevel(w: QuotaWindow): "ok" | "low" | "out" {
 /** "已用完，3:40 重置": what the composer says before a send while the
  *  account is out (it does not stop the send). */
 export function quotaOutNote(q: Quota, now = Date.now()): string | undefined {
-  if (!quotaHasNumbers(q)) return undefined;
-  const w = quotaWorst(q);
+  if (!quotaHasNumbers(q, now)) return undefined;
+  const w = quotaWorst(q, now);
   if (!w || !quotaSpent(w)) return undefined;
   const at = w.resets_at ? resetLabel(w.resets_at, now) : "";
   return at && at !== "—"

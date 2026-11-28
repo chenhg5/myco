@@ -272,6 +272,9 @@ function watchPage(page, size, scheme) {
     // On purpose: Claude on this computer cannot sign in until a way is
     // picked (添加 agent: the sign-in card, then it starts).
     if (msg.text().includes("502") && where.includes("/machines/m_studio/spawn")) return;
+    // On purpose: Bench Linux's myco is too old to say how many agents it
+    // runs at once (单聊 · 等待电脑名额: the App says to upgrade it).
+    if (msg.text().includes("409") && where.includes("/machines/m_bench/concurrency")) return;
     // On purpose: 设置 · 模型供应商 tests a wrong key (the vendor says 401).
     if (msg.text().includes("502") && /\/providers\/test$/.test(where.replace(/:\d+:\d+$/, ""))) return;
     // On purpose: 单聊 · 网络不好 cuts the chat's polls off.
@@ -3029,17 +3032,39 @@ async function runMatrix(browser, size, scheme) {
       await box.fill("名额排队预览");await box.press("Enter");
       const queue=page.locator('[data-testid="runner-queue"]').last();
       await queue.waitFor({timeout:15000});
-      if (!(await queue.innerText()).includes("3/3 在忙，排第 2")) throw Error("未显示名额和排队位置");
+      const qText=await queue.innerText();
+      if (!qText.includes("同时最多跑 3 个") || !qText.includes("排第 2")) throw Error(`未说清是名额满了和排队位置：${qText}`);
+      // Its owner raises the limit right there; the waiting task starts.
+      await queue.locator('[data-testid="raise-limit"]').waitFor({timeout:5000});
       if (await page.locator('.conv-detail .trace.is-live').count()) throw Error("等名额时不能假装正在启动");
       if (await page.locator(".conv-detail .conv-stuck").count()) throw Error("等待名额20分钟的任务不能误报卡住");
       await shot(page,size,scheme,"runner-queue");
       await go(page,"电脑",narrow);
       await clickVisible(page,page.locator(".pc-card",{hasText:"Studio Mac"}));
       const slots=page.locator('[data-testid="computer-runner-slots"]');await slots.waitFor();
-      if (!(await slots.innerText()).includes("3/3 在忙，2 个排队中") || !(await slots.innerText()).includes("myco runner service install --max-concurrent N")) throw Error("电脑详情未显示名额和调整命令");
+      await page.waitForFunction(()=>(document.querySelector('[data-testid="computer-runner-slots"]')?.textContent||"").includes("最多 3 个 agent 同时干活，现在 3 个在跑，2 个在排队"),null,{timeout:10000})
+        .catch(async()=>{throw Error(`电脑详情未显示上限、在跑和排队：${await slots.innerText()}`);});
+      if (!(await slots.locator('[data-testid="concurrency-input"]').count())) throw Error("电脑主人应能直接改上限");
+      if ((await slots.innerText()).includes("myco runner service install")) throw Error("不该再让人去敲命令改上限");
       await shot(page,size,scheme,"computer-runner-slots");
+      // An older computer says to upgrade myco there.
+      await navBackClick(page);
+      await clickVisible(page,page.locator(".pc-card",{hasText:"Bench Linux"}));
+      await page.locator('[data-testid="concurrency-too-old"]').waitFor({timeout:10000});
       await navBackClick(page);
       await openMember(page,narrow,"聊天","Review (Codex 云端)");
+      const q2=page.locator('[data-testid="runner-queue"]').last();
+      await q2.locator('[data-testid="raise-limit"]').click();
+      const dialog=page.getByRole("dialog");
+      await dialog.locator('[data-testid="concurrency-input"]').waitFor({timeout:10000});
+      await dialog.getByRole("button",{name:/多一个/}).click();
+      await dialog.getByRole("button",{name:/多一个/}).click();
+      await settle(page,200);
+      await shot(page,size,scheme,"raise-limit");
+      await dialog.locator('[data-testid="concurrency-save"]',{hasText:"改成 5 个"}).click();
+      await page.waitForFunction(()=>(document.querySelector('[role="dialog"] [data-testid="concurrency"]')?.textContent||"").includes("最多 5 个"),null,{timeout:10000});
+      await page.keyboard.press("Escape");
+      await page.locator('[data-testid="runner-queue"]').waitFor({state:"hidden",timeout:15000});
       await fetch(`http://${HOST}:${mockPort()}/app/mock/runner-queue`,{method:"DELETE"});
       await page.locator('[data-testid="runner-queue"]').waitFor({state:"hidden",timeout:15000});
       await page.locator(".conv-detail .conv-send.is-stop").click();
@@ -4695,6 +4720,30 @@ async function runMatrix(browser, size, scheme) {
         const d = document.querySelector(".conv-detail");
         return !!d && d.querySelectorAll(".trace.is-live, .trace.is-waiting").length === 0;
       }, null, { timeout: 30_000 });
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
+    // A question that comes after a later task was answered: in the chat
+    // below that answer (in time), with its choices, answered for the task
+    // it was asked on (not drawn dead inside the answered run).
+    await step("单聊 · 晚到的提问", async () => {
+      const made = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/late-ask`, { method: "POST" })).json();
+      await openMember(page, narrow, "聊天", "MCP Claude");
+      const card = page.locator(`.conv-detail .conv-ask .ask.is-live[data-ask="${made.ask}"]`);
+      await card.waitFor({ timeout: 15_000 });
+      if (await page.locator(`.conv-detail .trace .ask[data-ask="${made.ask}"]`).count()) throw new Error("晚到的提问不该还画在已经答完的那一轮里");
+      const order = await page.evaluate((id) => {
+        const ans = [...document.querySelectorAll(".conv-detail .conv-msg")].find((el) => el.textContent.includes("五件里四件"));
+        const q = document.querySelector(`.conv-detail .ask[data-ask="${id}"]`);
+        return !!ans && !!q && !!(ans.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING);
+      }, made.ask);
+      if (!order) throw new Error("晚到的提问应在之后那条回答的下面（按时间）");
+      if ((await card.locator(".ask-option:disabled").count()) > 0) throw new Error("提问的选项不该是灰的");
+      await card.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "ask-late");
+      await card.getByRole("button", { name: /收紧成这 11 个/ }).click();
+      await page.locator(`.conv-detail .ask.is-answered[data-ask="${made.ask}"] .ask-answer`, { hasText: "你选了：收紧成这 11 个" }).waitFor({ timeout: 10_000 });
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
