@@ -212,5 +212,8 @@ node scripts/ui-smoke.mjs --language-gate --browser webkit
 
 `web/ui-smoke/language-gate.json` records the source SHA, engine, complete matrix
 and outcome; CI uploads it alongside timings and the first failing screenshot.
+WebKit's non-saving background requests cancelled during a deliberate test reload
+are listed separately in the report. Preference/bridge save errors, language-pack
+errors outside the failure fixture, unexpected navigation and crashes still fail.
 The gate cannot be reduced with `--only`, `--combo` or `--shard`. Other local UI
 checks can select `--browser webkit` or disable retry with `--no-retry`.

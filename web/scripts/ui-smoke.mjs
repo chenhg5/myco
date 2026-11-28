@@ -40,9 +40,11 @@ import { mkdir, access, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { reloadCancellation } from "./language-gate-reload.mjs";
 
 execFileSync(process.execPath,[fileURLToPath(new URL("./i18n.test.mjs",import.meta.url))],{stdio:"inherit"});
 execFileSync(process.execPath,[fileURLToPath(new URL("./i18n-catalog.mjs",import.meta.url)),"--check"],{stdio:"inherit"});
+if (process.argv.includes("--language-gate")) execFileSync(process.execPath,[fileURLToPath(new URL("./language-gate-reload.test.mjs",import.meta.url))],{stdio:"inherit"});
 
 const pageRouteScript = ts.transpileModule(await readFile(appsPath("templates", "src", "_lib", "page-route.ts"),"utf8"),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^export /gm,"") + "\nwindow.__routeModule={subscribeAppRoute};";
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -106,7 +108,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ends, so four at once do not interleave.
 function log(...args) {
   const r = run();
-  if (r) r.lines.push(args.join(" "));
+  if (r && LANGUAGE_GATE) console.log(`[${r.matrix}]`, ...args);
+  else if (r) r.lines.push(args.join(" "));
   else console.log(...args);
 }
 
@@ -256,7 +259,7 @@ function addProblem(r, kind, text, where) {
 
 function reportProblems() {
   if (problems.length === 0) {
-    log("✓ 没有 console error 或 pageerror。");
+    log("✓ 没有非预期 console error 或 pageerror。");
     return;
   }
   console.error(`\n✖ 发现 ${problems.length} 个页面错误：`);
@@ -719,13 +722,23 @@ async function runMatrix(browser, size, scheme) {
       const check = await preview.newPage();
       const errors = [], nativeLanguages = [], outbound = [];
       const durable = {"myco-lang":"zh", "myco-theme":scheme};
+      let deliberateReload = false;
       const hostWrites = new Set();
       let hostWriteActivity = Date.now();
       check.on("pageerror", error => errors.push(error.stack || String(error)));
       check.on("crash", () => errors.push("Language page crashed"));
       check.on("console",message=>{
+        if(message.type()!=="error") return;
+        // WebKit reports old-document polling as access-control errors during
+        // a test-requested reload. Keep those auditable, without exempting
+        // preference/bridge saves, language assets, page errors or crashes.
+        const resource=reloadCancellation(message.text(),r.base,deliberateReload);
+        if(resource) {
+          r.reloadCancellations.push(resource);
+          return;
+        }
         const expectedPack503=/\/assets\/ko-[^/]+\.json$/.test(message.location().url||"") && message.text().includes("503");
-        if(message.type()==="error" && !expectedPack503)errors.push(`${message.text()} (${message.location().url||"unknown resource"})`);
+        if(!expectedPack503)errors.push(`${message.text()} (${message.location().url||"unknown resource"})`);
       });
       check.on("request", request => {
         if (!request.url().startsWith(r.base) && !request.url().startsWith("data:")) outbound.push(request.url());
@@ -774,7 +787,9 @@ async function runMatrix(browser, size, scheme) {
           if(Date.now()>deadline)throw Error("Language preference/bridge writes did not finish before reload");
           await check.waitForTimeout(20);
         }
-        await check.reload();await check.locator(".app-shell").waitFor();
+        deliberateReload=true;
+        try { await check.reload();await check.locator(".app-shell").waitFor(); }
+        finally { deliberateReload=false; }
       };
       const expected = {zh:"外观", "zh-Hant":"外觀", en:"Appearance", ja:"外観", ko:"모양", es:"Apariencia", "pt-BR":"Aparência"};
       try {
@@ -9863,7 +9878,7 @@ async function main() {
 
     const go = (c, i) => {
       const r = {
-        matrix: `${c.size.width}×${c.size.height} ${c.scheme}`, step: "启动", lines: [], timings: [], flakes: [],
+        matrix: `${c.size.width}×${c.size.height} ${c.scheme}`, step: "启动", lines: [], timings: [], flakes: [], reloadCancellations: [],
         mockPort: MOCK_PORT + i, base: `http://${HOST}:${APP_PORT + i}`, ok: false, error: null, ms: 0,
       };
       runs.push(r);
@@ -9894,7 +9909,8 @@ async function main() {
     const report = { version:1, platform:process.platform, browser:BROWSER, retry:false,
       source_sha:execFileSync("git",["rev-parse","HEAD"],{cwd:WEB,encoding:"utf8"}).trim(),
       ok:complete && problems.length === 0, languages:["zh","zh-Hant","en","ja","ko","es","pt-BR"],
-      matrices:runs.map(r=>({matrix:r.matrix,ok:r.ok,steps:r.timings.map(t=>t.label)})) };
+      expected_reload_cancellations:runs.reduce((n,r)=>n+r.reloadCancellations.length,0),
+      matrices:runs.map(r=>({matrix:r.matrix,ok:r.ok,steps:r.timings.map(t=>t.label),reload_cancellations:r.reloadCancellations})) };
     const { writeFile } = await import("node:fs/promises");
     await writeFile(path.join(OUT,"language-gate.json"),JSON.stringify(report,null,2)+"\n");
     if(!complete) { process.exitCode=1; log("Language gate failed or did not cover every required matrix/step"); }
