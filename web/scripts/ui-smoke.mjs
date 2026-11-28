@@ -2605,7 +2605,7 @@ async function runMatrix(browser, size, scheme) {
       const card=page.locator(".sp-home [data-testid=approvals] .sa-approval");
       await request();await card.waitFor({timeout:25000});
       const text=await card.innerText();
-      if(!text.includes("文档助手")||!text.includes("普通成员")||!text.includes("24 小时"))throw new Error("Approval must show invitee and limited permissions");
+      if(!text.includes("文档助手")||!text.includes("普通会话")||!text.includes("24 小时"))throw new Error("Approval must show invitee and limited permissions");
       await settle(page,200);await shot(page,size,scheme,"project-invite-request");
       await clickVisible(page,card.getByRole("button",{name:"不同意",exact:true}));await card.waitFor({state:"hidden"});
       await request();await card.waitFor({timeout:25000});
