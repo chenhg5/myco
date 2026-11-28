@@ -713,3 +713,12 @@ Quota windows that Claude marks `allowed_warning` (normalized as `warning`)
 remain usable: show the remaining percentage in amber and “接近上限” / “Near
 limit” in the window details and summary. Do not show “Out of quota” until a
 window is refused or its measured use reaches 100%.
+
+### Shared subscription usage
+
+Member quota tags, composer pill tooltips and quota details explain a shared
+observation with “同账号的另一个 agent X 前上报” / “Reported by another agent on
+the same account X ago”. Use existing muted quota notes; no donor name or machine
+is displayed. A recipient's login/key failure remains actionable while the shared
+numbers stay visible. Smoke: “成员 · 同账号共享额度”, all widths/themes, plus
+isolated Chinese/English 2x captures with the shared note scrolled into view.

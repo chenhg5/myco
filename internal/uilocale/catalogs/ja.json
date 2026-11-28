@@ -3473,5 +3473,6 @@
   "API allowance is used up; check the key limit or add credit.": "API 利用枠を使い切りました。キーの上限を確認するか、残高を追加してください。",
   "Unlimited": "無制限",
   "Balance": "残高",
-  "{0} left": "残り {0}"
+  "{0} left": "残り {0}",
+  "Reported by another agent on the same account {0}": "同じアカウントの別の agent が{0}報告"
 }

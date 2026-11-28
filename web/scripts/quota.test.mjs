@@ -25,7 +25,7 @@ const built = await build({
   format: "esm",
   plugins: [stub],
 });
-const { quotaPillLevel, quotaWindowLabel, quotaWindowText, quotaRemainingText, quotaSpent, quotaLiveWindows, quotaHasNumbers, quotaEffectiveStatus, quotaStatusText, quotaSummary, quotaSourceText, quotaOldNote, quotaOutNote, quotaWorst } = await import(
+const { quotaSharedNote, quotaPillLevel, quotaWindowLabel, quotaWindowText, quotaRemainingText, quotaSpent, quotaLiveWindows, quotaHasNumbers, quotaEffectiveStatus, quotaStatusText, quotaSummary, quotaSourceText, quotaOldNote, quotaOutNote, quotaWorst } = await import(
   `data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`
 );
 
@@ -135,3 +135,10 @@ for (const status of ["warning", "allowed_warning"]) {
 }
 
 assert.equal(quotaPillLevel({ name: "seven_day", used: .76, status: "warning" }), "low");
+
+const shared = { ...two, shared: true, shared_at: iso(now - 60e3), shared_from: "private-donor" };
+assert.ok(quotaSharedNote(shared, now).includes("同账号的另一个 agent"));
+assert.ok(quotaSummary(shared, [], now).line.includes("同账号的另一个 agent"));
+assert.ok(!quotaSummary(shared, [], now).line.includes("private-donor"));
+assert.ok(enQuota.quotaSharedNote(shared, now).includes("another agent on the same account"));
+assert.equal(quotaSharedNote(two, now), undefined);

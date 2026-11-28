@@ -30,6 +30,9 @@ export interface QuotaWindow {
 /** Why the last read failed (or "ok"); absent from older hubs. */
 export type QuotaStatus = "ok" | "unsupported" | "no_credentials" | "auth_required" | "throttled" | "transient_error" | "schema_changed";
 export interface Quota {
+  /** Usage borrowed from the same owner/provider/plan/account; no donor name is exposed. */
+  shared?: boolean;
+  shared_at?: string;
   source: "claude" | "codex" | string;
   /** the last successful read; zero (year 1) when there never was one */
   at: string;

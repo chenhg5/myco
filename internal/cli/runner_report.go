@@ -68,8 +68,9 @@ type runtimeReporter struct {
 	stopped   bool
 	// models lists the models the CLI offers, read again for each report
 	// (its list changes as the CLI updates); nil when it does not say.
-	models  func() []api.RuntimeModel
-	account func() string
+	models        func() []api.RuntimeModel
+	account       func() string
+	accountIDHash func(string) string
 	// provModels is the list of the provider the agent uses with an API
 	// key (startModels), target where that provider is; refresh* follow
 	// the App's requests to list again.
@@ -106,6 +107,21 @@ func (e *env) reportToHub(c *client.Client, me *api.Agent, h harness.Harness, rc
 			return e.in.Getenv(key)
 		}
 		return runtimeAccount(h.Name(), accountHome(get), get)
+	}
+	rep.accountIDHash = func(account string) string {
+		vars, _ := config.ReadEnvFile(rc.EnvFile)
+		env := map[string]string{}
+		for _, kv := range vars {
+			k, v, _ := strings.Cut(kv, "=")
+			env[k] = v
+		}
+		get := func(k string) string {
+			if v, ok := env[k]; ok {
+				return v
+			}
+			return e.in.Getenv(k)
+		}
+		return runtimeAccountIDHash(h.Name(), accountHome(get), get, account)
 	}
 	rep.flushLater() // clear any prior restart lease before slow CLI/tool discovery
 	go func() {
@@ -323,6 +339,14 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		}
 		if r.account != nil {
 			rt.Account = r.account()
+		}
+		if rt.Quota != nil && rt.Quota.ProfileRef != "" && rt.Quota.ProfileRef == r.quotaSource.Ref {
+			rt.AccountIDHash = r.quotaSource.AccountIDHash()
+			if rt.AccountIDHash != "" && r.accountIDHash != nil {
+				if current := r.accountIDHash(rt.Account); current != rt.AccountIDHash {
+					rt.Account = ""
+				}
+			}
 		}
 		if reflect.DeepEqual(rt, r.last) {
 			r.mu.Unlock()

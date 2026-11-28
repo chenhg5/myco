@@ -148,6 +148,8 @@ type RunnerQueuedTask struct {
 type Runtime struct {
 	// Account is a private, locally reported email identity hint (not authentication).
 	Account string `json:"account,omitempty"`
+	// AccountIDHash is a private SHA256 stable-ID hint; input only in the API.
+	AccountIDHash string `json:"account_id_hash,omitempty"`
 
 	MachineHealth *MachineHealth `json:"machine_health,omitempty"`
 	// RunnerInstance identifies a runner process; RestartingUntil is a
@@ -242,6 +244,8 @@ type RuntimeModel struct {
 
 // Quota is a CLI account's usage limits at one moment (from v0.19.5).
 type Quota struct {
+	Shared     bool      `json:"shared,omitempty"`
+	SharedAt   time.Time `json:"shared_at,omitzero"`
 	Provider   string    `json:"provider,omitempty"`
 	ProfileRef string    `json:"profile_ref,omitempty"`
 	MachineID  string    `json:"machine_id,omitempty"`

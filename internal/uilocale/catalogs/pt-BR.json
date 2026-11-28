@@ -3473,5 +3473,6 @@
   "API allowance is used up; check the key limit or add credit.": "O limite da API acabou; verifique o limite da chave ou adicione saldo.",
   "Unlimited": "Sem limite",
   "Balance": "Saldo",
-  "{0} left": "Restam {0}"
+  "{0} left": "Restam {0}",
+  "Reported by another agent on the same account {0}": "Informado por outro agent da mesma conta {0}"
 }

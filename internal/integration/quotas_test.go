@@ -123,7 +123,7 @@ func TestAccountQuotaSharedBindingOwnerPrivacyAndRestart(t *testing.T) {
 		}
 	}
 	// Failures preserve old numbers and their observation time, not the time
-	// of the failed check. Both agents resolve the same updated shared row.
+	// of the failed check. Connection failure status stays with its reporter.
 	failed := q
 	failed.At = time.Time{}
 	failed.Windows = nil
@@ -133,8 +133,11 @@ func TestAccountQuotaSharedBindingOwnerPrivacyAndRestart(t *testing.T) {
 		t.Fatal(e)
 	}
 	got := get(owner, "two")
-	if got.Status != "throttled" || !got.At.Equal(now) || len(got.Windows) != 1 {
-		t.Fatal("failed query erased shared observation")
+	if got.Status != "ok" || !got.At.Equal(now) || len(got.Windows) != 1 {
+		t.Fatal("donor failure replaced the recipient status or erased numbers")
+	}
+	if own := get(owner, "one"); own.Status != "throttled" || !own.At.Equal(now) {
+		t.Fatal("reporter lost its own connection issue")
 	}
 	// The new account is a new namespace. Its missing key has no old numbers.
 	switched := q
@@ -213,7 +216,7 @@ func TestAccountQuotaSharedBindingOwnerPrivacyAndRestart(t *testing.T) {
 	h.stop()
 	h = startHub(t, dbPath, app.DefaultMessagePolicy())
 	owner = h.client(ct.Token)
-	if got = get(owner, "two"); got == nil || len(got.Windows) != 1 || got.Status != "throttled" {
+	if got = get(owner, "two"); got == nil || len(got.Windows) != 1 || got.Status != "ok" {
 		t.Fatal("restart lost quota or binding")
 	}
 }

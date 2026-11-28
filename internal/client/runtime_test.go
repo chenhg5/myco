@@ -316,3 +316,52 @@ func TestRuntimeNewQuotaOlderHub(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeAccountIdentityOlderHub(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var rt api.Runtime
+		if e := json.NewDecoder(r.Body).Decode(&rt); e != nil {
+			t.Fatal(e)
+		}
+		if calls == 1 {
+			w.WriteHeader(400)
+			json.NewEncoder(w).Encode(api.Error{Code: "invalid_argument", Message: `invalid JSON body: json: unknown field "account_id_hash"`})
+			return
+		}
+		if rt.AccountIDHash != "" || rt.Account != "demo@example.com" || rt.CLI != "claude" {
+			t.Error("identity compatibility removed other runtime fields")
+		}
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, "token")
+	if e := c.ReportRuntime(context.Background(), api.Runtime{CLI: "claude", Account: "demo@example.com", AccountIDHash: "qa_fixture"}); e != nil || calls != 2 {
+		t.Fatalf("identity compatibility failed: %v %d", e, calls)
+	}
+}
+
+func TestRuntimeSharedQuotaIsNotRepublished(t *testing.T) {
+	now := time.Now().UTC()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var rt api.Runtime
+		if err := json.NewDecoder(r.Body).Decode(&rt); err != nil {
+			t.Error(err)
+		}
+		q := rt.Quota
+		if q == nil || q.Status != "auth_required" || q.Shared || !q.SharedAt.IsZero() || !q.At.IsZero() || len(q.Windows) != 0 {
+			t.Error("effective shared observation was published or connection state lost")
+		}
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	c, _ := New(srv.URL, "demo-token")
+	q := &api.Quota{Source: "claude", Provider: "claude", Plan: "claude_subscription", Status: "auth_required", At: now, Shared: true, SharedAt: now, Windows: []api.QuotaWindow{{Name: "five_hour", Used: .9}}}
+	if err := c.ReportRuntime(context.Background(), api.Runtime{CLI: "claude-cloud", Quota: q}); err != nil {
+		t.Fatal(err)
+	}
+	if !q.Shared || len(q.Windows) != 1 {
+		t.Fatal("caller quota mutated")
+	}
+}

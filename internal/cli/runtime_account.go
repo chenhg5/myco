@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/myco-ai/myco/internal/quota"
 )
 
 // runtimeAccount reads identity hints only. It never authenticates, refreshes,
@@ -28,7 +30,11 @@ func runtimeAccount(cli, home string, getenv func(string) string) string {
 				Email string `json:"emailAddress"`
 			} `json:"oauthAccount"`
 		}
-		if !readAccountJSON(filepath.Join(home, ".claude.json"), &cfg) {
+		path := filepath.Join(home, ".claude.json")
+		if dir := getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+			path = filepath.Join(dir, ".claude.json")
+		}
+		if !readAccountJSON(path, &cfg) {
 			return ""
 		}
 		return accountEmail(cfg.OAuthAccount.Email)
@@ -90,4 +96,63 @@ func readAccountJSON(path string, out any) bool {
 	defer f.Close()
 	b, err := io.ReadAll(io.LimitReader(f, (1<<20)+1))
 	return err == nil && len(b) <= 1<<20 && json.Unmarshal(b, out) == nil
+}
+
+// runtimeAccountIDHash reads only identity fields, never credentials/helpers.
+// Comparing the email guards an account-file switch between the two reads.
+func runtimeAccountIDHash(cli, home string, getenv func(string) string, email string) string {
+	provider, id, foundEmail := "", "", ""
+	switch cli {
+	case "claude", "claude-cloud":
+		var cfg struct {
+			Account struct {
+				ID    string `json:"accountUuid"`
+				Email string `json:"emailAddress"`
+			} `json:"oauthAccount"`
+		}
+		path := filepath.Join(home, ".claude.json")
+		if dir := getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+			path = filepath.Join(dir, ".claude.json")
+		}
+		if home == "" || !readAccountJSON(path, &cfg) {
+			return ""
+		}
+		provider, id, foundEmail = "claude", cfg.Account.ID, cfg.Account.Email
+	case "codex":
+		dir := getenv("CODEX_HOME")
+		if dir == "" {
+			if home == "" {
+				return ""
+			}
+			dir = filepath.Join(home, ".codex")
+		}
+		var cfg struct {
+			Tokens struct {
+				ID    string `json:"account_id"`
+				Token string `json:"id_token"`
+			} `json:"tokens"`
+		}
+		if !readAccountJSON(filepath.Join(dir, "auth.json"), &cfg) {
+			return ""
+		}
+		provider, id = "codex", cfg.Tokens.ID
+		parts := strings.Split(cfg.Tokens.Token, ".")
+		if len(parts) == 3 {
+			raw, e := base64.RawURLEncoding.DecodeString(strings.TrimRight(parts[1], "="))
+			if e == nil {
+				var claims struct {
+					Email string `json:"email"`
+				}
+				if json.Unmarshal(raw, &claims) == nil {
+					foundEmail = claims.Email
+				}
+			}
+		}
+	default:
+		return ""
+	}
+	if email != "" && !strings.EqualFold(strings.TrimSpace(email), strings.TrimSpace(foundEmail)) {
+		return ""
+	}
+	return quota.AccountIDHash(provider, id)
 }

@@ -209,6 +209,7 @@ func reportSessionQuota(ctx context.Context, c *client.Client, getenv func(strin
 		rt.CLI = me.Binding.Harness
 	}
 	rt.Account = runtimeAccount(me.Binding.Harness, accountHome(getenv), getenv)
+	rt.AccountIDHash = runtimeAccountIDHash(me.Binding.Harness, accountHome(getenv), getenv, rt.Account)
 	_ = c.ReportRuntime(ctx, rt)
 }
 

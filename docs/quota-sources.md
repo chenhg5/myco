@@ -71,3 +71,52 @@ are not probed. There is no cross-region fallback. New runners omit this quota
 on an older strict Hub's precise unsupported-field/provider validation error;
 other runtime fields still report normally. An older App can ignore the
 optional balance object, but displaying USD/unlimited requires an updated App.
+
+## Shared subscription usage across agents
+
+The Hub shares Claude and Codex subscription windows across machines and cloud
+sessions owned by the same member. The effective quota is the newest observation
+(`at`) among the agent's own report, its current local profile and its account
+snapshot. Account observations older than one hour, future observations, and
+windows whose reset has passed do not replace current numbers. Legacy status-only
+reports retain their existing resource-check behaviour. The App, picker and fork
+checks use the same resolved data and one-hour freshness rule.
+
+A newer snapshot can clear `pending`/`collector_busy` placeholders. It cannot
+clear that agent's `auth_required`, `no_credentials`, throttling or collection
+failure. Those connection states stay local: another agent does not inherit them.
+Only usage windows and observation time are shared. A client sending runtime
+metadata does not republish borrowed numbers as a fresh observation; switching
+its account clears the previous account's observation. A shared row's tooltip says
+another agent on the same account reported it, with the report's age; it gives no
+agent name, donor machine/profile, email, stable ID or grouping key.
+
+The Hub generates a random 32-byte key once in private SQLite table
+`quota_account_secret` (included in database backups). It computes HMAC-SHA256 over
+a domain separator, owner, provider, plan, identity kind and normalized identity.
+Derived keys stay in `quota_account_snapshots`/`quota_account_aliases` and never
+enter API responses. The snapshot primary key isolates owner/provider/plan/key;
+a strictly newer `at` is required to replace its numbers. Runtime/profile/account
+writes are one transaction. Existing databases gain the tables/columns and backfill
+eligible legacy observations; migrated report times use `checked_at` or `at`.
+
+New native collectors send a domain-separated SHA256 digest of the stable Claude
+`oauthAccount.accountUuid` or Codex `tokens.account_id`, rather than the plaintext
+ID. A machine-specific HMAC would not match across machines; the secret HMAC is
+therefore applied at the Hub. Cloud/session CLI reports can send the same digest
+when available. These are grouping hints, **not authentication**. The existing
+account-owner visibility and machine ownership checks still apply.
+
+Without a stable hint, the Hub falls back to the existing `runtime.account` email
+(lowercase, surrounding whitespace removed). A confirmed stable-ID/email report
+lets email-only old clients find that group. If the same email is associated with
+different stable IDs, email-only sharing is disabled conservatively; the distinct
+stable-ID groups remain isolated. Earlier email-only history is not copied into a
+new stable-ID namespace. Missing/invalid identity hints do not group agents.
+
+API allowances (including GLM/Kimi/OpenRouter) retain local-profile sharing.
+A CLI's OAuth email does not identify an API key's billing account or key-specific
+limit, so it must not join those accounts to a subscription pool. Unknown plans,
+providers and gateway connections are also excluded from cross-machine grouping.
+Old clients can keep reporting their existing quota shapes; cloud Claude sessions
+with no `profile_ref` are recognized through their cloud harness/source kind.

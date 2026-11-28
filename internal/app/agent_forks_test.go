@@ -469,3 +469,29 @@ func TestUnknownActorCannotRetireAdministratorCopies(t *testing.T) {
 		t.Fatalf("unknown actor inherited admin provenance: %v", err)
 	}
 }
+
+func TestAgentForkUsesSharedAccountWindows(t *testing.T) {
+	r := newForkRig(t)
+	r.source.Runtime.Account = "shared@example.com"
+	r.source.Runtime.Quota = &domain.Quota{Source: "codex", Provider: "codex", Plan: "chatgpt_subscription", Status: "ok", At: r.clock.t.Add(-time.Minute), Windows: []domain.QuotaWindow{{Name: "primary", Used: .2}}}
+	r.source.Runtime.QuotaReportedAt = r.clock.t
+	if e := r.agents.SetRuntime(r.ctx, r.source.Name, r.source.Runtime); e != nil {
+		t.Fatal(e)
+	}
+	donor, e := domain.NewAgent("donor-id", "donor", domain.AgentSpec{Binding: domain.Binding{Harness: "codex"}}, "donor-token", r.clock.t)
+	if e != nil {
+		t.Fatal(e)
+	}
+	donor.Owner = r.source.Owner
+	if e = r.agents.Create(r.ctx, donor); e != nil {
+		t.Fatal(e)
+	}
+	rt := domain.Runtime{CLI: "codex", Account: "SHARED@example.com", QuotaReportedAt: r.clock.t, Quota: &domain.Quota{Source: "codex", Provider: "codex", Plan: "chatgpt_subscription", Status: "ok", At: r.clock.t, Windows: []domain.QuotaWindow{{Name: "primary", Used: 1, Status: "rejected"}}}}
+	if e = r.agents.SetRuntime(r.ctx, donor.Name, rt); e != nil {
+		t.Fatal(e)
+	}
+	actor, viewer := app.Actor{Agent: r.creator}, domain.Viewer{Agent: r.creator}
+	if _, e = r.svc.Fork(r.ctx, actor, viewer, app.ForkInput{From: string(r.source.Name), RequestID: "shared-spent"}, false); !domain.IsCode(e, domain.CodeInvalidState) {
+		t.Fatalf("fork ignored shared exhausted account: %v", e)
+	}
+}

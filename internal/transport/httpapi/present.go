@@ -251,7 +251,7 @@ func quotaDTO(q *domain.Quota) *api.Quota {
 		return nil
 	}
 	now := time.Now().UTC()
-	out := &api.Quota{Source: q.Source, At: q.At, Provider: q.Provider, ProfileRef: q.ProfileRef, MachineID: q.MachineID, SourceKind: q.SourceKind, Status: domain.QuotaStatusAt(q, now), CheckedAt: q.CheckedAt, ErrorCode: q.ErrorCode, Plan: q.Plan, Windows: []api.QuotaWindow{}}
+	out := &api.Quota{Shared: q.Shared, SharedAt: q.SharedAt, Source: q.Source, At: q.At, Provider: q.Provider, ProfileRef: q.ProfileRef, MachineID: q.MachineID, SourceKind: q.SourceKind, Status: domain.QuotaStatusAt(q, now), CheckedAt: q.CheckedAt, ErrorCode: q.ErrorCode, Plan: q.Plan, Windows: []api.QuotaWindow{}}
 	for _, w := range q.Windows {
 		// A window whose reset time has passed is no longer the window these
 		// numbers describe: drop it rather than show yesterday's use.
@@ -307,9 +307,6 @@ func goalBrief(g *domain.Goal) *api.GoalBrief {
 // visibleQuota deliberately does not use Actor.Owns: an administrator or
 // project coordinator is not automatically the owner of a paid account.
 func (s *Server) visibleQuota(r *http.Request, a *domain.Agent) *api.Quota {
-	if a.Runtime.Quota == nil {
-		return nil
-	}
 	owner := a.Owner
 	if s.machines != nil {
 		owner = s.machines.QuotaOwner(r.Context(), a)

@@ -8,7 +8,7 @@ import { ChevronDown, ChevronRight, Shield, ShieldOff, TriangleAlert } from "luc
 import { hubAfter0194 } from "@/app/hubVersion";
 import { ConfirmDialog, ErrorText } from "@/app/dialogs";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
-import { quotaHasNumbers, quotaLiveWindows, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaTight, quotaUnreadable, quotaWindowLabel, quotaWindowText } from "@/app/quota";
+import { quotaSharedNote, quotaHasNumbers, quotaLiveWindows, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaTight, quotaUnreadable, quotaWindowLabel, quotaWindowText } from "@/app/quota";
 import { cn, timeAgo } from "@/lib/utils";
 import { L, E } from "@/lib/i18n";
 
@@ -684,6 +684,7 @@ function QuotaRows({ quota, row, now }: { quota: NonNullable<Runtime["quota"]>; 
           <span className="app-kv-value">{source}</span>
         </div>
       )}
+      {quotaSharedNote(quota, now) && <div className="app-quota-stale">{quotaSharedNote(quota, now)}</div>}
       {(status || !has) && (
         <div className={cn("app-quota-status", action && "is-action")} role="status">
           <TriangleAlert aria-hidden />

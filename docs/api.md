@@ -2193,3 +2193,24 @@ and network policy. Optional `forge.history` negotiates read-only repository
 (`author`, `label`, `updated_after`, `draft`, `sort`); provider support is explicit,
 and filters run on the provider before pagination. This is a desktop page bridge,
 not a Hub credential or agent action API. See `docs/app-os.md` for the field matrix.
+
+### Same-account subscription quota sharing
+
+`Runtime.account_id_hash` is an optional input-only grouping hint, formatted
+`qa_` plus 64 lowercase hex characters: SHA256 of
+`myco/quota-account-id/v1\0<provider>\0<stable ID>`. New native collectors bind this
+to the collected profile. It is omitted from runtime responses. Unsupported old
+Hubs receive a retry with only this precisely rejected field removed.
+
+`runtime.quota` responses may include `shared:true` and `shared_at` (Hub receipt
+time, or the legacy check/observation time for migrated data). These fields are
+computed, never trusted as input. They reveal no donor name or internal account
+key. Quota ownership filtering applies before resolving shared numbers, including
+runtime write responses, lists, overview and agent selection.
+
+The Hub keeps an owner/provider/plan/identity HMAC namespace and chooses the newest
+unexpired observation among self, profile and account data. Own connection errors
+remain local; only pending collector placeholders can become healthy using shared
+numbers. Both display and pick/fork checks use the resolved quota. See
+[quota sources](quota-sources.md#shared-subscription-usage-across-agents) for
+identity precedence, conservative email collision handling, migration and limits.

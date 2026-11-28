@@ -574,6 +574,10 @@ func open(path string, t *Timing) (*sql.DB, error) {
 			return nil, fmt.Errorf("migrate: %w", err)
 		}
 	}
+	if err := migrateQuotaAccounts(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate quota accounts: %w", err)
+	}
 	if err := migrateMessageCoordination(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)

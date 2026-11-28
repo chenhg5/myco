@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"github.com/myco-ai/myco/internal/api"
-	"github.com/myco-ai/myco/internal/client"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 func TestRuntimeAccountSources(t *testing.T) {
@@ -74,7 +75,7 @@ func TestSessionAccountReportsWithoutModelAndRefreshes(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/me":
-			json.NewEncoder(w).Encode(api.Agent{Binding: api.Binding{Harness: "claude-cloud"}, Runtime: &api.Runtime{Model: "existing-model", ModelSource: "observed"}})
+			json.NewEncoder(w).Encode(api.Agent{Binding: api.Binding{Harness: "claude-cloud"}, Runtime: &api.Runtime{Account: "previous@example.com", Model: "existing-model", ModelSource: "observed", Quota: &api.Quota{Source: "claude", Status: "ok", Windows: []api.QuotaWindow{{Name: "five_hour", Used: .9}}}}})
 		case "/v1/me/runtime":
 			var rt api.Runtime
 			if err := json.NewDecoder(r.Body).Decode(&rt); err != nil {
@@ -105,8 +106,39 @@ func TestSessionAccountReportsWithoutModelAndRefreshes(t *testing.T) {
 		t.Fatal("account-only reporting or refresh failed")
 	}
 	for _, rt := range []api.Runtime{first, second} {
+		if rt.Quota != nil {
+			t.Fatal("previous account quota carried into changed identity")
+		}
 		if rt.Model != "existing-model" || rt.ModelSource != "observed" {
 			t.Fatal("account report changed model provenance")
 		}
+	}
+}
+
+func TestRuntimeStableAccountDigest(t *testing.T) {
+	home := t.TempDir()
+	get := func(string) string { return "" }
+	if e := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"oauthAccount":{"accountUuid":"stable-a","emailAddress":"demo@example.com"}}`), 0600); e != nil {
+		t.Fatal(e)
+	}
+	digest := runtimeAccountIDHash("claude", home, get, "demo@example.com")
+	if !strings.HasPrefix(digest, "qa_") || len(digest) != 67 || strings.Contains(digest, "stable-a") {
+		t.Fatal("invalid identity digest")
+	}
+	if runtimeAccountIDHash("claude-cloud", home, get, "other@example.com") != "" {
+		t.Fatal("cloud email associated an unrelated local account")
+	}
+	if runtimeAccountIDHash("claude", home, get, "demo@example.com") != digest {
+		t.Fatal("identity not stable")
+	}
+	override := t.TempDir()
+	getOverride := func(k string) string {
+		if k == "CLAUDE_CONFIG_DIR" {
+			return override
+		}
+		return ""
+	}
+	if runtimeAccount("claude", home, getOverride) != "" || runtimeAccountIDHash("claude", home, getOverride, "demo@example.com") != "" {
+		t.Fatal("config override fell back to default account")
 	}
 }

@@ -13,6 +13,12 @@ type QuotaRepository interface {
 	GetQuota(context.Context, string, string, string, string) (*Quota, error)
 }
 
+var regexpAccountHash = regexp.MustCompile(`^qa_[a-f0-9]{64}$`)
+
+type AccountQuotaRepository interface {
+	GetAccountQuota(context.Context, string, *Agent) (*Quota, error)
+}
+
 var quotaRef = regexp.MustCompile(`^qp_[a-f0-9]{64}$`)
 
 func (q *Quota) Validate() error {

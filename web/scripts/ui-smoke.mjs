@@ -6678,6 +6678,52 @@ async function runMatrix(browser, size, scheme) {
       }
     });
 
+    await step("成员 · 同账号共享额度", async () => {
+      const at = new Date(Date.now() - 5 * 60e3).toISOString();
+      const quota = { source: "claude", provider: "claude", plan: "claude_subscription", source_kind: "cloud_session", status: "ok", at, checked_at: at, shared: true, shared_at: at,
+        windows: [{ name: "five_hour", duration_sec: 18000, used: .37, resets_at: new Date(Date.now() + 3 * 3600e3).toISOString() }] };
+      const put = (v) => {
+        if (Array.isArray(v)) { v.forEach(put); return; }
+        if (!v || typeof v !== "object") return;
+        if (v.name === "release-cloud" && v.runtime) v.runtime = { ...v.runtime, quota };
+        if (v.name === "mcp-claude" && v.runtime) v.runtime = { ...v.runtime, quota: { ...quota, status: "auth_required", source_kind: "cache" } };
+        for (const x of Object.values(v)) put(x);
+      };
+      const routeURL = /\/app\/overview(\?|$)/;
+      const handler = async (route) => { const response = await route.fetch(); const json = await response.json(); put(json); await route.fulfill({ response, json }); };
+      try {
+        await page.route(routeURL, handler); await page.reload({ waitUntil: "domcontentloaded" }); await page.locator(".app-shell").waitFor();
+        await go(page, "成员", narrow);
+        const card = page.locator(".mb-card", { hasText: "Release (Claude 云端)" });
+        await card.locator(".app-quota-tag", { hasText: "剩 63%" }).waitFor({ timeout: 15_000 });
+        if (!(await card.locator(".app-quota-tag").getAttribute("title")).includes("同账号的另一个 agent")) throw Error("共享额度 tooltip 缺少匿名来源");
+        await page.locator(".mb-card", { hasText: "MCP Claude" }).locator(".app-quota-tag", { hasText: "需重新登录" }).waitFor();
+        await card.click(); await page.locator(".ms").waitFor(); await clickVisible(page, page.locator(".ms .ms-fold"));
+        const note = page.locator(".ms .app-quota-stale", { hasText: "同账号的另一个 agent" }); await note.waitFor(); await note.scrollIntoViewIfNeeded();
+        await shot(page, size, scheme, "member-account-quota-shared");
+        if (size.width === 1200) {
+          for (const language of ["zh", "en"]) {
+            const preview = await browser.newContext({ viewport: size, colorScheme: scheme, deviceScaleFactor: 2, storageState: await context.storageState() });
+            try {
+              await preview.addInitScript(({ language, scheme }) => { localStorage.setItem("myco-lang", language); localStorage.setItem("myco-theme", scheme); }, { language, scheme });
+              const capture = await preview.newPage(); await capture.route(routeURL, handler);
+              const url = new URL(page.url()); url.searchParams.set("lang", language);
+              await capture.goto(url.href); await capture.locator(".app-shell").waitFor(); await go(capture, language === "zh" ? "成员" : "Members", false);
+              await clickVisible(capture, capture.locator(".mb-card", { hasText: "Release (Claude 云端)" }));
+              await capture.locator(".ms").waitFor(); await clickVisible(capture, capture.locator(".ms .ms-fold"));
+              const shared = capture.locator(".ms .app-quota-stale", { hasText: language === "zh" ? "同账号的另一个 agent" : "another agent on the same account" });
+              await shared.waitFor(); await shared.scrollIntoViewIfNeeded(); await settle(capture, 200);
+              await shot(capture, size, scheme, `member-account-quota-shared-${language}-2x`);
+            } finally { await preview.close(); }
+          }
+        }
+        await page.keyboard.press("Escape"); await page.locator(".ms").waitFor({ state: "hidden" });
+        await openMember(page, narrow, "聊天", "Release (Claude 云端)");
+        const pill = page.locator(".conv-detail [data-testid=quota-pill]"); await pill.waitFor();
+        if (!(await pill.getAttribute("title")).includes("同账号的另一个 agent")) throw Error("输入框额度 tooltip 缺少匿名共享来源");
+      } finally { await page.unroute(routeURL, handler); await page.reload({ waitUntil: "domcontentloaded" }); await page.locator(".app-shell").waitFor(); }
+    });
+
     await step("成员 · OpenRouter 余额额度", async () => {
       const at = new Date().toISOString();
       const quota = { source: "openrouter", provider: "openrouter", plan: "api_balance", source_kind: "official_api", status: "ok", at, checked_at: at,

@@ -62,8 +62,12 @@ type MachineRepository interface {
 // Runtime is what an agent runs on: its CLI, the CLI's version and model,
 // and the permission level, as reported by its runner.
 type Runtime struct {
+	// QuotaReportedAt is assigned by the Hub use case, never decoded from JSON.
+	QuotaReportedAt time.Time `json:"-"`
 	// Account is a private, locally reported email identity hint (not authentication).
 	Account string `json:"account,omitempty"`
+	// AccountIDHash is a private SHA256 stable-ID hint; input only in the API.
+	AccountIDHash string `json:"account_id_hash,omitempty"`
 
 	MachineHealth   string    `json:"machine_health,omitempty"`
 	RunnerInstance  string    `json:"runner_instance,omitempty"`
@@ -165,6 +169,10 @@ func (r Runtime) ModelList() []RuntimeModel {
 
 // Quota is a CLI account's usage limits at one moment.
 type Quota struct {
+	ReportedBy string    `json:"-"`
+	ReportedAt time.Time `json:"-"`
+	Shared     bool      `json:"shared,omitempty"`
+	SharedAt   time.Time `json:"shared_at,omitzero"`
 	Provider   string    `json:"provider,omitempty"`
 	ProfileRef string    `json:"profile_ref,omitempty"`
 	MachineID  string    `json:"machine_id,omitempty"`
@@ -366,6 +374,9 @@ func orNone(h string) string {
 
 // Validate keeps runtime fields short single lines.
 func (r Runtime) Validate() error {
+	if r.AccountIDHash != "" && !regexpAccountHash.MatchString(r.AccountIDHash) {
+		return Errf(CodeInvalidArgument, "invalid account identity hash")
+	}
 	if len(r.Account) > 320 || strings.ContainsAny(r.Account, "\x00\n\r\t") {
 		return Errf(CodeInvalidArgument, "invalid runtime account")
 	}

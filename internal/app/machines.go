@@ -276,7 +276,7 @@ func (s *MachineService) SetRuntime(ctx context.Context, a *domain.Agent, rt dom
 		a.Runtime = old
 		return nil // a late goodbye from a process the new runner replaced
 	}
-	if rt.Quota != nil && rt.Quota.ProfileRef != "" && (rt.Quota.CheckedAt.After(now.Add(5*time.Minute)) || rt.Quota.At.After(rt.Quota.CheckedAt.Add(time.Minute))) {
+	if rt.Quota != nil && (rt.Quota.At.After(now.Add(5*time.Minute)) || rt.Quota.ProfileRef != "" && (rt.Quota.CheckedAt.After(now.Add(5*time.Minute)) || rt.Quota.At.After(rt.Quota.CheckedAt.Add(time.Minute)))) {
 		return domain.Errf(domain.CodeInvalidArgument, "quota observation time is in the future; check the computer clock")
 	}
 	if rt.Quota != nil && rt.Quota.ProfileRef != "" {
@@ -299,6 +299,7 @@ func (s *MachineService) SetRuntime(ctx context.Context, a *domain.Agent, rt dom
 		b, _ := json.Marshal(h)
 		rt.MachineHealth = string(b)
 	}
+	rt.QuotaReportedAt = now
 	a.Runtime = rt
 	if err := s.agents.SetRuntime(ctx, a.Name, rt); err != nil {
 		return err
@@ -528,27 +529,36 @@ func (s *MachineService) SetOwner(ctx context.Context, id, memberID string) (*do
 	return m, s.machines.Save(ctx, m)
 }
 
-// AccountQuota resolves an agent's current reference, never another profile.
+// AccountQuota is the shared resolver used by display, pick and fork checks.
 func (s *MachineService) AccountQuota(ctx context.Context, a *domain.Agent) *domain.Quota {
-	q := a.Runtime.Quota
-	if q == nil || q.ProfileRef == "" {
-		return q
+	owner := s.QuotaOwner(ctx, a)
+	var profile, shared *domain.Quota
+	if q := a.Runtime.Quota; q != nil && q.ProfileRef != "" {
+		if repo, ok := s.agents.(domain.QuotaRepository); ok {
+			profile, _ = repo.GetQuota(ctx, owner, a.MachineID, q.Provider, q.ProfileRef)
+		}
 	}
-	repo, ok := s.agents.(domain.QuotaRepository)
-	if !ok {
-		return nil
+	target := a
+	if profile != nil && a.Runtime.Quota != nil && a.Runtime.Quota.Plan == "" {
+		copyAgent := *a
+		own := *a.Runtime.Quota
+		own.Plan = profile.Plan
+		own.SourceKind = profile.SourceKind
+		copyAgent.Runtime.Quota = &own
+		target = &copyAgent
 	}
-	out, err := repo.GetQuota(ctx, s.QuotaOwner(ctx, a), a.MachineID, q.Provider, q.ProfileRef)
-	if err != nil {
-		return nil
+	if owner != "" && a.Owner == owner {
+		if repo, ok := s.agents.(domain.AccountQuotaRepository); ok {
+			shared, _ = repo.GetAccountQuota(ctx, owner, target)
+		}
 	}
-	return out
+	return domain.ResolveQuotaNumbers(a, profile, shared, s.clock.Now())
 }
 
 // QuotaOwner follows the computer's owner for machine-local paid accounts.
 // Transferring an agent must not transfer the former owner's login statistics.
 func (s *MachineService) QuotaOwner(ctx context.Context, a *domain.Agent) string {
-	if a.Runtime.Quota != nil && a.MachineID != "" {
+	if a.MachineID != "" {
 		m, err := s.machines.Get(ctx, a.MachineID)
 		if err != nil {
 			return ""

@@ -178,7 +178,12 @@ func reportSessionRuntime(ctx context.Context, c *client.Client, getenv func(str
 	if rt.Account == account && rt.Model == model && rt.Effort == effort && rt.ModelSource == "self" {
 		return
 	}
-	rt.Account = runtimeAccount(me.Binding.Harness, accountHome(getenv), getenv)
+	newAccount := runtimeAccount(me.Binding.Harness, accountHome(getenv), getenv)
+	if !strings.EqualFold(strings.TrimSpace(rt.Account), strings.TrimSpace(newAccount)) {
+		rt.Quota = nil // never carry a previous account's observation into a new identity
+	}
+	rt.Account = newAccount
+	rt.AccountIDHash = runtimeAccountIDHash(me.Binding.Harness, accountHome(getenv), getenv, rt.Account)
 	if model != "" {
 		rt.Model, rt.ModelSource = model, "self"
 	}

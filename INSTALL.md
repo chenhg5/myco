@@ -1436,3 +1436,6 @@ See [the page file API](docs/api.md#page-owned-files) for migration and CLI comm
 
 
 Account quota collection also supports effective GLM Coding Plan, Kimi Coding Plan and OpenRouter connections. OpenRouter shows the key spending allowance in USD or Unlimited, without a reset countdown. See [supported quota sources](docs/quota-sources.md) for recognized URLs and limitations.
+
+
+Claude and Codex subscription usage can be shared across your agents and computers when their account identity matches; local sign-in failures remain local. See [shared subscription quota](docs/quota-sources.md#shared-subscription-usage-across-agents).

@@ -207,7 +207,7 @@ func (s *ForkService) Fork(ctx context.Context, a Actor, v domain.Viewer, in For
 	capacity := -1
 	if !in.Force {
 		q := s.machines.AccountQuota(ctx, src)
-		if domain.QuotaStatusAt(q, s.clock.Now()) != "ok" {
+		if domain.QuotaAvailability(q, s.clock.Now()) != "available" {
 			return nil, domain.Errf(domain.CodeInvalidState, "source quota status is not ok").WithSuggestion("wait for healthy quota data or pass --force to override only the resource checks")
 		}
 		var slots struct {

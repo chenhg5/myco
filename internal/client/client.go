@@ -957,6 +957,15 @@ func (c *Client) ReportMachine(ctx context.Context, r api.MachineReport) error {
 
 // ReportRuntime tells the hub the caller's CLI and model.
 func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
+	if r.Quota != nil && (r.Quota.Shared || !r.Quota.SharedAt.IsZero()) {
+		q := *r.Quota
+		q.Shared = false
+		q.SharedAt = time.Time{}
+		// Effective shared numbers are a read projection, not a new observation.
+		q.At = time.Time{}
+		q.Windows = nil
+		r.Quota = &q
+	}
 	if c.Sealer != nil && c.Sealer.ID != nil {
 		for _, f := range r.Features {
 			if f == "remote_provider" || f == "sealed_spawn" {
@@ -966,11 +975,15 @@ func (c *Client) ReportRuntime(ctx context.Context, r api.Runtime) error {
 		}
 	}
 	var err error
-	for attempt := 0; attempt < 8; attempt++ {
+	for attempt := 0; attempt < 16; attempt++ {
 		err = c.do(ctx, http.MethodPut, "/v1/me/runtime", nil, r, nil)
 		// Older hubs reject unknown JSON fields. Retry only that specific schema
 		// rejection, leaving authentication and other validation failures intact.
 		var apiErr *Error
+		if r.AccountIDHash != "" && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "account_id_hash"`) {
+			r.AccountIDHash = ""
+			continue
+		}
 		if r.Account != "" && errors.As(err, &apiErr) && apiErr.Status == http.StatusBadRequest && strings.Contains(apiErr.Message, `unknown field "account"`) {
 			r.Account = ""
 			continue

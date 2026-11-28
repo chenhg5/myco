@@ -3473,5 +3473,6 @@
   "API allowance is used up; check the key limit or add credit.": "API 사용 한도를 소진했습니다. 키 한도를 확인하거나 잔액을 충전하세요.",
   "Unlimited": "무제한",
   "Balance": "잔액",
-  "{0} left": "{0} 남음"
+  "{0} left": "{0} 남음",
+  "Reported by another agent on the same account {0}": "같은 계정의 다른 agent가 {0} 보고함"
 }

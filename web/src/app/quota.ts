@@ -248,6 +248,8 @@ export function quotaSummary(q: Quota, machines: Machine[] = [], now = Date.now(
   if (old) line += L(E`。${quotaOldNote(q, now)}`, E`. ${quotaOldNote(q, now)}`);
   else if (status) line += L(E`。${status}，${quotaStaleNote(q, now)}`, E`. ${status}; ${quotaStaleNote(q, now)}`);
   else if (stale) line += L(E`（${quotaStaleNote(q, now)}）`, E` (${quotaStaleNote(q, now)})`);
+  const shared = quotaSharedNote(q, now);
+  if (shared) line += ` · ${shared}`;
   const level: QuotaLevel = quotaNeedsAction(q) ? "action" : old ? "old" : quotaSpent(worst) ? "spent" : quotaTight(worst) ? "tight" : "ok";
   const age = old ? timeAgo(quotaObservedAt(q), now) : "";
   return {
@@ -315,4 +317,10 @@ export function quotaRemainingText(w: QuotaWindow): string {
   if (w.balance?.unlimited) return L("不限额", "Unlimited");
   if (w.balance) return L(E`剩 ${usd(w.balance.remaining)}`, E`${usd(w.balance.remaining)} left`);
   return L(E`剩 ${quotaLeft(w)}%`, E`${quotaLeft(w)}% left`);
+}
+
+export function quotaSharedNote(q: Quota, now = Date.now()): string | undefined {
+  if (!q.shared) return undefined;
+  const age = timeAgo(q.shared_at || q.at, now);
+  return L(E`同账号的另一个 agent ${age}上报`, E`Reported by another agent on the same account ${age}`);
 }

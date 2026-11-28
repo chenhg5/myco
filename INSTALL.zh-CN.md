@@ -1363,3 +1363,6 @@ App 自动化编辑器按本机时间填写起止时间，并在列表显示有�
 
 
 账号额度采集还支持当前连接使用的 GLM Coding Plan、Kimi Coding Plan 和 OpenRouter。OpenRouter 显示 key 的美元可用额度或「不限额」，不显示重置倒计时。识别地址和限制见[支持的额度来源](docs/quota-sources.md)。
+
+
+Claude 和 Codex 订阅额度可以在账号标识匹配的 agent 与电脑间共享；本机登录失败仍单独显示。详见[同账号订阅额度共享](docs/quota-sources.md#shared-subscription-usage-across-agents)。

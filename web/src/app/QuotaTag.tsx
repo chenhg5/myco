@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Gauge, TriangleAlert } from "lucide-react";
 import type { AgentRow } from "@/app/types";
 import { machinesOfHub } from "@/app/nodes";
-import { quotaRemainingText, quotaEffectiveStatus, quotaHasNumbers, quotaLiveWindows, quotaObservedAt, quotaPillLevel, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaSummary, quotaUnreadable, quotaWindowLabel, quotaWindowShort, quotaWindowText, quotaWorst } from "@/app/quota";
+import { quotaSharedNote, quotaRemainingText, quotaEffectiveStatus, quotaHasNumbers, quotaLiveWindows, quotaObservedAt, quotaPillLevel, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaSummary, quotaUnreadable, quotaWindowLabel, quotaWindowShort, quotaWindowText, quotaWorst } from "@/app/quota";
 import { fitMenu } from "@/app/fitMenu";
 import { L, E } from "@/lib/i18n";
 import { timeAgo } from "@/lib/utils";
@@ -56,6 +56,7 @@ export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
   // (a failed first read has no observation time at all)
   const readAt = read && new Date(read).getTime() > Date.UTC(2000, 0, 1) ? read : "";
   const windows = has ? quotaLiveWindows(quota, now) : [];
+  const shared = quotaSharedNote(quota, now);
   let label: string;
   let title: string;
   if (worst) {
@@ -69,9 +70,10 @@ export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
     label = summary.short;
     title = L(E`${summary.line}（点开看全部）`, E`${summary.line} (click for all)`);
   }
+  const tooltip = shared && !title.includes(shared) ? `${title} · ${shared}` : title;
   return (
     <span className="quota-pill-wrap">
-      <button type="button" className={cn("quota-pill", `is-${level}`, (status || stale) && "is-stale")} title={title} aria-label={title}
+      <button type="button" className={cn("quota-pill", `is-${level}`, (status || stale) && "is-stale")} title={tooltip} aria-label={tooltip}
         aria-expanded={open} onClick={() => setOpen((o) => !o)} onMouseDown={(e) => e.preventDefault()} data-testid="quota-pill">
         <Gauge className="quota-pill-icon" aria-hidden />
         <span className="quota-pill-text">{label}</span>
@@ -87,6 +89,7 @@ export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
                 <span>{quotaWindowText(w, now)}</span>
               </div>
             ))}
+            {shared && <p className="run-pill-note">{shared}</p>}
             {status && <p className={cn("run-pill-note quota-pill-status", !action && "is-quiet")}>{status}{windows.length > 0 && L("，上面是上次取到的。", "; above is the last read.")}</p>}
             <p className="run-pill-note">
               {source && <>{source}<br /></>}
