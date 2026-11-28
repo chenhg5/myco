@@ -4698,6 +4698,30 @@ async function runMatrix(browser, size, scheme) {
       await clickVisible(page, page.locator(".conv-head button").first());
     });
 
+    // A question that comes after a later task was answered: in the chat
+    // below that answer (in time), with its choices, answered for the task
+    // it was asked on (not drawn dead inside the answered run).
+    await step("单聊 · 晚到的提问", async () => {
+      const made = await (await fetch(`http://${HOST}:${mockPort()}/app/mock/late-ask`, { method: "POST" })).json();
+      await openMember(page, narrow, "聊天", "MCP Claude");
+      const card = page.locator(`.conv-detail .conv-ask .ask.is-live[data-ask="${made.ask}"]`);
+      await card.waitFor({ timeout: 15_000 });
+      if (await page.locator(`.conv-detail .trace .ask[data-ask="${made.ask}"]`).count()) throw new Error("晚到的提问不该还画在已经答完的那一轮里");
+      const order = await page.evaluate((id) => {
+        const ans = [...document.querySelectorAll(".conv-detail .conv-msg")].find((el) => el.textContent.includes("五件里四件"));
+        const q = document.querySelector(`.conv-detail .ask[data-ask="${id}"]`);
+        return !!ans && !!q && !!(ans.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING);
+      }, made.ask);
+      if (!order) throw new Error("晚到的提问应在之后那条回答的下面（按时间）");
+      if ((await card.locator(".ask-option:disabled").count()) > 0) throw new Error("提问的选项不该是灰的");
+      await card.scrollIntoViewIfNeeded();
+      await settle(page, 300);
+      await shot(page, size, scheme, "ask-late");
+      await card.getByRole("button", { name: /收紧成这 11 个/ }).click();
+      await page.locator(`.conv-detail .ask.is-answered[data-ask="${made.ask}"] .ask-answer`, { hasText: "你选了：收紧成这 11 个" }).waitFor({ timeout: 10_000 });
+      await clickVisible(page, page.locator(".conv-head button").first());
+    });
+
     // While a round is running the box speaks for that round: Enter adds to
     // it (one run, one loading) and ⌘/Ctrl+Enter puts the next message
     // behind it, listed above the box until the round ends.

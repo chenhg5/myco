@@ -324,7 +324,7 @@ function useNear(): [(el: Element | null) => void, boolean] {
   return [ref, near];
 }
 
-export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, from, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, cli, onStatus, queueText, onPlan }: {
+export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaused, onActivity, from, until, borrow, said, steers, onUsage, answers, canAnswer, onAnswer, others, cli, onStatus, queueText, onPlan }: {
   hubId: string; task: Message; onGrow?: () => void;
   /** told the plan this run is working through (and when it was written),
    *  for the bar at the top of the chat (PlanBar); null when it has none */
@@ -340,9 +340,15 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
   said?: Message[];
   /** the steers that answered its questions, by question id */
   answers?: Map<string, Message>;
-  /** you sent the task: you may answer its questions */
-  canAnswer?: boolean;
-  onAnswer?: (text: string) => Promise<void>;
+  /** you may answer its questions (asked of a task you sent): for this
+   *  run's task, or, as a function, for the task each question is on */
+  canAnswer?: boolean | ((task: Message) => boolean);
+  /** answers a question, for the task it was asked on */
+  onAnswer?: (text: string, task: Message) => Promise<void>;
+  /** other tasks whose reports show here (the open run this part cut, the
+   *  earlier ones it goes on with): a question one of them asks is open,
+   *  and answered, for that task, not this one */
+  others?: Message[];
   /** its answer is in the conversation: done, even if its status lags */
   answered?: boolean;
   /** a newer run in the chat is the one at work on screen: this one, still
@@ -376,8 +382,16 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     if (!sayFirstSeen.has(key)) sayFirstSeen.set(key, Date.now());
     return running && sayFirstSeen.get(key)! - openedAt.current > 2000;
   };
+  // A question is open on the task it was asked on: this run's, or another
+  // whose reports show here.
+  const ownerOf = (ask: Message): Message => (ask.reply_to ? others?.find((o) => o.id === ask.reply_to) : undefined) || task;
+  const askOpen = (ask: Message): boolean => {
+    const o = ownerOf(ask);
+    return o === task ? running && task.asking === ask.id : isOpen(o.status) && o.asking === ask.id;
+  };
+  const mayAnswer = (ask: Message) => (typeof canAnswer === "function" ? canAnswer(ownerOf(ask)) : !!canAnswer);
   // Waiting on a question to its sender: not at work, no loading.
-  const asking = running && !!task.asking;
+  const asking = running && (!!task.asking || !!said?.some((p) => p.ask && p.reply_to !== task.id && askOpen(p)));
   // A finished run does not change: kept (and saved with the page data).
   const memoKey = `trace\u0000${hubId}\u0000${task.id}`;
   const [rawEvents, setEvents] = useState<TraceEvent[] | null>(() => {
@@ -778,14 +792,12 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
     keep = new Set<number>();
     for (let i = Math.max(0, after.length - KEEP); i < after.length; i++) keep.add(i);
     after.forEach((s, i) => {
-      if (asking && s.kind === "ask" && task.asking === s.msg.id) keep!.add(i);
+      if (s.kind === "ask" && askOpen(s.msg)) keep!.add(i);
     });
   }
   const hidden = keep ? after.length - keep.size : 0;
   // Waiting on you: the card stays out even if the rest is folded.
-  const waitAsk = asking
-    ? after.filter((s): s is Extract<Segment, { kind: "ask" }> => s.kind === "ask" && task.asking === s.msg.id)
-    : [];
+  const waitAsk = after.filter((s): s is Extract<Segment, { kind: "ask" }> => s.kind === "ask" && askOpen(s.msg));
 
   // One piece of the process; last: the newest of the whole run.
   const renderSeg = (seg: Segment, last: boolean): React.ReactNode => (seg.kind === "say" ? (
@@ -798,7 +810,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
             <SteerBubble key={seg.msg.id} hubId={hubId} msg={seg.msg} />
           ) : seg.kind === "ask" ? (
             <AskCard key={seg.msg.id} hubId={hubId} ask={seg.msg} answer={answers?.get(seg.msg.id)}
-              open={asking && task.asking === seg.msg.id} canAnswer={!!canAnswer} onAnswer={onAnswer} />
+              open={askOpen(seg.msg)} canAnswer={mayAnswer(seg.msg)} onAnswer={onAnswer && ((text) => onAnswer(text, ownerOf(seg.msg)))} />
           ) : seg.kind === "reports" ? (
             // What it reported (myco message progress): a small timeline of its
             // own, quieter than the answer, each with when.
@@ -835,7 +847,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
       {before.map((part, k) => (
         <EarlierSteps key={part.steer.id} steps={stepsIn(part.segs)}
           took={tookLine(new Date(part.steer.created_at).getTime() - (k ? new Date(before[k - 1].steer.created_at).getTime() : partStart(part.segs)))}
-          waiting={asking ? part.segs.filter((x): x is Extract<Segment, { kind: "ask" }> => x.kind === "ask" && task.asking === x.msg.id).map((x) => renderSeg(x, false)) : []}>
+          waiting={part.segs.filter((x): x is Extract<Segment, { kind: "ask" }> => x.kind === "ask" && askOpen(x.msg)).map((x) => renderSeg(x, false))}>
           {part.segs.map((seg) => renderSeg(seg, false))}
           <SteerBubble hubId={hubId} msg={part.steer} />
         </EarlierSteps>
@@ -851,7 +863,7 @@ export function TraceView({ hubId, task, onGrow, answered, quiet, footed, onPaus
       )}
       {!open && waitAsk.map((seg) => (
         <AskCard key={seg.msg.id} hubId={hubId} ask={seg.msg} answer={answers?.get(seg.msg.id)}
-          open canAnswer={!!canAnswer} onAnswer={onAnswer} />
+          open canAnswer={mayAnswer(seg.msg)} onAnswer={onAnswer && ((text) => onAnswer(text, ownerOf(seg.msg)))} />
       ))}
       {open && (
         <>
