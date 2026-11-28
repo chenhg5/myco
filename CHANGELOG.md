@@ -4,6 +4,26 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.14
+
+Brief release notes, generated from commit titles. Formal notes will follow.
+- Hub: ` Keep normalized quota warnings usable for coordinator selection ` (177f78e4)
+- App, CLI, Hub: ` Remind Claude cloud sessions to refresh stale usage and preserve quota warnings ` (31fa1e85)
+- App: ` Show GLM MCP quota separately from model windows ` (76c0f706)
+- App, Hub: ` Add GLM Kimi and OpenRouter account quota sources ` (762bc184)
+- App: ` Keep Escape scoped to the open language menu ` (23e05a38)
+
+**中文**
+
+简要说明，直接列出提交原标题；正式说明稍后补充。
+- Hub：` Keep normalized quota warnings usable for coordinator selection ` (177f78e4)
+- 桌面应用、命令行、Hub：` Remind Claude cloud sessions to refresh stale usage and preserve quota warnings ` (31fa1e85)
+- 桌面应用：` Show GLM MCP quota separately from model windows ` (76c0f706)
+- 桌面应用、Hub：` Add GLM Kimi and OpenRouter account quota sources ` (762bc184)
+- 桌面应用：` Keep Escape scoped to the open language menu ` (23e05a38)
+
+https://github.com/myco-ai/myco/compare/9dc9e2f7444c62002ff6facac8474ed23387726d...0b1123a47706db7410188c3cfb093e69630f073c
+
 ## v0.23.13
 
 Brief release notes, generated from commit titles. Formal notes will follow.
