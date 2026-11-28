@@ -261,9 +261,10 @@ export function agentQuotaHint(a: Agent, now = Date.now()): { level: "tight" | "
   const quota = a.runtime?.quota;
   if (!quota || quotaUnreadable(quota)) return undefined;
   const s = quotaSummary(quota, [], now);
-  // Only a current warning: old numbers are not a reason to act.
-  if (s.level !== "tight" && s.level !== "spent") return undefined;
-  return { level: s.level, text: s.short, title: s.line };
+  // Only a current warning or something to do (sign in again, add a key):
+  // old numbers are not a reason to act.
+  if (s.level !== "tight" && s.level !== "spent" && s.level !== "action") return undefined;
+  return { level: s.level === "tight" ? "tight" : "spent", text: s.short, title: s.line };
 }
 
 /** A window's name in a few characters for the composer: "5h", "7d", "月". */
