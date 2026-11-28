@@ -189,7 +189,8 @@ The release-required `app-macos` CI job runs the focused language gate on macOS
 with Playwright WebKit before packaging the App. It always checks seven languages
 at both window widths and in both themes, without retrying a failed step. It uses
 mouse coordinates and keyboard events, checks switching back to Simplified Chinese,
-reload persistence, System selection, failed-pack recovery, native-menu language
+reload persistence after host-write acknowledgments, System selection,
+failed-pack recovery, native-menu language
 reporting and unchanged original messages. A missing matrix or step fails the gate.
 
 The picker must use the App menu rather than an HTML `select`: macOS system WebKit

@@ -719,13 +719,23 @@ async function runMatrix(browser, size, scheme) {
       const check = await preview.newPage();
       const errors = [], nativeLanguages = [], outbound = [];
       const durable = {"myco-lang":"zh", "myco-theme":scheme};
+      const hostWrites = new Set();
+      let hostWriteActivity = Date.now();
       check.on("pageerror", error => errors.push(error.stack || String(error)));
       check.on("crash", () => errors.push("Language page crashed"));
       check.on("console",message=>{
         const expectedPack503=/\/assets\/ko-[^/]+\.json$/.test(message.location().url||"") && message.text().includes("503");
         if(message.type()==="error" && !expectedPack503)errors.push(`${message.text()} (${message.location().url||"unknown resource"})`);
       });
-      check.on("request", request => { if (!request.url().startsWith(r.base) && !request.url().startsWith("data:")) outbound.push(request.url()); });
+      check.on("request", request => {
+        if (!request.url().startsWith(r.base) && !request.url().startsWith("data:")) outbound.push(request.url());
+        if(request.method()!=="GET" && /\/app\/(?:preferences(?:\/import)?|ui-lang)$/.test(request.url())) {
+          hostWrites.add(request);hostWriteActivity=Date.now();
+        }
+      });
+      const hostWriteFinished = request => { if(hostWrites.delete(request))hostWriteActivity=Date.now(); };
+      check.on("requestfinished",hostWriteFinished);
+      check.on("requestfailed",hostWriteFinished);
       // Exercise durable language preferences independently of the optional
       // conversation cache, whose unload writes WebKit can cancel noisily.
       await preview.route(/\/app\/cache\?kind=(?:pages|traces)$/,route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({enabled:false,entries:[]})}));
@@ -754,6 +764,17 @@ async function runMatrix(browser, size, scheme) {
           if(Date.now()>deadline)throw new Error(`Language preference not saved: ${language}`);
           await check.waitForTimeout(20);
         }
+      };
+      const reloadSavedPage = async () => {
+        // A route's durable map updates before the browser receives its ACK.
+        // Also allow the host's 80ms preference debounce to dispatch. Reloading
+        // first cancels a genuine pending write and WebKit logs an unload error.
+        const began=Date.now(), deadline=began+5000;
+        while(hostWrites.size || Date.now()-Math.max(began,hostWriteActivity)<200) {
+          if(Date.now()>deadline)throw Error("Language preference/bridge writes did not finish before reload");
+          await check.waitForTimeout(20);
+        }
+        await check.reload();await check.locator(".app-shell").waitFor();
       };
       const expected = {zh:"外观", "zh-Hant":"外觀", en:"Appearance", ja:"外観", ko:"모양", es:"Apariencia", "pt-BR":"Aparência"};
       try {
@@ -789,7 +810,7 @@ async function runMatrix(browser, size, scheme) {
           await shot(check,size,scheme,`language-${language}`);
           await closeSettings(check);
           if(await check.locator(".conv-detail .md").first().innerText()!==original) throw new Error("Language selection changed the original message");
-          await check.reload();await check.locator(".app-shell").waitFor();
+          await reloadSavedPage();
           if(await check.locator("html").getAttribute("lang")!==(language==="zh"?"zh-CN":language))throw new Error("Language was lost after reload");
           // Return through the UI, without replacing the profile or reloading
           // first: cached packs must work in both directions too.
@@ -813,7 +834,7 @@ async function runMatrix(browser, size, scheme) {
             if(navigated)throw Error("Returning to Chinese reloaded the page");
           } finally {check.off("framenavigated", onNavigate);}
           await closeSettings(check);
-          await check.reload();await check.locator(".app-shell").waitFor();
+          await reloadSavedPage();
           if(await check.locator("html").getAttribute("lang")!=="zh-CN")throw Error("Returning to Chinese was not saved");
         }
         let failPack = true;
@@ -830,14 +851,14 @@ async function runMatrix(browser, size, scheme) {
         await check.waitForFunction(()=>document.documentElement.lang==="ko");
         await saved("ko");
         durable["myco-lang"]="zh";
-        await check.reload();await check.locator(".app-shell").waitFor();
+        await reloadSavedPage();
         await go(check,"设置",narrow);
         await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
         await selectLanguage(check,"system");
         await check.waitForFunction(()=>document.documentElement.lang==="ja");
         await check.waitForFunction(()=>document.querySelector('[data-testid="language-select"]')?.getAttribute("data-value")==="system");
         await saved("system");
-        await check.reload();await check.locator(".app-shell").waitFor();
+        await reloadSavedPage();
         if(await check.locator("html").getAttribute("lang")!=="ja" || await check.evaluate(()=>localStorage.getItem("myco-lang"))!=="system")throw new Error("System selection lost after reload");
         for(const l of Object.keys(expected)) if(!nativeLanguages.includes(l))throw new Error(`Native bridge missed ${l}`);
         if(errors.length)throw new Error(errors.join("\n"));
