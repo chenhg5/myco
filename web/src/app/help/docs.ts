@@ -93,7 +93,20 @@ export const HELP_ORDER: HelpId[] = HELP_GROUPS.flatMap((g) => g.ids);
  * scripts/help-shots.mjs), bundled with the App.
  */
 const SHOTS = import.meta.glob("./img/*.webp", { eager: true, query: "?url", import: "default" }) as Record<string, string>;
-const shotURL = (name: string) => SHOTS[`./img/${name}.webp`];
+const shotURL = (name: string) => samePagePath(SHOTS[`./img/${name}.webp`]);
+
+/** A bundled file's address as a path on this page's own server. In the
+ *  desktop App the page is at wails://localhost/…, a scheme the message
+ *  sanitizer (DOMPurify) drops from <img src>, so a full address would
+ *  leave every picture blank there; a path loads the same everywhere. */
+export function samePagePath(u: string | undefined): string | undefined {
+  if (!u) return u;
+  try {
+    const x = new URL(u, location.href);
+    if (x.protocol === location.protocol && x.host === location.host) return x.pathname + x.search;
+  } catch { /* not an address: as it is */ }
+  return u;
+}
 
 /** A page's text in the App's language, its pictures' addresses filled in. */
 export function helpText(id: HelpId): string {

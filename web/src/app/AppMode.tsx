@@ -1050,7 +1050,7 @@ export default function AppMode({ initialHubs, initialInfo }: {
     return () => window.removeEventListener("myco-prepare", on);
   }, [hubId]);
   const startLocal = async () => {
-    const r = await appApi.startLocalHub({ tunnel: "none" });
+    const r = await appApi.startLocalHub({ tunnel: "none", display: L("我的工作区", "My workspace") });
     setPreparePending(r.hub.id);
     startOnboarding();
     setPreparing(r.hub.id);

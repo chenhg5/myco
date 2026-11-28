@@ -473,7 +473,9 @@ export interface LocalState {
   addrs?: string[];
 }
 export type LocalTunnel = "cloudflare" | "tailscale" | "none";
-export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string; /** Another hub on this computer (`myco hub up --name`); omit for the default one. */ name?: string }
+export interface StartLocalHubInput { tunnel: LocalTunnel; hostname?: string; /** Another hub on this computer (`myco hub up --name`); omit for the default one. */ name?: string;
+  /** what to call it in the App, in the App's language (newer consoles; older ones name the first "我的工作区") */
+  display?: string }
 export interface StartLocalHubResult {
   hub: Hub;
   public_url: string;

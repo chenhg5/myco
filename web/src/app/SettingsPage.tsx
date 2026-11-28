@@ -481,7 +481,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
     setBusy(`start:${name || ""}`);
     setActionError(null);
     try {
-      await appApi.startLocalHub({ tunnel: "none", name: name || undefined });
+      await appApi.startLocalHub({ tunnel: "none", name: name || undefined, ...(name ? {} : { display: L("我的工作区", "My workspace") }) });
       await reloadLocal();
       await onRefresh();
     } catch (e) {

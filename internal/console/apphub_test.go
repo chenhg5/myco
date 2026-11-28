@@ -70,9 +70,13 @@ func TestLocalHubWithoutServiceManager(t *testing.T) {
 	b := &console.Backend{Store: console.NewStore(r.store), Secrets: r.secrets, Local: l}
 	r.app.Config.Handler = b.Handler()
 
-	code, m, raw := r.do("POST", "/app/local/hub", map[string]string{"tunnel": "none"})
+	// (named in the App's language: the App sends what to call it)
+	code, m, raw := r.do("POST", "/app/local/hub", map[string]string{"tunnel": "none", "display": "My workspace"})
 	if code != 201 {
 		t.Fatalf("start: %d %s", code, raw)
+	}
+	if hub, _ := m["hub"].(map[string]any); hub == nil || hub["name"] != "My workspace" {
+		t.Fatalf("the first workspace should be named as the App asked: %s", raw)
 	}
 	if mycoPath == "" {
 		t.Fatal("the CLI must be installed first")
