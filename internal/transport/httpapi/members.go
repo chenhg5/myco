@@ -295,6 +295,27 @@ func (s *Server) listAudit(w http.ResponseWriter, r *http.Request) {
 }
 
 // mayOwnMachine checks the actor may manage machine id.
+// isMachineOwner: only the person who owns the machine, from their own
+// device (the hub's owner for a machine nobody owns), not an administrator
+// for them and not an agent: what runs on someone's computer is their call.
+func (s *Server) isMachineOwner(w http.ResponseWriter, r *http.Request, id, what string) bool {
+	actor := s.actorOf(r)
+	m, err := s.machines.Get(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return false
+	}
+	switch {
+	case actor.Agent != nil || actor.Via != nil:
+	case actor.Member != nil && m.Owner == actor.Member.ID:
+		return true
+	case m.Owner == "" && actor.IsOwner():
+		return true
+	}
+	writeError(w, domain.Errf(domain.CodePermissionDenied, "only the owner of this computer may %s", what))
+	return false
+}
+
 func (s *Server) mayOwnMachine(w http.ResponseWriter, r *http.Request, id, what string) bool {
 	if s.actorOf(r).Manages() {
 		return true

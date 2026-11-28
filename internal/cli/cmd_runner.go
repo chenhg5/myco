@@ -47,7 +47,7 @@ notes are never auto-answered. Logs go to stderr.`,
 		},
 		Flags: []Flag{
 			{Name: "all", Kind: Bool, Help: "Serve every agent profile in ~/.myco/agents"},
-			{Name: "max-concurrent", Kind: Int, Default: "3", Help: "With --all: max agent CLIs running at once, shared fairly between workspaces"},
+			{Name: "max-concurrent", Kind: Int, Default: "10", Help: "With --all: max agent CLIs running at once, shared fairly between workspaces; runner.max_concurrent in ~/.myco/machine.yaml, set later (myco machine concurrency, or the App), wins over it"},
 			{Name: "harness", Kind: Enum, Values: harnesses.Names(), Help: "Agent CLI adapter (default from config, else claude); see: myco harness list"},
 			{Name: "access", Kind: Enum, Values: []string{"readonly", "workspace", "full"}, Help: "Permission level mapped to CLI flags (default: config, else the CLI's own headless default)"},
 			{Name: "model", Kind: String, Help: "Model in the CLI's own naming"},
@@ -124,8 +124,17 @@ notes are never auto-answered. Logs go to stderr.`,
 				}
 				return r.Run(e.in.Ctx)
 			}
-			if n := e.in.Int("max-concurrent"); n > 0 {
-				shared.slots = runner.NewSlotPool(n)
+			// How many agent CLIs run at once: the explicit flag, or
+			// machine.yaml's runner.max_concurrent when chosen later (from
+			// the App or myco machine concurrency), read live.
+			flag := 0
+			if e.in.IsSet("max-concurrent") {
+				flag = max(1, e.in.Int("max-concurrent"))
+			}
+			shared.limit = newSlotLimit(e.defaultPath, flag, log)
+			shared.slots = shared.limit.pool
+			if !e.in.Bool("once") {
+				go shared.limit.Run(e.in.Ctx)
 			}
 			return e.runAll(shared, log)
 		}),
@@ -144,6 +153,8 @@ type runnerShared struct {
 	rebind      bool
 	trace       string
 	slots       *runner.SlotPool
+	// limit keeps slots on the flag or machine.yaml's setting (--all).
+	limit *slotLimit
 	// locks: one turn at a time per CLI session, across every agent
 	// (several workspaces can share a session) and runner process.
 	locks    *runner.SessionLocks
@@ -634,7 +645,7 @@ func (e *env) runAll(sh runnerShared, log *slog.Logger) error {
 	}
 	limit := 0
 	if sh.slots != nil {
-		limit = sh.slots.Snapshot("").MaxConcurrent
+		limit = sh.slots.Max()
 	}
 	log.Info("runner serving all agents", "profiles_dir", dir, "profiles", n, "max_concurrent", limit)
 	if n == 0 {

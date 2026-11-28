@@ -45,6 +45,9 @@ type Machine struct {
 	// local policy: only someone with access to this machine can change it,
 	// and it applies whichever hub asks.
 	Spawn SpawnPolicy `yaml:"spawn,omitempty" json:"spawn,omitempty"`
+	// Runner is how this machine's runner (runner start --all) works: how
+	// many agent CLIs it runs at once. Read live, like Spawn.
+	Runner RunnerPolicy `yaml:"runner,omitempty" json:"runner,omitempty"`
 }
 
 // Hubs lists every membership, the primary one first.
