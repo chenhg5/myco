@@ -17,7 +17,7 @@ import { LocalShellAccess } from "@/app/LocalShellAccess";
 import { MachineDirs } from "@/app/MachineDirs";
 import { ComputerCheck } from "@/app/ComputerCheck";
 import { MachineUpgrade, UpgradeAll, useLatestRelease } from "@/app/MycoUpgrade";
-import { agentQuotaHint } from "@/app/quota";
+import { agentQuotaHint, quotaLiveWindows } from "@/app/quota";
 import { Avatar, AvatarStack, isWorkspace, stateWords } from "@/app/persona";
 import { PageHero, SectionHead } from "@/app/PageHero";
 import { projectsOf } from "@/app/Members";
@@ -38,7 +38,8 @@ function computerQuotaHint(machineId: string, hubId: string, rows: AgentRow[]) {
     if (x.hub.id !== hubId || x.st.agent.machine_id !== machineId) continue;
     const h = agentQuotaHint(x.st.agent);
     if (!h) continue;
-    const used = Math.max(...(x.st.agent.runtime?.quota?.windows || []).map((w) => w.used), 0);
+    const quota = x.st.agent.runtime?.quota;
+    const used = Math.max(...(quota ? quotaLiveWindows(quota).map((w) => w.used) : []), 0);
     const rank = (h.level === "spent" ? 2 : 0) + Math.min(used, 1.99) / 2;
     if (rank > bestRank) { best = { ...h, who: nodeName(x.st.agent, x.hub) }; bestRank = rank; }
   }

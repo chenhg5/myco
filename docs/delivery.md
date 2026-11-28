@@ -271,6 +271,27 @@ as used up until it resets, without a model turn. Such quota is marked
 `source_kind: cloud_session`; it never replaces a runner's own collection or a
 newer report, and only numbers, times and statuses are sent.
 
+Claude Code also runs a `statusLine` command after most turns and gives it JSON
+on stdin with the account's `rate_limits` (five-hour and seven-day percent used
+and reset times). `myco join` sets that command to `myco agent runtime
+statusline`; it reads only those numbers and times, writes them to
+`~/.myco/quota/<agent>.json` with the observation time, and prints a short line.
+It never uses the network and never fails: no rate limits, bad input or a
+missing file still leaves a line. A status line that was already configured is
+kept and chained (myco runs it with the same JSON and prints its output);
+`--uninstall` restores it exactly, and `--install`/`--dry-run` show the change.
+The command runs under Claude Code's own identity, and only the session whose
+config it is writes that agent's file.
+
+`myco inbox wait` then reports the file as `source_kind: statusline` when the
+observation is newer than the last report, at most once every five minutes (a
+marker next to the file, shared by a session and its runner). The runner polls
+the same file and uses it only while it has no healthy collection of its own,
+so a native or event sample always wins. Only numbers, window names and reset
+times are sent; nothing of the account goes with them, and an older observation
+never replaces a newer report. Nothing is reported by the status line itself:
+until a wait or runner is there to send it, the numbers stay on the computer.
+
 Sampling normally occurs at most once per five minutes per local account;
 Claude caches are re-read once per minute. Errors are cached for fifteen minutes,
 with a longer `Retry-After` respected on HTTP 429. HTTP redirects are not followed.
