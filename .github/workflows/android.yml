@@ -2,6 +2,7 @@ name: android
 
 on:
   push:
+    branches-ignore: ['wip/**']
     paths: ['android/**', 'internal/api/**', '.github/workflows/android.yml']
   pull_request:
     paths: ['android/**', 'internal/api/**', '.github/workflows/android.yml']
