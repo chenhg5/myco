@@ -77,8 +77,8 @@ export function ResumeRow({ row, now, mayManage, onRefresh }: {
             {has
               ? used
                 ? L(
-                  E`上次重新接入：${timeAgo(used, now)}${env ? ` · 在 ${env}` : ""}`,
-                  E`Last resumed ${timeAgo(used, now)}${env ? ` · in ${env}` : ""}`,
+                  (env ? E`上次重新接入：${timeAgo(used, now)} · 在 ${env}` : E`上次重新接入：${timeAgo(used, now)}`),
+                  (env ? E`Last resumed ${timeAgo(used, now)} · in ${env}` : E`Last resumed ${timeAgo(used, now)}`),
                 )
                 : L("还没用过", "Not used yet")
               : L("还没有链接", "No link yet")}

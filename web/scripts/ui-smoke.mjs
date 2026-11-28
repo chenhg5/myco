@@ -39,6 +39,9 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+execFileSync(process.execPath,[fileURLToPath(new URL("./i18n.test.mjs",import.meta.url))],{stdio:"inherit"});
+execFileSync(process.execPath,[fileURLToPath(new URL("./i18n-catalog.mjs",import.meta.url)),"--check"],{stdio:"inherit"});
+
 const pageRouteScript = ts.transpileModule(await readFile(appsPath("templates", "src", "_lib", "page-route.ts"),"utf8"),{compilerOptions:{module:ts.ModuleKind.ES2022,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^export /gm,"") + "\nwindow.__routeModule={subscribeAppRoute};";
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // UI_SMOKE_OUT: where screenshots and the built App go (default web/ui-smoke;
@@ -625,6 +628,102 @@ async function runMatrix(browser, size, scheme) {
     await page.locator(".app-shell").waitFor();
     await page.locator(".sp-home, .sp-group, .sp-first").first().waitFor({ timeout: 20_000 });
     await settle(page);
+
+    await step("七种语言 · 首次使用和连接", async () => {
+      const languages=["zh","zh-Hant","en","ja","ko","es","pt-BR"];
+      const names={zh:"在这台电脑上开始","zh-Hant":"在這臺電腦上開始",en:"Start on this computer"};
+      for(const language of languages) {
+        const preview=await browser.newContext({viewport:size,colorScheme:scheme,deviceScaleFactor:Number(process.env.UI_SMOKE_SCALE)||1});
+        const check=await preview.newPage();const errors=[];
+        check.on("pageerror",error=>errors.push(error.stack||String(error)));
+        await preview.route("**/app/hubs",route=>route.fulfill({status:200,contentType:"application/json",body:"[]"}));
+        await preview.addInitScript(({scheme})=>localStorage.setItem("myco-theme",scheme),{scheme});
+        try {
+          await check.goto(`${r.base}/?lang=${language}`);await check.getByTestId("welcome").waitFor();
+          const catalog=language==="zh"||language==="en"?null:JSON.parse(await readFile(path.join(WEB,"../internal/uilocale/catalogs",`${language}.json`),"utf8"));
+          const start=names[language]||catalog["Start on this computer"];
+          // Traditional spellings are catalog-authored, not inferred from glyph rules.
+          const wanted=language==="zh-Hant"?catalog["在这台电脑上开始"]:start;
+          if(await check.locator(".wl-start").innerText()!==wanted)throw new Error(`Welcome action is not localized: ${language}`);
+          if(await check.getByTestId("language-select").locator("option").count()!==8)throw new Error("Missing language options on Welcome");
+          await shot(check,size,scheme,`welcome-language-${language}`);
+          await clickVisible(check,check.locator(".wl-way").first());await check.locator(".app-modal").waitFor();
+          const input=check.locator(".app-modal input").first();
+          const example="https://example.com/c/myco_console_demo";
+          await input.fill(example);if(await input.inputValue()!==example)throw new Error("Connection input was translated");
+          await check.keyboard.press("Escape");
+          if(await check.evaluate(w=>document.documentElement.scrollWidth>w+1,size.width))throw new Error(`Welcome overflow in ${language}`);
+          if(errors.length)throw new Error(errors.join("\n"));
+        } finally {await preview.close();}
+      }
+    });
+
+    await step("设置 · 七种语言核心流程", async () => {
+      const preview = await browser.newContext({ viewport: size, colorScheme: scheme, locale: "ja-JP", deviceScaleFactor: Number(process.env.UI_SMOKE_SCALE) || 1 });
+      const check = await preview.newPage();
+      const errors = [], nativeLanguages = [], outbound = [];
+      const durable = {"myco-lang":"zh", "myco-theme":scheme};
+      check.on("pageerror", error => errors.push(error.stack || String(error)));
+      check.on("request", request => { if (!request.url().startsWith(r.base) && !request.url().startsWith("data:")) outbound.push(request.url()); });
+      await preview.route(/\/app\/preferences(?:\/import)?$/, async route => {
+        if (route.request().method() !== "GET") Object.assign(durable,route.request().postDataJSON().values);
+        await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({version:1,values:durable})});
+      });
+      await preview.route("**/app/ui-lang", async route => {
+        if(route.request().method()==="PUT") nativeLanguages.push(route.request().postDataJSON().lang);
+        await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({lang:nativeLanguages.at(-1)||""})});
+      });
+      const expected = {zh:"外观", "zh-Hant":"外觀", en:"Appearance", ja:"外観", ko:"모양", es:"Apariencia", "pt-BR":"Aparência"};
+      try {
+        await check.goto(r.base); await check.locator(".app-shell").waitFor();
+        await go(check,"官网改版",narrow);
+        const original = await check.locator(".conv-detail .md").first().innerText();
+        for (const language of ["zh-Hant","en","ja","ko","es","pt-BR","zh"]) {
+          // Start from Chinese navigation, then retain the open settings section.
+          await go(check,"设置",narrow);
+          await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
+          const picker=check.getByTestId("language-select");
+          if(await picker.locator("option").count()!==8) throw new Error("Expected System plus seven languages");
+          await picker.selectOption(language);
+          await check.waitForFunction(l=>document.documentElement.lang===l, language==="zh"?"zh-CN":language);
+          await check.locator(".app-settings-tab.active").filter({hasText:expected[language]}).waitFor();
+          if(await check.getByTestId("language-select").inputValue()!==language) throw new Error("The selected language was not retained");
+          await check.waitForFunction(l=>localStorage.getItem("myco-lang")===l,language);
+          const overflow=await check.evaluate(w=>document.documentElement.scrollWidth>w+1,size.width);
+          if(overflow) throw new Error(`Horizontal overflow in ${language}`);
+          await shot(check,size,scheme,`language-${language}`);
+          await closeSettings(check);
+          if(await check.locator(".conv-detail .md").first().innerText()!==original) throw new Error("Language selection changed the original message");
+          await check.reload();await check.locator(".app-shell").waitFor();
+          if(await check.locator("html").getAttribute("lang")!==(language==="zh"?"zh-CN":language))throw new Error("Language was lost after reload");
+          // Reset only this isolated profile before the next scenario.
+          durable["myco-lang"]="zh";
+          await check.reload();await check.locator(".app-shell").waitFor();
+        }
+        let failPack = true;
+        await check.route(/\/assets\/ko-[^/]+\.json$/, async route => {
+          if(failPack) await route.fulfill({status:503,body:"unavailable"}); else await route.continue();
+        });
+        await go(check,"设置",narrow);
+        await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
+        await check.getByTestId("language-select").selectOption("ko");
+        await check.getByTestId("language-error").waitFor();
+        if(await check.locator("html").getAttribute("lang")!=="zh-CN")throw new Error("Failed pack replaced a working language");
+        failPack=false;
+        await clickVisible(check,check.getByTestId("language-retry"));
+        await check.waitForFunction(()=>document.documentElement.lang==="ko");
+        durable["myco-lang"]="zh";
+        await check.reload();await check.locator(".app-shell").waitFor();
+        await go(check,"设置",narrow);
+        await clickVisible(check,check.locator(".app-settings-tab",{hasText:"外观"}));
+        await check.getByTestId("language-select").selectOption("system");
+        await check.waitForFunction(()=>document.documentElement.lang==="ja");
+        if(await check.getByTestId("language-select").inputValue()!=="system")throw new Error("System selection lost");
+        for(const l of Object.keys(expected)) if(!nativeLanguages.includes(l))throw new Error(`Native bridge missed ${l}`);
+        if(errors.length)throw new Error(errors.join("\n"));
+        if(outbound.length)throw new Error("UI localization made an external request: "+outbound.join(","));
+      } finally {await preview.close();}
+    });
 
     // A project opens on your chat with its coordinator; the tasks it hands
     // out are cards in that chat; the members column says what each does.

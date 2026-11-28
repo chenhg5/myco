@@ -141,7 +141,7 @@ function publishPanel(next: PanelState) {
 export function PageToggle() {
   const st = useSyncExternalStore((f) => { panelSubs.add(f); return () => { panelSubs.delete(f); }; }, () => panelState);
   if (!st.count) return null;
-  const label = st.open ? L("收起网页面板", "Tuck the pages away") : L(E`展开网页面板：${st.title}${st.count > 1 ? ` 等 ${st.count} 个` : ""}`, E`Show the pages: ${st.title}${st.count > 1 ? ` and ${st.count - 1} more` : ""}`);
+  const label = st.open ? L("收起网页面板", "Tuck the pages away") : L((st.count > 1 ? E`展开网页面板：${st.title} 等 ${st.count} 个` : E`展开网页面板：${st.title}`), (st.count > 1 ? E`Show the pages: ${st.title} and ${st.count - 1} more` : E`Show the pages: ${st.title}`));
   return (
     <button type="button" className={cn("pg-toggle", st.open && "is-on")} aria-pressed={st.open} title={label} aria-label={label}
       onClick={() => window.dispatchEvent(new Event("myco-pages-toggle"))}>
@@ -392,7 +392,7 @@ export function PageHost() {
                 <span className="pg-tab-name">{x.meta.title || L("正在打开…", "Opening…")}</span>
               </button>
               <button type="button" className="pg-tab-close" onClick={() => close(x.key)}
-                title={L("关闭这个标签", "Close this tab")} aria-label={L(E`关闭 ${x.meta.title || "这个标签"}`, E`Close ${x.meta.title || "this tab"}`)}><X /></button>
+                title={L("关闭这个标签", "Close this tab")} aria-label={L(E`关闭 ${x.meta.title || L("这个标签", "this tab")}`, E`Close ${x.meta.title || L("这个标签", "this tab")}`)}><X /></button>
             </div>
           ))}
         </div>
@@ -880,7 +880,7 @@ function PageView({ target, open, active, reload, onMeta }: {
   const title = local ? L(E`这台电脑 · ${local.port || (local.protocol === "https:" ? "443" : "80")} 端口`, E`This computer · port ${local.port || 80}`)
     : opened?.name || page?.name || L("网页", "Page");
   const about = local ? local.host + local.pathname.replace(/\/$/, "")
-    : opened?.live && target.kind === "page" ? L(E`实时 · ${page ? nameOf(target.hubId, page.publisher) : ""} 电脑上的 ${opened.port || page?.port || ""} 端口`, E`Live · port ${opened.port || page?.port || ""} on ${page ? nameOf(target.hubId, page.publisher) : ""}'s computer`)
+    : opened?.live && target.kind === "page" ? L((page ? E`实时 · ${nameOf(target.hubId, page.publisher)} 电脑上的 ${opened.port || page?.port || ""} 端口` : E`实时 ·  电脑上的 ${opened.port || page?.port || ""} 端口`), (page ? E`Live · port ${opened.port || page?.port || ""} on ${nameOf(target.hubId, page.publisher)}'s computer` : E`Live · port ${opened.port || page?.port || ""} on 's computer`))
     : opened ? [opened.latest > 1 || opened.version > 1 ? L(E`第 ${opened.version} 版`, E`Version ${opened.version}`) : "", page && target.kind === "page" ? L(E`${nameOf(target.hubId, page.publisher)} 发布`, E`by ${nameOf(target.hubId, page.publisher)}`) : "", page ? timeAgo(page.versions.find((v) => v.n === opened.version)?.at || page.updated_at) : ""].filter(Boolean).join(" · ")
       : "";
   const newer = opened && page && page.version > opened.version ? page.version : 0;
@@ -924,7 +924,7 @@ function PageView({ target, open, active, reload, onMeta }: {
         </div>
       )}
     <Modal className={cn("pg-remote-ask", remoteAsking?.settingsReview && "pg-browser-settings-dialog")} wide={!!remoteAsking?.review || !!remoteAsking?.settingsReview} open={!!remoteAsking} onOpenChange={(o) => {if (!o) remoteAsking?.answer(false);}}
-      title={remoteAsking?.title || L(E`允许「${opened?.name || page?.name || "此应用"}」使用远程桌面？`, E`Allow “${opened?.name || page?.name || "this app"}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
+      title={remoteAsking?.title || L(E`允许「${opened?.name || page?.name || L("此应用", "this app")}」使用远程桌面？`, E`Allow “${opened?.name || page?.name || L("此应用", "this app")}” to use Remote Desktop?`)} description={remoteAsking?.text || ""}>
       {remoteAsking?.review && <BrowserApprovalDetails review={remoteAsking.review} />}
       {remoteAsking?.settingsReview && <BrowserProfileSettingsDetails review={remoteAsking.settingsReview} onRead={setSettingsRead} />}
       {remoteAsking?.settingsReview && <p className="pg-browser-settings-hint" style={{visibility: settingsRead === remoteAsking.settingsReview ? "hidden" : undefined}} role="status">{L("请滚动查看完整设置，再允许。", "Scroll through all settings before allowing.")}</p>}
@@ -934,7 +934,7 @@ function PageView({ target, open, active, reload, onMeta }: {
       </div>
     </Modal>
     <Modal open={!!consent} onOpenChange={(o) => { if (!o) consent?.answer("deny"); }} className="pg-ask"
-      title={consent ? L(E`允许「${consent.name || "这个应用"}」${osWant(consent.group, consent.host).zh}吗？`, E`Let "${consent.name || "this app"}" ${osWant(consent.group, consent.host).en}?`) : ""}
+      title={consent ? L(E`允许「${consent.name || L("这个应用", "this app")}」${osWant(consent.group, consent.host).zh}吗？`, E`Let "${consent.name || L("此应用", "this app")}" ${osWant(consent.group, consent.host).en}?`) : ""}
       description={consent ? [
         consent.declared ? "" : L("这个应用没有在说明里声明要用这一项。", "This app does not declare that it uses this."),
         consent.once_only ? osOnceWhy(consent.group) : L("选「始终允许」，以后这个应用不再问（升级后也不问，只问新版本新加的）；可以在设置 → 应用权限里收回。", "With \"Always allow\", this app won't ask again, not even after an update (only for what a new version adds). You can take it back in Settings → App permissions."),

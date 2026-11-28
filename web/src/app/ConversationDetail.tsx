@@ -308,7 +308,7 @@ function SuperagentIntro({ agent }: { agent?: Agent }) {
       <ul className="sa-intro-list">
         {items.map(([z, e]) => <li key={z}>{L(z, e)}</li>)}
       </ul>
-      <p className="sa-intro-foot">{L(E`它总是以自己的名义说话，不会冒充你。${mac ? "在哪儿都可以按 ⌘⇧Space 叫它。" : ""}`, (mac ? E`It always speaks as itself, never as you. Press ⌘⇧Space anywhere to call it.` : E`It always speaks as itself, never as you.`))}</p>
+      <p className="sa-intro-foot">{L((mac ? E`它总是以自己的名义说话，不会冒充你。在哪儿都可以按 ⌘⇧Space 叫它。` : E`它总是以自己的名义说话，不会冒充你。`), (mac ? E`It always speaks as itself, never as you. Press ⌘⇧Space anywhere to call it.` : E`It always speaks as itself, never as you.`))}</p>
     </div>
   );
 }
@@ -3234,8 +3234,8 @@ export function decisionOf(body: string): { who: string; ok: boolean; what: stri
   const [, who, verb, raw, rest] = m;
   const task = /^(create|update|delete) scheduled task "(.+)" in project (.+)$/.exec(raw.trim());
   const what = task
-    ? L(E`${task[1] === "create" ? "创建" : task[1] === "delete" ? "删除" : "修改"}项目「${task[3]}」的定时任务「${task[2]}」`,
-      E`${task[1] === "create" ? "create" : task[1] === "delete" ? "delete" : "change"} “${task[2]}” in project “${task[3]}”`)
+    ? L((task[1] === "create" ? E`创建项目「${task[3]}」的定时任务「${task[2]}」` : (task[1] === "delete" ? E`删除项目「${task[3]}」的定时任务「${task[2]}」` : E`修改项目「${task[3]}」的定时任务「${task[2]}」`)),
+      (task[1] === "create" ? E`create “${task[2]}” in project “${task[3]}”` : (task[1] === "delete" ? E`delete “${task[2]}” in project “${task[3]}”` : E`change “${task[2]}” in project “${task[3]}”`)))
     : raw.trim();
   return { who, ok: verb === "同意了", what, failed: /^但没做成/.test(rest.trim()) };
 }

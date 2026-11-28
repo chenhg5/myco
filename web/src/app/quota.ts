@@ -72,10 +72,7 @@ export function resetLabel(iso: string | undefined, now = Date.now()): string {
   if (diff <= 0) return L("马上", "now");
   if (diff < 24 * 3600e3) return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
   if (diff < 7 * 24 * 3600e3) {
-    return L(
-      ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][d.getDay()],
-      ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()],
-    );
+    return d.toLocaleDateString(locale(), { weekday: "short" });
   }
   return d.toLocaleDateString(locale(), { month: "short", day: "numeric" });
 }
@@ -229,7 +226,7 @@ export function quotaSummary(q: Quota, machines: Machine[] = [], now = Date.now(
   const reset = resetIn(worst.resets_at, now);
   const what = quotaSpent(worst) ? L("用完了", "out") : L(E`剩 ${quotaLeft(worst)}%`, E`${quotaLeft(worst)}% left`);
   const label = quotaWindowLabel(worst);
-  let line = L(E`额度：${label}${what}（${src}）${reset ? "，" + reset : ""}`, E`Usage: ${label} ${what} (${src})${reset ? "; " + reset : ""}`);
+  let line = L((reset ? E`额度：${label}${what}（${src}）${"，" + reset}` : E`额度：${label}${what}（${src}）`), (reset ? E`Usage: ${label} ${what} (${src})${"; " + reset}` : E`Usage: ${label} ${what} (${src})`));
   if (status) line += L(E`。${status}，${quotaStaleNote(q, now)}`, E`. ${status}; ${quotaStaleNote(q, now)}`);
   else if (stale) line += L(E`（${quotaStaleNote(q, now)}）`, E` (${quotaStaleNote(q, now)})`);
   const level: QuotaLevel = quotaNeedsAction(q) ? "action" : quotaSpent(worst) ? "spent" : quotaTight(worst) ? "tight" : "ok";

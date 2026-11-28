@@ -13,7 +13,7 @@ import { PageHero, SectionHead, SectionSkeleton } from "@/app/PageHero";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { describe, fromCron, localZone, nextRun, soonLabel, toCron, weekChips, type Every } from "@/app/schedule";
-import { L, E } from "@/lib/i18n";
+import { L, E, locale } from "@/lib/i18n";
 import { bytes, cn, timeAgo } from "@/lib/utils";
 
 /**
@@ -32,8 +32,8 @@ import { bytes, cn, timeAgo } from "@/lib/utils";
 
 const outcomeWords = (r: AutomationRun) =>
   r.outcome === "sent" ? L("已发送", "Sent")
-    : r.outcome === "skipped" ? L(E`跳过了${r.error ? `：${skipWhy(r.error)}` : ""}`, E`Skipped${r.error ? `: ${r.error}` : ""}`)
-      : L(E`没发出去${r.error ? `：${r.error}` : ""}`, E`Not sent${r.error ? `: ${r.error}` : ""}`);
+    : r.outcome === "skipped" ? L((r.error ? E`跳过了：${skipWhy(r.error)}` : E`跳过了`), (r.error ? E`Skipped: ${r.error}` : E`Skipped`))
+      : L((r.error ? E`没发出去：${r.error}` : E`没发出去`), (r.error ? E`Not sent: ${r.error}` : E`Not sent`));
 const skipWhy = (e: string) => e === "expired" ? "已到结束时间" : e === "once" ? "已经执行过一次" : e === "project_scope_changed" ? "项目或目标权限已变更" : /starts_at|active period has not started/.test(e) ? "还没到开始时间" : /not finished/.test(e) ? "上一次的任务还没做完" : e;
 const boundLocal = (value?: string) => value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0,16) : "";
 const disabledWords = (a: Automation) => a.disabled_reason === "expired" ? L("已到期", "Expired") : a.disabled_reason === "once" ? L("已执行一次", "Single attempt used") : a.disabled_reason === "project_scope_changed" ? L("项目范围已变更", "Project scope changed") : L("已暂停", "Paused");
@@ -287,8 +287,7 @@ function whenAt(iso: string, now: number): string {
   if (back === 0) return L(E`今天 ${hm}`, E`Today ${hm}`);
   if (back === 1) return L(E`昨天 ${hm}`, E`Yesterday ${hm}`);
   const sameYear = d.getFullYear() === new Date(now).getFullYear();
-  return L(E`${sameYear ? "" : `${d.getFullYear()}年`}${d.getMonth() + 1}月${d.getDate()}日 ${hm}`,
-    E`${d.toLocaleDateString("en", { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) })} ${hm}`);
+  return `${d.toLocaleDateString(locale(), { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) })} ${hm}`;
 }
 
 type RunFilter = "all" | "sent" | "skipped" | "failed";

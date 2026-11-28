@@ -112,13 +112,13 @@ function historyLines(e: AuditEntry): string[] {
     });
   }
   switch (e.action) {
-    case "agent.visibility": return [L(E`可见范围改为「${e.detail === "private" ? "仅自己" : "团队可见"}」`, (e.detail === "private" ? E`Visibility set to only its owner` : E`Visibility set to everyone on the hub`))];
+    case "agent.visibility": return [L((e.detail === "private" ? E`可见范围改为「仅自己」` : E`可见范围改为「团队可见」`), (e.detail === "private" ? E`Visibility set to only its owner` : E`Visibility set to everyone on the hub`))];
     case "agent.owner": return [L(E`转交：${e.detail || ""}`, E`Given: ${e.detail || ""}`)];
     case "agent.update": {
       try {
         const d = JSON.parse(e.detail || "") as { added?: string[]; removed?: string[] };
         if (Array.isArray(d.added) && Array.isArray(d.removed)) return [
-          L(E`允许谁派任务：新增 ${d.added.join(", ") || "无"}；移除 ${d.removed.join(", ") || "无"}`, E`Who can give tasks: added ${d.added.join(", ") || "none"}; removed ${d.removed.join(", ") || "none"}`),
+          L(E`允许谁派任务：新增 ${d.added.join(", ") || L("无", "none")}；移除 ${d.removed.join(", ") || L("无", "none")}`, E`Who can give tasks: added ${d.added.join(", ") || L("无", "none")}; removed ${d.removed.join(", ") || L("无", "none")}`),
         ];
       } catch { /* Older Hubs store a human-readable list. */ }
       return [e.detail?.startsWith("allow_from: ") ? L(E`允许谁派任务：${e.detail.slice(12)}`, E`Who can give tasks: ${e.detail.slice(12)}`) : (e.detail || L("修改", "Changed"))];
@@ -485,8 +485,8 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
         description={remote
-          ? L(E`它在另一台电脑上：它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型），由它那台电脑上的 runner 照着改。只影响这个 agent，密钥只存在它那台电脑上。`, (codex ? E`It runs on another computer: which provider (endpoint, key and model) its Codex uses; the runner there applies it. Only this agent is affected; keys stay on that computer.` : E`It runs on another computer: which provider (endpoint, key and model) its Claude Code uses; the runner there applies it. Only this agent is affected; keys stay on that computer.`))
-          : L(E`后台唤醒这个 agent 时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`, (codex ? E`Which provider (endpoint, key and model) this agent's Codex uses when it is woken in the background. Only this agent is affected; keys stay on this computer.` : E`Which provider (endpoint, key and model) this agent's Claude Code uses when it is woken in the background. Only this agent is affected; keys stay on this computer.`))}>
+          ? L((codex ? E`它在另一台电脑上：它的 Codex 用哪个服务商（地址、密钥和模型），由它那台电脑上的 runner 照着改。只影响这个 agent，密钥只存在它那台电脑上。` : E`它在另一台电脑上：它的 Claude Code 用哪个服务商（地址、密钥和模型），由它那台电脑上的 runner 照着改。只影响这个 agent，密钥只存在它那台电脑上。`), (codex ? E`It runs on another computer: which provider (endpoint, key and model) its Codex uses; the runner there applies it. Only this agent is affected; keys stay on that computer.` : E`It runs on another computer: which provider (endpoint, key and model) its Claude Code uses; the runner there applies it. Only this agent is affected; keys stay on that computer.`))
+          : L((codex ? E`后台唤醒这个 agent 时，它的 Codex 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。` : E`后台唤醒这个 agent 时，它的 Claude Code 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`), (codex ? E`Which provider (endpoint, key and model) this agent's Codex uses when it is woken in the background. Only this agent is affected; keys stay on this computer.` : E`Which provider (endpoint, key and model) this agent's Claude Code uses when it is woken in the background. Only this agent is affected; keys stay on this computer.`))}>
         <div className="app-provider-list" role="radiogroup" data-testid="provider-options">
           <label className={cn("app-provider-opt", choice === "" && "picked")}>
             <input type="radio" name="provider" checked={choice === ""} onChange={() => setChoice("")} />
@@ -496,8 +496,8 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
                 {following
                   ? L(E`现在走的是 ${following}`, E`Now going through ${following}`)
                   : current ? L(E`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, E`Now “${current.name}”; changes when you switch in cc-switch`)
-                  : remote ? L(E`用它那台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, (codex ? E`Uses Codex's own settings on its computer` : E`Uses Claude Code's own settings on its computer`))
-                  : L(E`用这台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, (codex ? E`Uses Codex's own settings on this computer` : E`Uses Claude Code's own settings on this computer`))}
+                  : remote ? L((codex ? E`用它那台电脑上 Codex 自己的设置` : E`用它那台电脑上 Claude Code 自己的设置`), (codex ? E`Uses Codex's own settings on its computer` : E`Uses Claude Code's own settings on its computer`))
+                  : L((codex ? E`用这台电脑上 Codex 自己的设置` : E`用这台电脑上 Claude Code 自己的设置`), (codex ? E`Uses Codex's own settings on this computer` : E`Uses Claude Code's own settings on this computer`))}
               </small>
             </span>
           </label>
@@ -1346,7 +1346,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
                 <div className="app-goal-now" data-testid="agent-goal">
                   <span>{row.st.goal.state === "paused" ? L("目标（已暂停）", "Goal (paused)") : L("当前目标", "Current goal")}</span>
                   <b>{row.st.goal.objective}</b>
-                  <small>{[L(E`第 ${row.st.goal.round}${row.st.goal.max_rounds ? `/${row.st.goal.max_rounds}` : ""} 轮`, E`round ${row.st.goal.round}${row.st.goal.max_rounds ? ` of ${row.st.goal.max_rounds}` : ""}`),
+                  <small>{[L((row.st.goal.max_rounds ? E`第 ${row.st.goal.round}/${row.st.goal.max_rounds} 轮` : E`第 ${row.st.goal.round} 轮`), (row.st.goal.max_rounds ? E`round ${row.st.goal.round} of ${row.st.goal.max_rounds}` : E`round ${row.st.goal.round}`)),
                     row.st.goal.next_wake_at ? L(E`下次唤醒 ${new Date(row.st.goal.next_wake_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}`, E`next ${new Date(row.st.goal.next_wake_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}`) : ""].filter(Boolean).join(" · ")}</small>
                 </div>
               )}
@@ -1471,7 +1471,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             <div className="app-group-title"><span className="name">{embedded ? L("管理", "Manage") : L("操作", "Actions")}</span></div>
             <div className="app-list">
               {!mayManage && (
-                <div className="app-empty-note">{L(E`这是 ${ag.owner || L("别人", "someone else")} 的 agent，只有 ${ag.owner || L("他", "they")} 或管理员能修改。`, E`This node belongs to ${ag.owner || "someone else"}; only they or an admin can change it.`)}</div>
+                <div className="app-empty-note">{L(E`这是 ${ag.owner || L("别人", "someone else")} 的 agent，只有 ${ag.owner || L("他", "they")} 或管理员能修改。`, E`This node belongs to ${ag.owner || L("别人", "someone else")}; only they or an admin can change it.`)}</div>
               )}
               {!embedded && (
                 <button type="button" className="app-action-row" onClick={() => openAction("profile")} disabled={!mayManage}>
@@ -1673,7 +1673,7 @@ export function Inspector({ row, now, projects, onClose, onRefresh, onThread, on
             <input type="radio" name="visibility" checked={visChoice === "private"} onChange={() => setVisChoice("private")} disabled={busy} />
             <span>
               <b>{L("仅自己", "Only its owner")}</b>
-              <small>{L(E`只有 ${ag.owner || "主人"} 和 ${ag.owner || "主人"} 自己的 agent 能找到它、给它派活；别人的回复照常能收到。`, E`Only ${ag.owner || "its owner"} and their own agents can find it and give it tasks; replies from others still arrive.`)}</small>
+              <small>{L(E`只有 ${ag.owner || L("主人", "its owner")} 和 ${ag.owner || L("主人", "its owner")} 自己的 agent 能找到它、给它派活；别人的回复照常能收到。`, E`Only ${ag.owner || L("主人", "its owner")} and their own agents can find it and give it tasks; replies from others still arrive.`)}</small>
             </span>
           </label>
         </div>

@@ -151,20 +151,20 @@ function Findings({ diag }: { diag: Diagnosis }) {
     if (proxy && h.proxy !== undefined) {
       const proxyOK = answered(h.proxy);
       if (!proxyOK && directOK) {
-        rows.push({ tone: "bad", title: L(E`经代理连不上${mine ? "工作区" : name}，直连是通的`, E`${name}: unreachable through the proxy, reachable directly`),
+        rows.push({ tone: "bad", title: L((mine ? E`经代理连不上工作区，直连是通的` : E`经代理连不上${name}，直连是通的`), E`${name}: unreachable through the proxy, reachable directly`),
           detail: L(E`myco 后台被设成走代理 ${proxy}，这个代理现在连不上。修好代理，或者让 myco 连工作区时不走代理：把工作区的地址加进服务的 NO_PROXY，再重启后台。`, E`Its runner goes through the proxy ${proxy}, which does not get through now. Fix the proxy, or let myco reach the workspace directly: add the workspace's host to the service's NO_PROXY and restart the runner.`) });
         continue;
       }
       if (!proxyOK && !directOK) {
-        rows.push({ tone: "bad", title: L(E`连不上${mine ? "工作区" : name}`, E`${name}: unreachable`), detail: L(E`经代理 ${proxy} 和直连都不通：看看那台电脑的网络。`, E`Neither through the proxy ${proxy} nor directly: check its network.`) });
+        rows.push({ tone: "bad", title: L((mine ? E`连不上工作区` : E`连不上${name}`), E`${name}: unreachable`), detail: L(E`经代理 ${proxy} 和直连都不通：看看那台电脑的网络。`, E`Neither through the proxy ${proxy} nor directly: check its network.`) });
         continue;
       }
-      rows.push({ tone: "ok", title: L(E`连得上${mine ? "工作区" : name}`, E`Reaches ${name}`), detail: L(E`经代理 ${proxy}`, E`through the proxy ${proxy}`) });
+      rows.push({ tone: "ok", title: L((mine ? E`连得上工作区` : E`连得上${name}`), E`Reaches ${name}`), detail: L(E`经代理 ${proxy}`, E`through the proxy ${proxy}`) });
       continue;
     }
     rows.push(directOK
-      ? { tone: "ok", title: L(E`连得上${mine ? "工作区" : name}`, E`Reaches ${name}`) }
-      : { tone: "bad", title: L(E`连不上${mine ? "工作区" : name}`, E`${name}: unreachable`), detail: L("那台电脑访问不到工作区的地址：多半是网络或防火墙，或者工作区只在局域网里。", "It cannot reach the workspace's address: its network or a firewall, or the workspace is only on a local network.") });
+      ? { tone: "ok", title: L((mine ? E`连得上工作区` : E`连得上${name}`), E`Reaches ${name}`) }
+      : { tone: "bad", title: L((mine ? E`连不上工作区` : E`连不上${name}`), E`${name}: unreachable`), detail: L("那台电脑访问不到工作区的地址：多半是网络或防火墙，或者工作区只在局域网里。", "It cannot reach the workspace's address: its network or a firewall, or the workspace is only on a local network.") });
   }
   if (diag.hubs.length === 0 && f.myco && f.myco !== "none") {
     rows.push({ tone: "bad", title: L("它还没连上任何工作区", "It is in no workspace"), detail: L("从「连一台电脑」重新连它一次。", "Connect it again from Connect a computer.") });

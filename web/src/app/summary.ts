@@ -13,7 +13,7 @@ export function summarize(m: Message): string {
       if (v && typeof v === "object" && "exit_code" in v) {
         const code = (v as { exit_code?: unknown }).exit_code;
         return typeof code === "number"
-          ? L(E`命令执行${code === 0 ? "完成" : "失败"}（退出码 ${code}）`, (code === 0 ? E`Command succeeded (exit code ${code})` : E`Command failed (exit code ${code})`))
+          ? L((code === 0 ? E`命令执行完成（退出码 ${code}）` : E`命令执行失败（退出码 ${code}）`), (code === 0 ? E`Command succeeded (exit code ${code})` : E`Command failed (exit code ${code})`))
           : L("命令执行结果", "Command result");
       }
     } catch { /* ordinary text */ }

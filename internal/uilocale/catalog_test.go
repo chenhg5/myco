@@ -24,7 +24,7 @@ func TestCatalogsAndFallback(t *testing.T) {
 			if got := Text(language, "设置", "Settings"); got == "" || got == "Settings" {
 				t.Errorf("missing core translation: %s", got)
 			}
-			format := Text(language, "有新版本 %s，点一下更新", "myco %s is out: update")
+			format := Text(language, "有新版本 %s，点此更新", "myco %s is out: update")
 			if got := fmt.Sprintf(format, "v1.2.3"); !strings.Contains(got, "v1.2.3") || strings.Contains(got, "%!") {
 				t.Fatalf("version placeholder: %s", got)
 			}

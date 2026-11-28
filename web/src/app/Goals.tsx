@@ -150,7 +150,7 @@ export function GoalBar({ hubId, goal, onChanged }: { hubId: string; goal: Goal 
       {(paused || backedOff) && (
         <div className={cn("goal-note", paused ? "is-paused" : "is-backoff")}>
           {paused
-            ? L(E`暂停了，等你决定：${goal.outcome || "连续几轮没有进展"}`, E`Paused, waiting for you: ${goal.outcome || "several rounds without progress"}`)
+            ? L(E`暂停了，等你决定：${goal.outcome || L("连续几轮没有进展", "several rounds without progress")}`, E`Paused, waiting for you: ${goal.outcome || L("连续几轮没有进展", "several rounds without progress")}`)
             : L(E`连续 ${goal.no_progress} 轮没有进展，间隔放宽到 ${span(goal.every_sec * 1000)}`, E`${goal.no_progress} rounds without progress: now every ${span(goal.every_sec * 1000)}`)}
         </div>
       )}
@@ -264,7 +264,7 @@ export function GoalEnded({ g, nameOf }: { g: Goal; nameOf: (n: string) => strin
     : g.state === "abandoned" ? L(E`目标放弃了：${what}`, E`Goal given up: ${what}`)
     : g.outcome === "round_limit" || (g.state === "expired" && g.round >= g.max_rounds) ? L(E`目标轮次用完了：${what}`, E`Goal out of rounds: ${what}`)
     : g.state === "expired" ? L(E`目标到期了：${what}`, E`Goal out of time: ${what}`)
-    : L(E`${g.ended_by ? nameOf(g.ended_by) : "有人"}停止了目标：${what}`, E`${g.ended_by ? nameOf(g.ended_by) : "Someone"} stopped the goal: ${what}`);
+    : L((g.ended_by ? E`${nameOf(g.ended_by)}停止了目标：${what}` : E`有人停止了目标：${what}`), (g.ended_by ? E`${nameOf(g.ended_by)} stopped the goal: ${what}` : E`Someone stopped the goal: ${what}`));
   return (
     <div className={cn("goal-ended", `is-${g.state}`, open && "is-open")} data-goal={g.id}>
       <button type="button" className="goal-ended-line" onClick={() => setOpen((o) => !o)} aria-expanded={open}>

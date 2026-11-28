@@ -687,8 +687,8 @@ function OpenElsewhere({ open, onClose, hubUrl, onRelink }: { open: boolean; onC
   let port = "";
   try { port = new URL(hubUrl).port; } catch { /* default */ }
   const cmd = `myco hub up --tunnel ${tunnel}`;
-  const ask = L(E`帮我把这台电脑上的 myco 工作区开放到公网：运行 ${cmd}${port && port !== "7780" ? `（它在 ${port} 端口）` : ""}，完成后告诉我它给出的公网地址。`,
-    E`Open the myco workspace on this computer to the internet: run ${cmd}${port && port !== "7780" ? ` (it is on port ${port})` : ""}, then tell me the public address it prints.`);
+  const ask = L((port && port !== "7780" ? E`帮我把这台电脑上的 myco 工作区开放到公网：运行 ${cmd}（它在 ${port} 端口），完成后告诉我它给出的公网地址。` : E`帮我把这台电脑上的 myco 工作区开放到公网：运行 ${cmd}，完成后告诉我它给出的公网地址。`),
+    (port && port !== "7780" ? E`Open the myco workspace on this computer to the internet: run ${cmd} (it is on port ${port}), then tell me the public address it prints.` : E`Open the myco workspace on this computer to the internet: run ${cmd}, then tell me the public address it prints.`));
   return (
     <Modal open={open} onOpenChange={(o) => !o && onClose()} title={L("把工作区开放到公网", "Open the workspace to the internet")} className="reach-dialog"
       description={L("这个工作区跑在另一台电脑上，开放要在那台电脑上做。开放以后，哪里的电脑都能连上它。", "This workspace runs on another computer, so it is opened there. Then computers anywhere can connect.")}>
@@ -1041,7 +1041,7 @@ function NewAgentPane({ open, hubId, rows, machine, here, state, onStarted, onSt
               ))}
             </div>
             <span className={cn("app-field-hint", tooHigh && "is-bad")}>{tooHigh
-              ? L(E`「${machine.name}」最多允许「${info?.max_access === "readonly" ? "只读" : "这个文件夹"}」。要放开，在那台电脑的 ~/.myco/machine.yaml 里设置 spawn.max_access。`, E`“${machine.name}” allows at most ${info?.max_access}. To allow more, set spawn.max_access in ~/.myco/machine.yaml there.`)
+              ? L((info?.max_access === "readonly" ? E`「${machine.name}」最多允许「只读」。要放开，在那台电脑的 ~/.myco/machine.yaml 里设置 spawn.max_access。` : E`「${machine.name}」最多允许「这个文件夹」。要放开，在那台电脑的 ~/.myco/machine.yaml 里设置 spawn.max_access。`), E`“${machine.name}” allows at most ${info?.max_access}. To allow more, set spawn.max_access in ~/.myco/machine.yaml there.`)
               : access === "full"
                 ? L("没有沙箱：能读写那台电脑上的任何文件、跑任何命令。", "No sandbox: it may read and write any file and run any command there.")
                 : access === "readonly"
