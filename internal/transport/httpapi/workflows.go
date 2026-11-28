@@ -289,7 +289,7 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request, c app.Caller) 
 }
 
 func (s *Server) getRun(w http.ResponseWriter, r *http.Request, c app.Caller) {
-	if r.URL.Query().Has("view") {
+	if r.Method == http.MethodGet && r.URL.Query().Has("view") {
 		s.getRunView(w, r, c)
 		return
 	}

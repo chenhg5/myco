@@ -38,4 +38,13 @@ func TestWorkflowRunViewsHTTPValidationAndScope(t *testing.T) {
 	for _, query := range []string{"", "?view=compact", "?view=step&step=" + instance} {
 		h.do("GET", path+query, outsider, nil).wantErr(t, 404, "not_found")
 	}
+	// Existing action responses must not acquire the GET-only view parser.
+	cancelled := h.do("POST", path+"/cancel?view=unknown", adminToken, nil).want(t, 200)
+	if _, ok := cancelled.body["view"]; ok {
+		t.Fatal("GET projection changed the legacy action response")
+	}
+	if _, ok := cancelled.body["definition"]; !ok {
+		t.Fatal("legacy cancel response lost its full definition")
+	}
+
 }
