@@ -4,7 +4,7 @@ import type { Message } from "@/api";
 import { appApi } from "@/appapi";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { exportName, stepsOf, toJsonl, toMarkdown, type ExportFormat, type ExportStep } from "@/app/chatExport";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,7 +47,7 @@ export function ExportChat({ open, onClose, hubId, withWhom, messages, nameOf }:
       }
       const ordered = [...messages].sort((a, b) => a.created_at.localeCompare(b.created_at));
       const content = format === "md"
-        ? toMarkdown(ordered, { title: L(`和 ${withWhom} 的对话`, `Conversation with ${withWhom}`), nameOf, steps: byTask })
+        ? toMarkdown(ordered, { title: L(E`和 ${withWhom} 的对话`, E`Conversation with ${withWhom}`), nameOf, steps: byTask })
         : toJsonl(ordered, byTask);
       const r = await appApi.saveExport(exportName(withWhom, format), content);
       setSaved(r.path);
@@ -60,7 +60,7 @@ export function ExportChat({ open, onClose, hubId, withWhom, messages, nameOf }:
 
   return (
     <Modal open={open} onOpenChange={(o) => !o && !busy && onClose()} title={L("导出对话", "Export the conversation")}
-      description={L(`和 ${withWhom} 的 ${messages.length} 条消息，存到「下载」文件夹。`, `${messages.length} messages with ${withWhom}, saved to Downloads.`)}>
+      description={L(E`和 ${withWhom} 的 ${messages.length} 条消息，存到「下载」文件夹。`, E`${messages.length} messages with ${withWhom}, saved to Downloads.`)}>
       <div data-testid="export-chat">
         <div className="app-field">
           <span className="app-field-label">{L("格式", "Format")}</span>

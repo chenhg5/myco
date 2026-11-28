@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { appApi, type HubOverview } from "@/appapi";
 import { ErrorText, Modal } from "@/app/dialogs";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 // Hubs whose name should be confirmed (just joined through an invite link),
 // and hubs where the person chose "later". Per device, best effort.
@@ -69,7 +69,7 @@ export function NamePrompt({ hubsOv, onRefresh }: { hubsOv?: HubOverview[]; onRe
   };
 
   return (
-    <Modal open onOpenChange={(o) => !o && !busy && skip()} title={L(`你在「${hub.name}」上叫什么？`, `What should you be called on “${hub.name}”?`)}
+    <Modal open onOpenChange={(o) => !o && !busy && skip()} title={L(E`你在「${hub.name}」上叫什么？`, E`What should you be called on “${hub.name}”?`)}
       description={L("你发的消息会署这个名字，你的 agent 会显示为「名字 的」。之后也能在设置里改。", "This name is used on this Hub only: what you send from the app is signed with it, and nodes you add show as yours. You can use a different name on each Hub, and change it later under Settings → People.")}>
       <form onSubmit={(e) => { e.preventDefault(); void save(); }}>
         <label className="app-field">

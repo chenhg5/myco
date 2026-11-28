@@ -5,7 +5,7 @@ import { ApiError, appApi } from "@/appapi";
 import type { AgentRow } from "@/app/types";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { thisComputerId } from "@/app/nodes";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /*
  * How many agent CLIs a computer runs at once (its runner, shared between
@@ -124,8 +124,8 @@ export function ConcurrencyLimit({ hubId, machine, here, owns, slots, onChanged,
         <div className="cc-text">
           {titled && <b>{L("同时干活", "At once")}</b>}
           <span>{limit === undefined ? L("正在问它…", "Asking it…")
-            : L(`最多 ${limit} 个 agent 同时干活${inUse !== undefined ? `，现在 ${inUse} 个在跑` : ""}${waiting ? `，${waiting} 个在排队` : ""}`,
-              `Up to ${limit} agents at once${inUse !== undefined ? `; ${inUse} running` : ""}${waiting ? `, ${waiting} waiting` : ""}`)}</span>
+            : L(E`最多 ${limit} 个 agent 同时干活${inUse !== undefined ? `，现在 ${inUse} 个在跑` : ""}${waiting ? `，${waiting} 个在排队` : ""}`,
+              E`Up to ${limit} agents at once${inUse !== undefined ? `; ${inUse} running` : ""}${waiting ? `, ${waiting} waiting` : ""}`)}</span>
         </div>
         {owns && !state?.tooOld && limit !== undefined && (
           <div className="cc-edit">
@@ -140,7 +140,7 @@ export function ConcurrencyLimit({ hubId, machine, here, owns, slots, onChanged,
             </div>
             {changed && (
               <button type="button" className="app-btn app-btn-small app-btn-primary" disabled={saving} onClick={() => void save()} data-testid="concurrency-save">
-                {saving ? L("正在改…", "Saving…") : L(`改成 ${value} 个`, `Set to ${value}`)}
+                {saving ? L("正在改…", "Saving…") : L(E`改成 ${value} 个`, E`Set to ${value}`)}
               </button>
             )}
           </div>
@@ -154,8 +154,8 @@ export function ConcurrencyLimit({ hubId, machine, here, owns, slots, onChanged,
       )}
       {waitingFor !== null && <p className="app-small-note cc-note">{L("几秒内生效，正在跑的任务不受影响…", "Takes effect within seconds; running tasks are not interrupted…")}</p>}
       {here && state?.notLive && (state.setting || 0) > 0 && (
-        <p className="app-small-note cc-note" data-testid="concurrency-not-live">{L(`已经记下最多 ${state.setting} 个。这台电脑的 runner 还没用上它（没在跑，或者版本较旧）：重启 runner 后生效。`,
-          `Saved: up to ${state.setting}. This computer's runner does not use it yet (not running, or older): restart the runner.`)}
+        <p className="app-small-note cc-note" data-testid="concurrency-not-live">{L(E`已经记下最多 ${state.setting} 个。这台电脑的 runner 还没用上它（没在跑，或者版本较旧）：重启 runner 后生效。`,
+          E`Saved: up to ${state.setting}. This computer's runner does not use it yet (not running, or older): restart the runner.`)}
           {" "}<button type="button" className="app-btn app-btn-small cc-restart" onClick={() => void appApi.restartRunner().then(() => window.setTimeout(() => void load(), 3000)).catch(setError)}>{L("重启 runner", "Restart the runner")}</button></p>
       )}
       <ErrorText error={error} />
@@ -176,7 +176,7 @@ export function RaiseLimit({ hub, machine, slots }: { hub: AgentRow["hub"]; mach
   return (
     <>
       <button type="button" className="app-btn app-btn-small trace-wait-act" onClick={() => setOpen(true)} data-testid="raise-limit">{L("调高上限", "Raise the limit")}</button>
-      <Modal open={open} onOpenChange={setOpen} title={L(`${machine.name} 同时干活的上限`, `How many run at once on ${machine.name}`)}
+      <Modal open={open} onOpenChange={setOpen} title={L(E`${machine.name} 同时干活的上限`, E`How many run at once on ${machine.name}`)}
         description={L("多出来的任务会排队，轮到了才开始。调高后排队的任务马上开始，正在跑的不受影响。", "Tasks beyond it wait their turn. Raising it starts waiting ones at once; running ones are not affected.")}>
         {here === null ? <p className="app-small-note">{L("正在问它…", "Asking it…")}</p>
           : <ConcurrencyLimit hubId={hub.id} machine={machine} here={here} owns slots={slots} titled={false} />}

@@ -13,7 +13,7 @@ import { PageHero, SectionHead, SectionSkeleton } from "@/app/PageHero";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { describe, fromCron, localZone, nextRun, soonLabel, toCron, weekChips, type Every } from "@/app/schedule";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { bytes, cn, timeAgo } from "@/lib/utils";
 
 /**
@@ -32,12 +32,12 @@ import { bytes, cn, timeAgo } from "@/lib/utils";
 
 const outcomeWords = (r: AutomationRun) =>
   r.outcome === "sent" ? L("已发送", "Sent")
-    : r.outcome === "skipped" ? L(`跳过了${r.error ? `：${skipWhy(r.error)}` : ""}`, `Skipped${r.error ? `: ${r.error}` : ""}`)
-      : L(`没发出去${r.error ? `：${r.error}` : ""}`, `Not sent${r.error ? `: ${r.error}` : ""}`);
+    : r.outcome === "skipped" ? L(E`跳过了${r.error ? `：${skipWhy(r.error)}` : ""}`, E`Skipped${r.error ? `: ${r.error}` : ""}`)
+      : L(E`没发出去${r.error ? `：${r.error}` : ""}`, E`Not sent${r.error ? `: ${r.error}` : ""}`);
 const skipWhy = (e: string) => e === "expired" ? "已到结束时间" : e === "once" ? "已经执行过一次" : e === "project_scope_changed" ? "项目或目标权限已变更" : /starts_at|active period has not started/.test(e) ? "还没到开始时间" : /not finished/.test(e) ? "上一次的任务还没做完" : e;
 const boundLocal = (value?: string) => value ? new Date(new Date(value).getTime() - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0,16) : "";
 const disabledWords = (a: Automation) => a.disabled_reason === "expired" ? L("已到期", "Expired") : a.disabled_reason === "once" ? L("已执行一次", "Single attempt used") : a.disabled_reason === "project_scope_changed" ? L("项目范围已变更", "Project scope changed") : L("已暂停", "Paused");
-const boundsWords = (a: Automation) => [a.starts_at ? L(`从 ${new Date(a.starts_at).toLocaleString()}`, `From ${new Date(a.starts_at).toLocaleString()}`) : "", a.ends_at ? L(`至 ${new Date(a.ends_at).toLocaleString()}`, `Until ${new Date(a.ends_at).toLocaleString()}`) : "", a.once ? L("只跑一次", "Run once") : ""].filter(Boolean).join(" · ");
+const boundsWords = (a: Automation) => [a.starts_at ? L(E`从 ${new Date(a.starts_at).toLocaleString()}`, E`From ${new Date(a.starts_at).toLocaleString()}`) : "", a.ends_at ? L(E`至 ${new Date(a.ends_at).toLocaleString()}`, E`Until ${new Date(a.ends_at).toLocaleString()}`) : "", a.once ? L("只跑一次", "Run once") : ""].filter(Boolean).join(" · ");
 const triggerWords = (t: AutomationRun["trigger"]) => (t === "schedule" ? L("到点", "On schedule") : t === "webhook" ? L("Webhook", "Webhook") : L("手动", "By hand"));
 const outcomeTone = (r: AutomationRun) => (r.outcome === "sent" ? "is-ok" : r.outcome === "failed" ? "is-bad" : "is-skip");
 
@@ -248,11 +248,11 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage, onOpenRun }: 
                     {boundsWords(a) && <span className="au-row-what" data-testid="automation-bounds">{boundsWords(a)}</span>}
                     <span className="au-row-status">
                       {!a.enabled ? <span>{disabledWords(a)}</span>
-                        : a.next_run_at ? <span>{L(`下次 ${soonLabel(new Date(a.next_run_at), new Date(now))}`, `Next ${soonLabel(new Date(a.next_run_at), new Date(now))}`)}</span>
+                        : a.next_run_at ? <span>{L(E`下次 ${soonLabel(new Date(a.next_run_at), new Date(now))}`, E`Next ${soonLabel(new Date(a.next_run_at), new Date(now))}`)}</span>
                           : a.webhook ? <span>{L("等外部调用", "Waiting for a call")}</span> : null}
                       {a.last_run && (
                         <span className={cn("au-last", outcomeTone(a.last_run))} title={outcomeWords(a.last_run)}>
-                          <i aria-hidden /><span className="au-last-text">{L(`上次 ${timeAgo(a.last_run.at, now)} · `, `Last ${timeAgo(a.last_run.at, now)} · `)}{outcomeWords(a.last_run)}</span>
+                          <i aria-hidden /><span className="au-last-text">{L(E`上次 ${timeAgo(a.last_run.at, now)} · `, E`Last ${timeAgo(a.last_run.at, now)} · `)}{outcomeWords(a.last_run)}</span>
                         </span>
                       )}
                     </span>
@@ -262,7 +262,7 @@ export function AutomationsPage({ hubId, rows, now, onOpenMessage, onOpenRun }: 
                 <span className="wf-row-actions">
                   <button type="button" className="app-btn app-btn-small wf-run-now" disabled={busy === a.id} onClick={() => void runNow(a)}
                     title={L("立即运行：现在就发一次", "Run now: send it once now")}><Play />{L("运行", "Run")}</button>
-                  <button type="button" className="app-btn app-btn-small wf-more" aria-label={L(`${a.name}：更多`, `${a.name}: more`)}
+                  <button type="button" className="app-btn app-btn-small wf-more" aria-label={L(E`${a.name}：更多`, E`${a.name}: more`)}
                     title={L("编辑、暂停、删除", "Edit, pause, delete")} onClick={(e) => menu.openUnder(e.currentTarget, rowMenu(a))}><MoreHorizontal /></button>
                 </span>
               </div>
@@ -284,11 +284,11 @@ function whenAt(iso: string, now: number): string {
   const hm = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const back = Math.round((day(new Date(now)) - day(d)) / 86_400_000);
-  if (back === 0) return L(`今天 ${hm}`, `Today ${hm}`);
-  if (back === 1) return L(`昨天 ${hm}`, `Yesterday ${hm}`);
+  if (back === 0) return L(E`今天 ${hm}`, E`Today ${hm}`);
+  if (back === 1) return L(E`昨天 ${hm}`, E`Yesterday ${hm}`);
   const sameYear = d.getFullYear() === new Date(now).getFullYear();
-  return L(`${sameYear ? "" : `${d.getFullYear()}年`}${d.getMonth() + 1}月${d.getDate()}日 ${hm}`,
-    `${d.toLocaleDateString("en", { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) })} ${hm}`);
+  return L(E`${sameYear ? "" : `${d.getFullYear()}年`}${d.getMonth() + 1}月${d.getDate()}日 ${hm}`,
+    E`${d.toLocaleDateString("en", { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) })} ${hm}`);
 }
 
 type RunFilter = "all" | "sent" | "skipped" | "failed";
@@ -329,7 +329,7 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
           <p className="pcd-sub">
             <span className={cn("pc-online", a.enabled && "is-on")}>{a.enabled ? L("在运行", "Running") : disabledWords(a)}</span>
             <span>{when}</span>
-            {a.enabled && a.next_run_at && <span>{L(`下次 ${soonLabel(new Date(a.next_run_at), new Date(now))}`, `Next ${soonLabel(new Date(a.next_run_at), new Date(now))}`)}</span>}
+            {a.enabled && a.next_run_at && <span>{L(E`下次 ${soonLabel(new Date(a.next_run_at), new Date(now))}`, E`Next ${soonLabel(new Date(a.next_run_at), new Date(now))}`)}</span>}
           </p>
         </div>
         {/* As a workflow's: 编辑, 立即运行 and a square ⋯ (pause, delete). */}
@@ -356,7 +356,7 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
             <span className="app-kv-value aud-to">{row && <Avatar agent={row.st.agent} size={18} badge={false} />}<b>{row ? nodeName(row.st.agent, row.hub) : a.to}</b></span></div>
         )}
         <div className="app-kv"><span className="app-kv-label">{L("什么时候", "When")}</span>
-          <span className="app-kv-value">{boundsWords(a) && <span className="app-kv-sub">{boundsWords(a)}</span>}{when}{a.schedule && <span className="app-kv-sub">{L(`按 ${a.schedule.tz || "UTC"} 时间`, `${a.schedule.tz || "UTC"} time`)}</span>}</span></div>
+          <span className="app-kv-value">{boundsWords(a) && <span className="app-kv-sub">{boundsWords(a)}</span>}{when}{a.schedule && <span className="app-kv-sub">{L(E`按 ${a.schedule.tz || "UTC"} 时间`, E`${a.schedule.tz || "UTC"} time`)}</span>}</span></div>
         {a.webhook && a.webhook_url && (
           <div className="app-kv"><span className="app-kv-label">{L("Webhook 地址", "Webhook address")}</span>
             <span className="app-kv-value mono aud-url"><span>{a.webhook_url}</span><CopyButton value={a.webhook_url} /></span></div>
@@ -364,7 +364,7 @@ function AutomationDetail({ hubId, a, row, now, stamp, busy, error, onEdit, onRu
         <div className="app-kv"><span className="app-kv-label">{a.workflow ? L("上一次还没结束", "Last one still going") : L("上一次没做完", "Last one unfinished")}</span>
           <span className="app-kv-value">{a.skip_if_busy ? L("跳过这次", "Skip this run") : L("照样发", "Send anyway")}</span></div>
         {a.workflow ? Object.entries(a.inputs || {}).map(([k, v]) => (
-          <div key={k} className="app-kv"><span className="app-kv-label">{L(`输入 ${k}`, `Input ${k}`)}</span><span className="app-kv-value mono">{v}</span></div>
+          <div key={k} className="app-kv"><span className="app-kv-label">{L(E`输入 ${k}`, E`Input ${k}`)}</span><span className="app-kv-value mono">{v}</span></div>
         )) : (
           <div className="app-kv aud-what"><span className="app-kv-label">{L("让它做什么", "What it asks")}</span>
             <div className="aud-body">{a.body}</div></div>
@@ -567,7 +567,7 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
   const wfMissing = target === "workflow" && !hook ? (wfDef?.inputs?.required || []).find((k) => !(wfInputs[k] || "").trim()) : undefined;
   const missing = !name.trim() ? L("还没写名字", "It needs a name")
     : target === "workflow" ? (!wfId ? L("选一个工作流", "Pick a workflow")
-      : wfMissing ? L(`还没填「${wfDef?.inputs?.properties?.[wfMissing]?.title || wfMissing}」`, `Fill in "${wfMissing}"`) : !timed && !hook ? L("选一种触发方式：定时或 Webhook", "Pick when: on a schedule, or by webhook") : "")
+      : wfMissing ? L(E`还没填「${wfDef?.inputs?.properties?.[wfMissing]?.title || wfMissing}」`, E`Fill in "${wfMissing}"`) : !timed && !hook ? L("选一种触发方式：定时或 Webhook", "Pick when: on a schedule, or by webhook") : "")
     : !to ? L("还没选发给谁", "Pick whom it goes to")
       : !body.trim() ? L("还没写让它做什么", "Say what to ask")
         : !timed && !hook ? L("选一种触发方式：定时或 Webhook", "Pick when: on a schedule, or by webhook")
@@ -717,7 +717,7 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
                   <div className="au-chips" role="radiogroup" aria-label={L("隔几小时", "How many hours")}>
                     {[1, 2, 3, 4, 6, 8, 12].map((n) => (
                       <button key={n} type="button" role="radio" aria-checked={hours === n} className={cn("au-chip", hours === n && "is-on")}
-                        onClick={() => setHours(n)} disabled={busy}>{L(`${n} 小时`, `${n} h`)}</button>
+                        onClick={() => setHours(n)} disabled={busy}>{L(E`${n} 小时`, E`${n} h`)}</button>
                     ))}
                   </div>
                 )}
@@ -740,8 +740,8 @@ function AutomationEditor({ hubId, rows, editing, now, onClose, onChanged }: {
                 )}
                 <div className="au-summary">
                   {describe(toCron(every))}
-                  <span>{L(`${tz} 时间`, `${tz} time`)}</span>
-                  {next && <span>{L(`下次 ${soonLabel(next, new Date(now))}`, `next ${soonLabel(next, new Date(now))}`)}</span>}
+                  <span>{L(E`${tz} 时间`, E`${tz} time`)}</span>
+                  {next && <span>{L(E`下次 ${soonLabel(next, new Date(now))}`, E`next ${soonLabel(next, new Date(now))}`)}</span>}
                 </div>
               </div>
             )}

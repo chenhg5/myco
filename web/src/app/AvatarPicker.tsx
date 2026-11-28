@@ -4,7 +4,7 @@ import type { Agent } from "@/api";
 import { appApi } from "@/appapi";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { accessoryFits, Avatar, isWorkspace, LOOK_PARTS, lookOf, lookWord, MushroomFace, parseLook, pictureOf, type Look } from "@/app/persona";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
@@ -202,7 +202,7 @@ export function AvatarDialog({ open, onOpenChange, hubId, agent, onSaved }: {
               const on = choice.kind === "look" && base.cap === i;
               return (
                 <button key={c} type="button" role="radio" aria-checked={on} className={cn("av-color", on && "is-on")}
-                  style={{ background: c }} aria-label={L(`颜色 ${i + 1}`, `Colour ${i + 1}`)} onClick={() => pick({ cap: i })}>
+                  style={{ background: c }} aria-label={L(E`颜色 ${i + 1}`, E`Colour ${i + 1}`)} onClick={() => pick({ cap: i })}>
                   {on && <Check />}
                 </button>
               );
@@ -215,7 +215,7 @@ export function AvatarDialog({ open, onOpenChange, hubId, agent, onSaved }: {
               const acc = accessoryFits(base.acc, shape) ? base.acc : 0;
               return (
                 <button key={shape} type="button" role="radio" aria-checked={on} className={cn("av-cell", on && "is-on")}
-                  aria-label={L(`形状 ${shape + 1}`, `Shape ${shape + 1}`)} onClick={() => pick({ shape })}>
+                  aria-label={L(E`形状 ${shape + 1}`, E`Shape ${shape + 1}`)} onClick={() => pick({ shape })}>
                   {cell({ ...base, shape, acc, sprout: acc === 1 })}
                 </button>
               );
@@ -229,7 +229,7 @@ export function AvatarDialog({ open, onOpenChange, hubId, agent, onSaved }: {
               const on = choice.kind === "look" && base.pattern === pattern && base.face === face;
               return (
                 <button key={k} type="button" role="radio" aria-checked={on} className={cn("av-cell", on && "is-on")}
-                  aria-label={L(`花纹和表情 ${k + 1}`, `Spots and face ${k + 1}`)} onClick={() => pick({ pattern, face })}>
+                  aria-label={L(E`花纹和表情 ${k + 1}`, E`Spots and face ${k + 1}`)} onClick={() => pick({ pattern, face })}>
                   {cell({ ...base, pattern, face })}
                 </button>
               );
@@ -242,7 +242,7 @@ export function AvatarDialog({ open, onOpenChange, hubId, agent, onSaved }: {
               const on = choice.kind === "look" && base.acc === acc;
               return (
                 <button key={name} type="button" role="radio" aria-checked={on} disabled={!fits} className={cn("av-cell", on && "is-on")}
-                  aria-label={accessoryLabel(name)} title={fits ? accessoryLabel(name) : L(`${accessoryLabel(name)}：这个形状戴不上`, `${accessoryLabel(name)}: does not fit this shape`)}
+                  aria-label={accessoryLabel(name)} title={fits ? accessoryLabel(name) : L(E`${accessoryLabel(name)}：这个形状戴不上`, E`${accessoryLabel(name)}: does not fit this shape`)}
                   onClick={() => pick({ acc })}>
                   {cell({ ...base, acc, sprout: acc === 1 })}
                 </button>

@@ -6,7 +6,7 @@ import type { Attachment, Message } from "@/api";
 import { Markdown } from "@/app/Markdown";
 import { bytes } from "@/app/attach";
 import { handleLinkClick } from "@/app/links";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { SeekMushroom } from "@/app/Working";
 
@@ -126,12 +126,12 @@ function diffLines(before: string, after: string): Line[] {
   let folded = 0;
   all.forEach((l, k) => {
     if (l.kind !== "same" || near[k]) {
-      if (folded) out.push({ kind: "fold", text: L(`… ${folded} 行没变`, `… ${folded} unchanged lines`) });
+      if (folded) out.push({ kind: "fold", text: L(E`… ${folded} 行没变`, E`… ${folded} unchanged lines`) });
       folded = 0;
       out.push(l);
     } else folded++;
   });
-  if (folded) out.push({ kind: "fold", text: L(`… ${folded} 行没变`, `… ${folded} unchanged lines`) });
+  if (folded) out.push({ kind: "fold", text: L(E`… ${folded} 行没变`, E`… ${folded} unchanged lines`) });
   return out;
 }
 
@@ -338,7 +338,7 @@ export function FilePreview({ hubId, file, version, open, onOpenChange }: {
     try { await appApi.saveAttachment(hubId, file.file_id); setSaved(true); } catch (e) { setError((e as Error).message); }
   };
 
-  const about = [bytes(file.size), version && version.n > 1 ? L(`第 ${version.n} 版`, `version ${version.n}`) : ""].filter(Boolean).join(" · ");
+  const about = [bytes(file.size), version && version.n > 1 ? L(E`第 ${version.n} 版`, E`version ${version.n}`) : ""].filter(Boolean).join(" · ");
   return (
     <DockPanel open={open} onOpenChange={onOpenChange} title={file.name} about={about}
       bodyClass={cn(md && view === "file" && "is-doc", html && view === "file" && "is-page")}

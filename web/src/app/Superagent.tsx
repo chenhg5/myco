@@ -7,7 +7,7 @@ import { joinSentence } from "@/app/AddToProject";
 import type { AgentRow } from "@/app/types";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { agentKind, machinesOfHub, nodeName } from "@/app/nodes";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { markSuperagent, SHROOM } from "@/app/superagentMark";
 
@@ -175,11 +175,11 @@ export function SuperagentSetup({ open, onOpenChange, hubId, rows, current, onRe
     <Modal open={open} onOpenChange={(o) => { if (!o) close(); }} wide
       title={current ? L("换一个 superagent", "Change your superagent") : "superagent"}
       description={L(
-        `superagent 是你在这个工作区的总管，名字叫 ${SHROOM}：它能看全工作区，帮你开 agent、建项目、派活、盯进度。删东西、停东西、改别人的权限这类事，它会先来问你。它不能以你的名义说话。`,
-        `Your superagent, ${SHROOM}, runs this workspace for you: it sees everything, starts agents, makes projects, hands out work and keeps track. Deleting, stopping or changing someone's access, it asks you first. It never speaks as you.`)}>
+        E`superagent 是你在这个工作区的总管，名字叫 ${SHROOM}：它能看全工作区，帮你开 agent、建项目、派活、盯进度。删东西、停东西、改别人的权限这类事，它会先来问你。它不能以你的名义说话。`,
+        E`Your superagent, ${SHROOM}, runs this workspace for you: it sees everything, starts agents, makes projects, hands out work and keeps track. Deleting, stopping or changing someone's access, it asks you first. It never speaks as you.`)}>
       <form onSubmit={(e) => { e.preventDefault(); if (ready) void submit(); }} data-testid="superagent-setup">
         <div className="seg seg-fill add-tabs" role="tablist" aria-label={L("怎么配", "How")}>
-          <button type="button" role="tab" aria-selected={how === "new"} className={cn("seg-btn", how === "new" && "active")} onClick={() => setHow("new")} disabled={busy}>{L(`新开 ${SHROOM}`, `New ${SHROOM}`)}</button>
+          <button type="button" role="tab" aria-selected={how === "new"} className={cn("seg-btn", how === "new" && "active")} onClick={() => setHow("new")} disabled={busy}>{L(E`新开 ${SHROOM}`, E`New ${SHROOM}`)}</button>
           <button type="button" role="tab" aria-selected={how === "pick"} className={cn("seg-btn", how === "pick" && "active")} onClick={() => setHow("pick")} disabled={busy}>{L("用已有的", "Use one")}</button>
           <button type="button" role="tab" aria-selected={how === "link"} className={cn("seg-btn", how === "link" && "active")} onClick={() => setHow("link")} disabled={busy} data-testid="superagent-link-tab">{L("一句话接入", "By a sentence")}</button>
         </div>
@@ -245,7 +245,7 @@ export function SuperagentSetup({ open, onOpenChange, hubId, rows, current, onRe
           ) : <span style={{ flex: 1 }} />}
           <button type="button" className="app-btn" onClick={close} disabled={busy}>{L("取消", "Cancel")}</button>
           {how !== "link" && <button type="submit" className="app-btn app-btn-primary" disabled={busy || !ready}>
-            {busy ? <><span className="app-spinner" />{L("正在配…", "Setting up…")}</> : how === "new" ? L(`开一个 ${SHROOM}`, `Start ${SHROOM}`) : L("就用它", "Use it")}
+            {busy ? <><span className="app-spinner" />{L("正在配…", "Setting up…")}</> : how === "new" ? L(E`开一个 ${SHROOM}`, E`Start ${SHROOM}`) : L("就用它", "Use it")}
           </button>}
         </div>
       </form>
@@ -258,8 +258,8 @@ function leftOf(expires: string, now: number): string {
   const ms = new Date(expires).getTime() - now;
   if (ms <= 0) return L("已过期", "expired");
   const h = Math.floor(ms / 3_600_000);
-  if (h >= 1) return L(`${h} 小时内有效`, `${h}h left`);
-  return L(`${Math.max(1, Math.round(ms / 60_000))} 分钟内有效`, `${Math.max(1, Math.round(ms / 60_000))}m left`);
+  if (h >= 1) return L(E`${h} 小时内有效`, E`${h}h left`);
+  return L(E`${Math.max(1, Math.round(ms / 60_000))} 分钟内有效`, E`${Math.max(1, Math.round(ms / 60_000))}m left`);
 }
 
 /** Whether an action_grant approval asks for keyboard and mouse (its
@@ -309,24 +309,24 @@ export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: strin
             <div className="sa-approval-text">
               <div className="sa-approval-what">
                 {page
-                  ? L(`${name || agent} 可以导出「${what}」`, `${name || agent} may export "${what}"`)
+                  ? L(E`${name || agent} 可以导出「${what}」`, E`${name || agent} may export "${what}"`)
                   : browser
                   ? browserControl
-                    ? L(`${name || agent} 可以操作浏览器 profile ${what}。操作会显示在你的屏幕上，你随时可以收回授权`, `${name || agent} may control browser profile ${what}. Actions appear on your screen, and you can revoke access at any time`)
+                    ? L(E`${name || agent} 可以操作浏览器 profile ${what}。操作会显示在你的屏幕上，你随时可以收回授权`, E`${name || agent} may control browser profile ${what}. Actions appear on your screen, and you can revoke access at any time`)
                     : browserRun
                       ? g.permissions.includes("browser.view")
-                        ? L(`${name || agent} 可以在 ${what} 上查看状态与运行结果，并运行主人批准的脚本`, `${name || agent} may view status and run results, and run owner-approved scripts on ${what}`)
-                        : L(`${name || agent} 可以在 ${what} 上运行主人批准的脚本`, `${name || agent} may run owner-approved scripts on ${what}`)
-                      : L(`${name || agent} 可以查看 ${what} 的状态与运行结果`, `${name || agent} may view status and run results in ${what}`)
+                        ? L(E`${name || agent} 可以在 ${what} 上查看状态与运行结果，并运行主人批准的脚本`, E`${name || agent} may view status and run results, and run owner-approved scripts on ${what}`)
+                        : L(E`${name || agent} 可以在 ${what} 上运行主人批准的脚本`, E`${name || agent} may run owner-approved scripts on ${what}`)
+                      : L(E`${name || agent} 可以查看 ${what} 的状态与运行结果`, E`${name || agent} may view status and run results in ${what}`)
                   : ssh
                   ? manage
-                    ? L(`${name || agent} 可以读取并管理 ${what} 的服务与容器`, `${name || agent} may inspect and manage services and containers on ${what}`)
-                    : L(`${name || agent} 可以读取 ${what} 的状态与日志`, `${name || agent} may read status and logs on ${what}`)
+                    ? L(E`${name || agent} 可以读取并管理 ${what} 的服务与容器`, E`${name || agent} may inspect and manage services and containers on ${what}`)
+                    : L(E`${name || agent} 可以读取 ${what} 的状态与日志`, E`${name || agent} may read status and logs on ${what}`)
                   : control
-                  ? L(`${name || agent} 可以看并操作 ${what} 的屏幕`, `${name || agent} may see and use ${what}'s screen`)
-                  : L(`${name || agent} 可以看 ${what} 的屏幕`, `${name || agent} may see ${what}'s screen`)}
+                  ? L(E`${name || agent} 可以看并操作 ${what} 的屏幕`, E`${name || agent} may see and use ${what}'s screen`)
+                  : L(E`${name || agent} 可以看 ${what} 的屏幕`, E`${name || agent} may see ${what}'s screen`)}
               </div>
-              <div className="sa-approval-meta">{left > 0 ? L(`还剩 ${left} 分钟`, `${left} min left`) : L("快到期了", "Ending soon")}</div>
+              <div className="sa-approval-meta">{left > 0 ? L(E`还剩 ${left} 分钟`, E`${left} min left`) : L("快到期了", "Ending soon")}</div>
             </div>
             <div className="sa-approval-actions">
               <button type="button" className="app-btn app-btn-small" disabled={!!busy} onClick={() => void revoke(g)}>
@@ -345,10 +345,10 @@ export function GrantStrip({ hubId, agent, name }: { hubId: string; agent: strin
  *  superagent's requests, a coordinator asking for a computer): what, why,
  *  and 同意 / 不同意. */
 function automationRequestSummary(input: Record<string, unknown>): string {
-  return [input.to ? L(`发给 ${input.to}`, `To ${input.to}`) : input.workflow ? L(`工作流 ${input.workflow}`, `Workflow ${input.workflow}`) : "",
+  return [input.to ? L(E`发给 ${input.to}`, E`To ${input.to}`) : input.workflow ? L(E`工作流 ${input.workflow}`, E`Workflow ${input.workflow}`) : "",
     input.cron ? `${input.cron} (${input.tz || "UTC"})` : "",
-    input.starts_at !== undefined ? (input.starts_at ? L(`开始 ${input.starts_at}`, `Starts ${input.starts_at}`) : L("清除开始限制", "No start bound")) : "",
-    input.ends_at !== undefined ? (input.ends_at ? L(`结束 ${input.ends_at}`, `Ends ${input.ends_at}`) : L("清除结束限制", "No end bound")) : "",
+    input.starts_at !== undefined ? (input.starts_at ? L(E`开始 ${input.starts_at}`, E`Starts ${input.starts_at}`) : L("清除开始限制", "No start bound")) : "",
+    input.ends_at !== undefined ? (input.ends_at ? L(E`结束 ${input.ends_at}`, E`Ends ${input.ends_at}`) : L("清除结束限制", "No end bound")) : "",
     input.once === true ? L("只跑一次", "Run once") : input.once === false ? L("按计划重复执行", "Repeat on schedule") : "",
     input.enabled === false ? L("暂停", "Pause") : input.enabled === true ? L("启用", "Enable") : "",
     input.skip_if_busy === true ? L("忙碌时跳过", "Skip while busy") : input.skip_if_busy === false ? L("忙碌时也发送", "Send while busy") : "",
@@ -365,12 +365,12 @@ function invitationWhat(a: Approval, grants?: ActionGrant[]): string {
     const profile = grant.target.resource.name || grant.target.resource.id;
     const permissions = grant.requested || [];
     const minutes = /，(\d+) 分钟$/.exec(a.what)?.[1];
-    const ttl = minutes ? L(`，${minutes} 分钟`, `, for ${minutes} minutes`) : "";
-    if (permissions.includes("browser.control")) return L(`操作浏览器配置「${profile}」`, `Control browser profile “${profile}”`) + (grant.hosts?.length ? L(`，限定网站：${grant.hosts.join("、")}`, `, limited to: ${grant.hosts.join(", ")}`) : "") + ttl;
+    const ttl = minutes ? L(E`，${minutes} 分钟`, E`, for ${minutes} minutes`) : "";
+    if (permissions.includes("browser.control")) return L(E`操作浏览器配置「${profile}」`, E`Control browser profile “${profile}”`) + (grant.hosts?.length ? L(E`，限定网站：${grant.hosts.join("、")}`, E`, limited to: ${grant.hosts.join(", ")}`) : "") + ttl;
     if (permissions.includes("browser.run")) return (permissions.includes("browser.view")
-      ? L(`在「${profile}」上查看状态与运行结果，并运行主人批准的脚本`, `View status and run results, and run owner-approved scripts in “${profile}”`)
-      : L(`运行「${profile}」中主人批准的脚本`, `Run owner-approved scripts in “${profile}”`)) + ttl;
-    return L(`查看「${profile}」的状态与运行结果`, `View status and run results in “${profile}”`) + ttl;
+      ? L(E`在「${profile}」上查看状态与运行结果，并运行主人批准的脚本`, E`View status and run results, and run owner-approved scripts in “${profile}”`)
+      : L(E`运行「${profile}」中主人批准的脚本`, E`Run owner-approved scripts in “${profile}”`)) + ttl;
+    return L(E`查看「${profile}」的状态与运行结果`, E`View status and run results in “${profile}”`) + ttl;
   }
   if (a.kind === "project_automation") {
     const action = String(a.payload?.action || "update");
@@ -378,12 +378,12 @@ function invitationWhat(a: Approval, grants?: ActionGrant[]): string {
     const name = String(input?.name || a.payload?.task_name || a.payload?.id || L("定时任务", "scheduled task"));
     const project = String(a.payload?.project || "");
     const verb = action === "create" ? L("创建", "Create") : action === "delete" ? L("删除", "Delete") : L("修改", "Update");
-    return L(`${verb}项目「${project}」的定时任务「${name}」`, `${verb} “${name}” in project “${project}”`);
+    return L(E`${verb}项目「${project}」的定时任务「${name}」`, E`${verb} “${name}” in project “${project}”`);
   }
   if (a.kind !== "project_invite") return a.what;
   const project = String(a.payload?.project_title || a.payload?.project || "");
   const name = String(a.payload?.display_name || L("新 agent", "a new agent"));
-  return L(`邀请「${name}」加入项目「${project}」`, `Invite ${name} to project “${project}”`);
+  return L(E`邀请「${name}」加入项目「${project}」`, E`Invite ${name} to project “${project}”`);
 }
 
 export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: string; name?: string }) {
@@ -427,14 +427,14 @@ export function ApprovalStrip({ hubId, agent, name }: { hubId: string; agent: st
         return <div className="sa-approval" key={a.id}>
           <ShieldQuestion className="sa-approval-icon" />
           <div className="sa-approval-text">
-            <div className="sa-approval-what">{L(`${who} 想：`, `${who} wants to: `)}{invitationWhat(a, s?.grants)}</div>
+            <div className="sa-approval-what">{L(E`${who} 想：`, E`${who} wants to: `)}{invitationWhat(a, s?.grants)}</div>
             {a.kind === "project_automation" && <div className="sa-approval-why">{L("仅批准这一次变更，不会打开项目的长期权限。任务归项目主人所有。", "Approve this change only; ongoing coordinator access stays unchanged. The task belongs to the project owner.")}</div>}
             {a.kind === "project_automation" && !!a.payload?.input && <div className="sa-approval-why">{automationRequestSummary(a.payload.input as Record<string, unknown>)}</div>}
             {a.kind === "project_automation" && automationRequestContent(a) && <details className="sa-approval-why"><summary>{L("查看任务内容", "Review task content")}</summary><pre className="sa-approval-content">{automationRequestContent(a)}</pre></details>}
             {a.kind === "project_invite" && <div className="sa-approval-why">{L("仅这一次邀请：链接 24 小时有效，只能用一次。新 agent 归项目主人所有，只加入为普通成员。", "This invitation only: the link lasts 24 hours and works once. The new agent belongs to the project owner and joins as an ordinary member.")}</div>}
             {control && <div className="sa-approval-why">
               {grant && grant.target.resource?.kind !== "agent" && (
-                <div><strong>{scoped.length ? L(`agent 只能在所选网站（${hosts.join("、")}）中看到并使用这个配置的登录状态。`, `The agent can use this profile’s sign-ins only on the selected sites (${hosts.join(", ")}).`) : L("这个配置里可能有你的登录状态，agent 能看到并操作这些网站。", "This profile may have sites you’re signed in to. The agent can see and interact with those sites.")}</strong></div>
+                <div><strong>{scoped.length ? L(E`agent 只能在所选网站（${hosts.join("、")}）中看到并使用这个配置的登录状态。`, E`The agent can use this profile’s sign-ins only on the selected sites (${hosts.join(", ")}).`) : L("这个配置里可能有你的登录状态，agent 能看到并操作这些网站。", "This profile may have sites you’re signed in to. The agent can see and interact with those sites.")}</strong></div>
               )}
               <div>{L("操作会显示在你的屏幕上，你随时可以停止。", "Actions appear on your screen. You can stop control at any time.")}</div>
               {grant && (scoped.length ? <fieldset className="sa-approval-hosts">

@@ -14,7 +14,7 @@ import { ErrorText } from "@/app/dialogs";
 import { AvatarDialog } from "@/app/AvatarPicker";
 import { Inspector, OfflineCard } from "@/app/Inspector";
 import { useContextMenu } from "@/app/ContextMenu";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 type Projects = { hubId: string; p: Project }[];
@@ -73,7 +73,7 @@ export function MembersPage({ rows, projects, now, onOpen }: {
       {asleep.length > 0 && (
         <>
           <button type="button" className="mb-rest-toggle" onClick={() => setShowResting((v) => !v)}>
-            {showResting ? L(`收起休息中的 ${asleep.length} 个`, `Hide ${asleep.length} resting`) : L(`休息中 ${asleep.length} 个（好几天没上线）`, `${asleep.length} resting (away for days)`)}
+            {showResting ? L(E`收起休息中的 ${asleep.length} 个`, E`Hide ${asleep.length} resting`) : L(E`休息中 ${asleep.length} 个（好几天没上线）`, E`${asleep.length} resting (away for days)`)}
           </button>
           {showResting && <Section rows={asleep} projects={projects} now={now} onOpen={onOpen} />}
         </>
@@ -196,7 +196,7 @@ export function MemberSheet({ row, details, projects, rows, now, onClose, onChat
         <input className="ms-name" value={name} onChange={(e) => setName(e.target.value)} aria-label={L("名字", "Name")} />
         <input className="ms-desc" value={desc} title={desc} onChange={(e) => setDesc(e.target.value)}
           placeholder={ws ? L("这个文件夹是做什么的", "What this folder is for") : L("它负责什么？比如 维护后端接口和数据库", "What does it do? e.g. Looks after the backend and the database")} aria-label={L("分工", "What it does")} />
-        {a.invited_by && <div className="ms-state" data-testid="member-invited-by">{L(`由 ${a.invited_by} 邀请`, `Invited by ${a.invited_by}`)}</div>}
+        {a.invited_by && <div className="ms-state" data-testid="member-invited-by">{L(E`由 ${a.invited_by} 邀请`, E`Invited by ${a.invited_by}`)}</div>}
         <div className="ms-state">{runnerUpdating(a) ? stateWords(row.st.state, undefined, true) : ws ? whereOf(row) : stateWords(row.st.state, a.status_text, runnerUpdating(a))}</div>
         {dirty && <div className="ms-save"><button type="button" className="app-btn app-btn-primary app-btn-small" disabled={busy || !name.trim()} onClick={() => void save()}>{L("保存", "Save")}</button></div>}
 
@@ -292,10 +292,10 @@ function WhoItIs({ row, now }: { row: AgentRow; now: number }) {
   const rows: [string, string, string?][] = [
     [L("在哪", "Where"), where, [a.binding.workdir, a.runtime?.account].filter(Boolean).join(" · ") || undefined],
     ...(!ws ? [[L("用的", "Runs"), [cliName(a), model].filter(Boolean).join(" · ")] as [string, string]] : []),
-    ...(session ? [[L("会话", "Session"), L(`「${session.title || folderOfDir(session.workdir)}」· ${timeAgo(session.last_active, now)}用过`, `“${session.title || folderOfDir(session.workdir)}” · used ${timeAgo(session.last_active, now)}`), session.title] as [string, string, string?]]
+    ...(session ? [[L("会话", "Session"), L(E`「${session.title || folderOfDir(session.workdir)}」· ${timeAgo(session.last_active, now)}用过`, E`“${session.title || folderOfDir(session.workdir)}” · used ${timeAgo(session.last_active, now)}`), session.title] as [string, string, string?]]
       : isInbox(a) ? [[L("会话", "Session"), L("只在它的会话开着时收消息", "Receives only while its session is open")] as [string, string]] : []),
     ...(!mine ? [[L("主人", "Owner"), a.owner || ""] as [string, string]] : []),
-    [L("加入", "Joined"), L(`${timeAgo(a.created_at, now)}`, timeAgo(a.created_at, now)) + (row.st.state === "offline" && a.last_seen_at ? L(` · 上次在线 ${timeAgo(a.last_seen_at, now)}`, ` · last online ${timeAgo(a.last_seen_at, now)}`) : "")],
+    [L("加入", "Joined"), L(E`${timeAgo(a.created_at, now)}`, timeAgo(a.created_at, now)) + (row.st.state === "offline" && a.last_seen_at ? L(E` · 上次在线 ${timeAgo(a.last_seen_at, now)}`, E` · last online ${timeAgo(a.last_seen_at, now)}`) : "")],
   ];
   return (
     <div className="ms-block">

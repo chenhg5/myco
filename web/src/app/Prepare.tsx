@@ -8,7 +8,7 @@ import { ErrorText } from "@/app/dialogs";
 import { LocalAgentLines } from "@/app/LocalAgents";
 import { Avatar } from "@/app/persona";
 import { Logo } from "@/components/brand";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { sessionDisplayName } from "@/app/nodes";
 import { cn, timeAgo } from "@/lib/utils";
 
@@ -158,9 +158,9 @@ export function Prepare({ hubId, hubName, hubUrl, now, onDone }: {
             {sessions.length > 8 && (
               <label className="wl-sessions-search">
                 <Search />
-                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L(`在 ${sessions.length} 个会话里找（标题、文件夹）`, `Find among ${sessions.length} sessions (title, folder)`)}
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={L(E`在 ${sessions.length} 个会话里找（标题、文件夹）`, E`Find among ${sessions.length} sessions (title, folder)`)}
                   aria-label={L("找会话", "Find a session")} />
-                {picked.size > 0 && <span className="wl-sessions-count">{L(`已选 ${picked.size} 个`, `${picked.size} picked`)}</span>}
+                {picked.size > 0 && <span className="wl-sessions-count">{L(E`已选 ${picked.size} 个`, E`${picked.size} picked`)}</span>}
               </label>
             )}
             <div className="wl-sessions" role="group" aria-label={L("把已有的会话加进来", "Bring in sessions you have")} data-testid="prepare-sessions">
@@ -207,8 +207,8 @@ export function Prepare({ hubId, hubName, hubUrl, now, onDone }: {
           <div className="wl-prep-actions">
             <button type="button" className="app-btn" onClick={() => onDone(joinedSoFar)} disabled={!!busy}>{L("先跳过", "Skip for now")}</button>
             <button type="button" className="app-btn app-btn-primary wl-start" onClick={() => void go()} disabled={!!busy} data-testid="prepare-go">
-              {busy ? <><span className="app-spinner" />{L(`正在加入 ${busy.at}/${busy.of}…`, `Joining ${busy.at}/${busy.of}…`)}</>
-                : <>{chosen.length ? L(`加入 ${chosen.length} 个并开始`, `Add ${chosen.length} and start`) : L("开始", "Start")}<ArrowRight /></>}
+              {busy ? <><span className="app-spinner" />{L(E`正在加入 ${busy.at}/${busy.of}…`, E`Joining ${busy.at}/${busy.of}…`)}</>
+                : <>{chosen.length ? L(E`加入 ${chosen.length} 个并开始`, E`Add ${chosen.length} and start`) : L("开始", "Start")}<ArrowRight /></>}
             </button>
           </div>
         </footer>
@@ -244,7 +244,7 @@ function PrepStage({ chosen, hubName }: { chosen: LocalSession[]; hubName: strin
         </div>
       </div>
       <p className="wl-cap">
-        <b>{chosen.length ? L(`进去以后，它们就在「${hubName}」里`, `Inside, they are in ${hubName}`) : L("选几个会话，它们就会出现在这里", "Pick a few sessions to see them here")}</b>
+        <b>{chosen.length ? L(E`进去以后，它们就在「${hubName}」里`, E`Inside, they are in ${hubName}`) : L("选几个会话，它们就会出现在这里", "Pick a few sessions to see them here")}</b>
         <span>{L("每一个都是一个 agent：直接聊，或者拉进一个项目一起做事", "Each one is an agent: chat with it, or bring it into a project with others")}</span>
       </p>
     </div>

@@ -4,7 +4,7 @@ import type { AgentRow } from "@/app/types";
 import { machinesOfHub } from "@/app/nodes";
 import { quotaEffectiveStatus, quotaHasNumbers, quotaLeft, quotaLiveWindows, quotaPillLevel, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaSummary, quotaUnreadable, quotaWindowLabel, quotaWindowShort, quotaWindowText, quotaWorst } from "@/app/quota";
 import { fitMenu } from "@/app/fitMenu";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { timeAgo } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -43,13 +43,13 @@ export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
   if (!worst) return null;
   const level = quotaPillLevel(worst);
   const short = quotaWindowShort(worst);
-  const text = quotaSpent(worst) ? L("已用完", "out") : L(`剩 ${quotaLeft(worst)}%`, `${quotaLeft(worst)}% left`);
+  const text = quotaSpent(worst) ? L("已用完", "out") : L(E`剩 ${quotaLeft(worst)}%`, E`${quotaLeft(worst)}% left`);
   const label = [short, text].filter(Boolean).join(" ");
   const status = quotaStatusText(quota, now);
   const stale = quotaStaleNote(quota, now);
   const source = quotaSourceText(quota, machinesOfHub(row.hub));
   const read = quota.checked_at || quota.at;
-  const title = L(`额度：${quotaWindowLabel(worst)}${text}（点开看全部）`, `Quota: ${quotaWindowLabel(worst)} ${text} (click for all)`);
+  const title = L(E`额度：${quotaWindowLabel(worst)}${text}（点开看全部）`, E`Quota: ${quotaWindowLabel(worst)} ${text} (click for all)`);
   return (
     <span className="quota-pill-wrap">
       <button type="button" className={cn("quota-pill", `is-${level}`, (status || stale) && "is-stale")} title={title} aria-label={title}
@@ -71,7 +71,7 @@ export function QuotaPill({ row, now }: { row: AgentRow; now: number }) {
             {status && <p className="run-pill-note quota-pill-status">{status}{L("，上面是上次取到的。", "; above is the last read.")}</p>}
             <p className="run-pill-note">
               {source && <>{source}<br /></>}
-              {read && L(`${timeAgo(read, now)}读取`, `Read ${timeAgo(read, now)}`)}
+              {read && L(E`${timeAgo(read, now)}读取`, E`Read ${timeAgo(read, now)}`)}
               {stale && !status && <>{L("（数据较旧）", " (old data)")}</>}
             </p>
           </div>

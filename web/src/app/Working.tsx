@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /*
  * A node at work, at the foot of a conversation: a little pixel mushroom
@@ -112,10 +112,10 @@ const TURN_MS = 3600;
 
 function elapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return L(`${s} 秒`, `${s}s`);
+  if (s < 60) return L(E`${s} 秒`, E`${s}s`);
   const m = Math.floor(s / 60);
-  if (m < 60) return L(`${m} 分 ${s % 60} 秒`, `${m}m ${s % 60}s`);
-  return L(`${Math.floor(m / 60)} 小时 ${m % 60} 分`, `${Math.floor(m / 60)}h ${m % 60}m`);
+  if (m < 60) return L(E`${m} 分 ${s % 60} 秒`, E`${m}m ${s % 60}s`);
+  return L(E`${Math.floor(m / 60)} 小时 ${m % 60} 分`, E`${Math.floor(m / 60)}h ${m % 60}m`);
 }
 
 /** A playful verb for a node that says nothing about what it is doing,
@@ -166,7 +166,7 @@ export function WorkingLine({ name, since, status, side, behind = 0 }: {
         {/* keyed, so a new verb fades in */}
         <span key={text} className="work-verb">{text}</span>
         <Elapsed since={since} className="work-time" />
-        {behind > 0 && <span className="work-time">{L(`后面还有 ${behind} 个任务`, `${behind} more queued`)}</span>}
+        {behind > 0 && <span className="work-time">{L(E`后面还有 ${behind} 个任务`, E`${behind} more queued`)}</span>}
       </div>
     </div>
   );

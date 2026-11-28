@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Eye, Hourglass, X } from "lucide-react";
 import { appApi, errorMessage } from "@/appapi";
 import type { Watch } from "@/api";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/app/dialogs";
 import { useContextMenu } from "@/app/ContextMenu";
@@ -61,11 +61,11 @@ function useNow(on: boolean) {
 /** 12 秒 / 12 分钟 / 1 小时 5 分 */
 function span(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
-  if (s < 60) return L(`${s} 秒`, `${s}s`);
+  if (s < 60) return L(E`${s} 秒`, E`${s}s`);
   const m = Math.floor(s / 60);
-  if (m < 60) return L(`${m} 分钟`, `${m} min`);
+  if (m < 60) return L(E`${m} 分钟`, E`${m} min`);
   const h = Math.floor(m / 60);
-  return m % 60 ? L(`${h} 小时 ${m % 60} 分`, `${h} h ${m % 60} min`) : L(`${h} 小时`, `${h} h`);
+  return m % 60 ? L(E`${h} 小时 ${m % 60} 分`, E`${h} h ${m % 60} min`) : L(E`${h} 小时`, E`${h} h`);
 }
 
 function clock(iso?: string): string {
@@ -79,8 +79,8 @@ function clock(iso?: string): string {
 function timing(w: Watch, now: number): string {
   const started = Date.parse(w.started_at);
   const deadline = Date.parse(w.deadline);
-  const parts = [L(`已 ${span(now - started)}，剩 ${span(deadline - now)}`, `${span(now - started)} so far, ${span(deadline - now)} left`)];
-  if (w.last_check_at) parts.push(L(`${span(now - Date.parse(w.last_check_at))}前看过`, `checked ${span(now - Date.parse(w.last_check_at))} ago`));
+  const parts = [L(E`已 ${span(now - started)}，剩 ${span(deadline - now)}`, E`${span(now - started)} so far, ${span(deadline - now)} left`)];
+  if (w.last_check_at) parts.push(L(E`${span(now - Date.parse(w.last_check_at))}前看过`, E`checked ${span(now - Date.parse(w.last_check_at))} ago`));
   return parts.join(" · ");
 }
 
@@ -124,8 +124,8 @@ export function WatchBar({ hubId, watches, onChanged }: {
     <div className="watch-detail">
       {w.last_result && <div className="watch-result"><span>{L("最近一次", "Last check")}</span><code>{w.last_result}</code></div>}
       <div className="watch-times">
-        {L(`开始 ${clock(w.started_at)} · 截止 ${clock(w.deadline)}`, `Started ${clock(w.started_at)} · until ${clock(w.deadline)}`)}
-        {w.checks > 0 && L(` · 看了 ${w.checks} 次`, ` · ${w.checks} checks`)}
+        {L(E`开始 ${clock(w.started_at)} · 截止 ${clock(w.deadline)}`, E`Started ${clock(w.started_at)} · until ${clock(w.deadline)}`)}
+        {w.checks > 0 && L(E` · 看了 ${w.checks} 次`, E` · ${w.checks} checks`)}
       </div>
     </div>
   );
@@ -138,11 +138,11 @@ export function WatchBar({ hubId, watches, onChanged }: {
           <Eye className="watch-eye" />
           {one ? (
             <>
-              <span className="watch-what">{L(`正在盯：${one.what}`, `Watching: ${one.what}`)}</span>
+              <span className="watch-what">{L(E`正在盯：${one.what}`, E`Watching: ${one.what}`)}</span>
               <span className="watch-time">{timing(one, now)}</span>
             </>
           ) : (
-            <span className="watch-what">{L(`正在盯 ${watches.length} 件事`, `Watching ${watches.length} things`)}</span>
+            <span className="watch-what">{L(E`正在盯 ${watches.length} 件事`, E`Watching ${watches.length} things`)}</span>
           )}
           <ChevronDown className="watch-chev" />
         </button>
@@ -166,7 +166,7 @@ export function WatchBar({ hubId, watches, onChanged }: {
       {menu.element}
       <ConfirmDialog open={!!stopping} onOpenChange={(o) => { if (!o) { setStopping(null); setError(""); } }}
         title={L("停止盯这件事？", "Stop watching this?")}
-        description={stopping ? L(`「${stopping.what}」。停了以后不再替它等，它会收到一条消息，知道是你停的。`, `“${stopping.what}”. It stops waiting for it, and gets a message saying you stopped it.`) : undefined}
+        description={stopping ? L(E`「${stopping.what}」。停了以后不再替它等，它会收到一条消息，知道是你停的。`, E`“${stopping.what}”. It stops waiting for it, and gets a message saying you stopped it.`) : undefined}
         confirmLabel={L("停止", "Stop")} busy={!!stopping && busy === stopping.id} error={stopping ? error : undefined}
         onConfirm={() => { if (stopping) void stop(stopping); }} />
     </div>
@@ -177,10 +177,10 @@ export function WatchBar({ hubId, watches, onChanged }: {
 export function WatchEnded({ w, nameOf }: { w: Watch; nameOf: (n: string) => string }) {
   const took = w.ended_at ? span(Date.parse(w.ended_at) - Date.parse(w.started_at)) : "";
   const text = w.state === "met"
-    ? L(`盯到了：${w.what}${took ? `（${took}）` : ""}`, `Got it: ${w.what}${took ? ` (after ${took})` : ""}`)
+    ? L(E`盯到了：${w.what}${took ? `（${took}）` : ""}`, E`Got it: ${w.what}${took ? ` (after ${took})` : ""}`)
     : w.state === "expired"
-      ? L(`盯了 ${took} 没等到：${w.what}`, `Watched ${took}, it did not come: ${w.what}`)
-      : L(`${w.ended_by ? nameOf(w.ended_by) : "有人"}停止了盯：${w.what}`, `${w.ended_by ? nameOf(w.ended_by) : "Someone"} stopped watching: ${w.what}`);
+      ? L(E`盯了 ${took} 没等到：${w.what}`, E`Watched ${took}, it did not come: ${w.what}`)
+      : L(E`${w.ended_by ? nameOf(w.ended_by) : "有人"}停止了盯：${w.what}`, E`${w.ended_by ? nameOf(w.ended_by) : "Someone"} stopped watching: ${w.what}`);
   return (
     <div className={cn("watch-ended", `is-${w.state}`)} data-watch={w.id} title={w.outcome || undefined}>
       <Eye />

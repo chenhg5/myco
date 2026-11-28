@@ -1,5 +1,5 @@
 import createDOMPurify from "dompurify";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /*
  * What a message's Markdown can hold beyond text (Markdown.tsx draws the
@@ -82,7 +82,7 @@ async function drawOne(box: HTMLElement): Promise<void> {
       // (its source shown at once)
       box.querySelector("details.md-mermaid-src")?.setAttribute("open", "");
       const why = box.querySelector(".md-mermaid-why");
-      if (why) why.textContent = L(`这张图没画出来：${firstLine(e)}`, `This diagram could not be drawn: ${firstLine(e)}`);
+      if (why) why.textContent = L(E`这张图没画出来：${firstLine(e)}`, E`This diagram could not be drawn: ${firstLine(e)}`);
       return;
     }
   }

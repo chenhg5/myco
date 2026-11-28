@@ -25,7 +25,7 @@ import { PageHero, SectionHead } from "@/app/PageHero";
 import { projectsOf } from "@/app/Members";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type Projects = { hubId: string; p: Project }[];
@@ -45,7 +45,7 @@ function computerQuotaHint(machineId: string, hubId: string, rows: AgentRow[]) {
     const rank = (h.level === "spent" ? 2 : 0) + Math.min(used, 1.99) / 2;
     if (rank > bestRank) { best = { ...h, who: nodeName(x.st.agent, x.hub) }; bestRank = rank; }
   }
-  return best && { ...best, title: L(`${best.who}：${best.title}`, `${best.who}: ${best.title}`) };
+  return best && { ...best, title: L(E`${best.who}：${best.title}`, E`${best.who}: ${best.title}`) };
 }
 
 /*
@@ -116,7 +116,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
         <button type="button" className="pc-row-main" onClick={() => onProfile(r)}>
           <span className="pc-row-name mono">{a.binding.workdir ? shortDir(a.binding.workdir) : nodeName(a, r.hub)}</span>
           <span className="pc-row-sub">
-            {ps.length > 0 ? <span>{L(`在「${ps.map((p) => p.title || p.name).join("」「")}」里`, `In ${ps.map((p) => p.title || p.name).join(", ")}`)}</span> : <span>{L("不在项目里", "In no project")}</span>}
+            {ps.length > 0 ? <span>{L(E`在「${ps.map((p) => p.title || p.name).join("」「")}」里`, E`In ${ps.map((p) => p.title || p.name).join(", ")}`)}</span> : <span>{L("不在项目里", "In no project")}</span>}
             {runnerUpdating(a) ? <span>{L("正在更新", "Updating")}</span> : r.st.state === "offline" && <span>{L("不在线", "Away")}</span>}
           </span>
         </button>
@@ -138,7 +138,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
           <span className="pc-row-sub">
             <span>{stateWords(r.st.state, a.status_text, runnerUpdating(a))}</span>
             {a.binding.workdir && <span className="mono">{shortDir(a.binding.workdir)}</span>}
-            {ps.length > 0 && <span>{L(`在「${ps.map((p) => p.title || p.name).join("」「")}」里`, `In ${ps.map((p) => p.title || p.name).join(", ")}`)}</span>}
+            {ps.length > 0 && <span>{L(E`在「${ps.map((p) => p.title || p.name).join("」「")}」里`, E`In ${ps.map((p) => p.title || p.name).join(", ")}`)}</span>}
             {quota && <span className={cn("pc-quota", quota.level === "spent" && "is-spent")} title={quota.title}>{quota.text}</span>}
           </span>
         </span>
@@ -289,7 +289,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
                   <span className="pc-card-count">
                     {healthState(m)==="alert" && <span className="dot failed" title={L("机器负载需要关注", "Machine needs attention")} />}
                     {agents.length || terminals.length
-                      ? [agents.length ? L(`${agents.length} 个 agent`, `${agents.length} agent${agents.length === 1 ? "" : "s"}`) : "", terminals.length ? L(`${terminals.length} 个终端`, `${terminals.length} terminal${terminals.length === 1 ? "" : "s"}`) : ""].filter(Boolean).join(" · ")
+                      ? [agents.length ? L(E`${agents.length} 个 agent`, E`${agents.length} agent${agents.length === 1 ? "" : "s"}`) : "", terminals.length ? L(E`${terminals.length} 个终端`, E`${terminals.length} terminal${terminals.length === 1 ? "" : "s"}`) : ""].filter(Boolean).join(" · ")
                       : L("上面还没有 agent", "Nothing on it yet")}
                   </span>
                   {quota && <span className={cn("pc-quota", quota.level === "spent" && "is-spent")} title={quota.title}>{quota.text}</span>}
@@ -415,7 +415,7 @@ function ComputerAIs({ hubId, machine }: { hubId: string; machine: Machine }) {
     <section className="app-setting-card app-setting-lines" data-testid="pc-ais">
       {info.ais.map((a) => {
         const state = <span className={cn("pcd-chip pcd-ai", `is-${a.state}`)}>{aiText(a)}</span>;
-        const counts = L(`MCP ${a.mcp?.length || 0} · 技能 ${a.skills?.length || 0} · 插件 ${a.plugins?.length || 0}`, `MCP ${a.mcp?.length || 0} · Skills ${a.skills?.length || 0} · Plugins ${a.plugins?.length || 0}`);
+        const counts = L(E`MCP ${a.mcp?.length || 0} · 技能 ${a.skills?.length || 0} · 插件 ${a.plugins?.length || 0}`, E`MCP ${a.mcp?.length || 0} · Skills ${a.skills?.length || 0} · Plugins ${a.plugins?.length || 0}`);
         if (!hasTools(a)) {
           return <Line key={a.cli || a.name} title={a.name}>{state}</Line>;
         }
@@ -476,7 +476,7 @@ function RemoveComputer({ machine, rows, onClose, onRemoved }: {
   const shown = (gone || []).filter((name) => { const r = rowOf(name); return !r || agentKind(r.st.agent) !== "machine"; });
   const n = shown.length;
   return (
-    <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={L(`移除「${machine.name}」？`, `Remove “${machine.name}”?`)}
+    <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={L(E`移除「${machine.name}」？`, E`Remove “${machine.name}”?`)}
       description={L("这台电脑会从工作区里拿掉，不能撤销。", "This computer leaves the workspace; this can't be undone.")}>
       {gone === null && !error && <div className="app-empty-note">{L("正在看会一起移除什么…", "Looking at what goes with it…")}</div>}
       {gone !== null && n > 0 && (
@@ -497,7 +497,7 @@ function RemoveComputer({ machine, rows, onClose, onRemoved }: {
           <Info />
           <div>
             <div>{n > 0
-              ? L(`它上面的 ${n} 个 agent 和终端会一起移除；聊过的内容都保留。`, `The ${n} agent${n === 1 ? "" : "s"} and terminals on it go too; conversations are kept.`)
+              ? L(E`它上面的 ${n} 个 agent 和终端会一起移除；聊过的内容都保留。`, E`The ${n} agent${n === 1 ? "" : "s"} and terminals on it go too; conversations are kept.`)
               : L("它上面没有 agent 或终端；聊过的内容都保留。", "Nothing else is on it; conversations are kept.")}</div>
             {machine.online && (
               <>
@@ -512,7 +512,7 @@ function RemoveComputer({ machine, rows, onClose, onRemoved }: {
       <div className="app-modal-actions">
         <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>
         <button type="button" className="app-btn app-btn-danger" onClick={() => void remove()} disabled={busy || gone === null}>
-          {busy ? L("正在移除…", "Removing…") : n > 0 ? L(`移除这台电脑和上面的 ${n} 个`, `Remove it and the ${n} on it`) : L("移除这台电脑", "Remove this computer")}
+          {busy ? L("正在移除…", "Removing…") : n > 0 ? L(E`移除这台电脑和上面的 ${n} 个`, E`Remove it and the ${n} on it`) : L("移除这台电脑", "Remove this computer")}
         </button>
       </div>
     </Modal>

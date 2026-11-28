@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, FileText, Loader2, Paperclip, X } from "lucide-react";
 import { appApi } from "@/appapi";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Lightbox } from "@/app/lightbox";
 
@@ -129,8 +129,8 @@ export function useAttachments(hubId: string, keep?: string) {
     any: ready.length > 0,
     /** the text to send: what was typed, or (files alone) what they are */
     body: (text: string) => text.trim() || (ready.length === 1
-      ? L(`发来一个文件：${ready[0].name}`, `Sent a file: ${ready[0].name}`)
-      : L(`发来 ${ready.length} 个文件：${ready.map((x) => x.name).join("、")}`, `Sent ${ready.length} files: ${ready.map((x) => x.name).join(", ")}`)),
+      ? L(E`发来一个文件：${ready[0].name}`, E`Sent a file: ${ready[0].name}`)
+      : L(E`发来 ${ready.length} 个文件：${ready.map((x) => x.name).join("、")}`, E`Sent ${ready.length} files: ${ready.map((x) => x.name).join(", ")}`)),
   };
 }
 
@@ -208,9 +208,9 @@ export function AttachList({ items, onRemove }: { items: Pending[]; onRemove: (k
     <div className="att-list" onClick={(e) => e.stopPropagation()}>
       {items.map((x) => (
         <div key={x.key} className={cn("att-chip", x.preview && "is-picture", x.state === "error" && "is-error", x.state === "uploading" && "is-busy")}
-          title={x.error ? `${x.name}\n${x.error}` : x.preview ? L(`${x.name} · 点一下看大图`, `${x.name} · click to enlarge`) : `${x.name} · ${bytes(x.size)}`}>
+          title={x.error ? `${x.name}\n${x.error}` : x.preview ? L(E`${x.name} · 点一下看大图`, E`${x.name} · click to enlarge`) : `${x.name} · ${bytes(x.size)}`}>
           {x.preview ? (
-            <button type="button" className="att-thumb-btn" onClick={() => setOpen(pictures.indexOf(x))} aria-label={L(`看大图：${x.name}`, `Enlarge ${x.name}`)}>
+            <button type="button" className="att-thumb-btn" onClick={() => setOpen(pictures.indexOf(x))} aria-label={L(E`看大图：${x.name}`, E`Enlarge ${x.name}`)}>
               <img className="att-thumb" src={x.preview} alt={x.name} draggable={false} />
             </button>
           ) : (

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Project } from "@/api";
 import { appApi, type Hub } from "@/appapi";
 import { ErrorText } from "@/app/dialogs";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 const GiB = 1024 ** 3;
 const bytes = (n: number) => n >= GiB ? `${(n / GiB).toFixed(2)} GiB`
@@ -64,8 +64,8 @@ export function ProjectStorageSettings({ hub }: { hub: Hub }) {
       </label>
       {project?.files_max ? <>
         <p className="app-small-note">{L(
-          `文件 ${project.files_used ?? 0}/${project.files_max} · ${bytes(project.bytes_used ?? 0)} / ${bytes(project.bytes_max ?? 0)} · 上下文文档 ${project.docs_used ?? 0}/100`,
-          `Files ${project.files_used ?? 0}/${project.files_max} · ${bytes(project.bytes_used ?? 0)} / ${bytes(project.bytes_max ?? 0)} · Context documents ${project.docs_used ?? 0}/100`,
+          E`文件 ${project.files_used ?? 0}/${project.files_max} · ${bytes(project.bytes_used ?? 0)} / ${bytes(project.bytes_max ?? 0)} · 上下文文档 ${project.docs_used ?? 0}/100`,
+          E`Files ${project.files_used ?? 0}/${project.files_max} · ${bytes(project.bytes_used ?? 0)} / ${bytes(project.bytes_max ?? 0)} · Context documents ${project.docs_used ?? 0}/100`,
         )}</p>
         <label className="app-field"><span className="app-field-label">{L("文件数上限", "File count limit")}</span>
           <input className="app-input" type="number" min="1" max="10000" step="1" value={files} onChange={e => { setFiles(e.target.value); setSaved(false); }} disabled={busy}/>

@@ -4,7 +4,7 @@ import { appApi, type HubOverview } from "@/appapi";
 import { Avatar } from "@/app/persona";
 import { SHROOM, useSuperagent } from "@/app/Superagent";
 import { useThemeMode } from "@/lib/theme";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import "@/app/app.css";
 import "@/app/space.css";
@@ -137,7 +137,7 @@ export function Quick() {
             <textarea ref={input} rows={1} value={draft} autoFocus disabled={!agent}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }}
-              placeholder={L(`交给 ${name}…`, `Hand ${name} something…`)} data-testid="quick-input" />
+              placeholder={L(E`交给 ${name}…`, E`Hand ${name} something…`)} data-testid="quick-input" />
             <button type="submit" className={cn("qp-send", draft.trim() && "on")} disabled={!draft.trim() || sending} aria-label={L("发送", "Send")}>
               {sending ? <span className="app-spinner" /> : <ArrowUp />}
             </button>
@@ -145,7 +145,7 @@ export function Quick() {
           {error && <div className="qp-error">{error}</div>}
           {waiting > 0 && (
             <button type="button" className="qp-waiting" onClick={() => once(() => openChat())} data-testid="quick-waiting">
-              <ShieldQuestion />{L(`${name} 有 ${waiting} 件事等你点头`, `${name} has ${waiting} thing${waiting > 1 ? "s" : ""} waiting for your OK`)}
+              <ShieldQuestion />{L(E`${name} 有 ${waiting} 件事等你点头`, E`${name} has ${waiting} thing${waiting > 1 ? "s" : ""} waiting for your OK`)}
               <span className="qp-waiting-go">{L("去看", "See")}</span>
             </button>
           )}

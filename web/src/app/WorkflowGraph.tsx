@@ -4,7 +4,7 @@ import type { RunStep, WfEdgeDef, WfStepDef, WorkflowDef } from "@/api";
 import type { AgentRow } from "@/app/types";
 import { nodeName } from "@/app/nodes";
 import { Avatar } from "@/app/persona";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,9 +40,9 @@ export function stepKind(s: WfStepDef): "agent" | "computer" | "human" {
 function whenWords(when: string): string {
   const w = when.replace(/\s+/g, " ").trim();
   let m = w.match(/^output\.choice ?== ?['"](.+)['"]$/);
-  if (m) return L(`选「${m[1]}」`, `chose "${m[1]}"`);
+  if (m) return L(E`选「${m[1]}」`, E`chose "${m[1]}"`);
   m = w.match(/^output\.choice ?!= ?['"](.+)['"]$/);
-  if (m) return L(`没选「${m[1]}」`, `not "${m[1]}"`);
+  if (m) return L(E`没选「${m[1]}」`, E`not "${m[1]}"`);
   if (w === "output.approved") return L("通过", "approved");
   if (w === "!output.approved") return L("没通过", "not approved");
   const short = w.replace(/\boutput\./g, "");
@@ -55,20 +55,20 @@ function edgeLabel(e: WfEdgeDef): string {
   const parts: string[] = [];
   if (e.onError) parts.push(L("出错时", "on error"));
   if (e.when) parts.push(whenWords(e.when));
-  if (e.maxIterations) parts.push(L(`最多 ${e.maxIterations} 次`, `≤${e.maxIterations}×`));
+  if (e.maxIterations) parts.push(L(E`最多 ${e.maxIterations} 次`, E`≤${e.maxIterations}×`));
   return parts.join(" · ");
 }
 
 function carries(e: WfEdgeDef): string | undefined {
-  return e.map ? L(`交给下一步：${Object.keys(e.map).join("、")}`, `Hands on: ${Object.keys(e.map).join(", ")}`) : undefined;
+  return e.map ? L(E`交给下一步：${Object.keys(e.map).join("、")}`, E`Hands on: ${Object.keys(e.map).join(", ")}`) : undefined;
 }
 
 /** A way out of a step that ends the run as failed: a short red note
  *  beside the step, not a line across the drawing to a 失败 at the end. */
 function failWords(e: WfEdgeDef, viaElse: boolean): string {
-  if (viaElse) return e.maxIterations ? L(`${e.maxIterations} 次还不行就失败`, `fails after ${e.maxIterations}`) : L("不行就失败", "else fails");
+  if (viaElse) return e.maxIterations ? L(E`${e.maxIterations} 次还不行就失败`, E`fails after ${e.maxIterations}`) : L("不行就失败", "else fails");
   const why = edgeLabel(e);
-  return why ? L(`${why}就失败`, `${why}: fails`) : L("失败", "fails");
+  return why ? L(E`${why}就失败`, E`${why}: fails`) : L("失败", "fails");
 }
 
 function layout(def: WorkflowDef) {
@@ -230,7 +230,7 @@ export function WorkflowGraph({ def, hubId, rows, states, selected, onSelect }: 
           const r = rowOf(target);
           const who = n.kind === "human"
             ? (s.human === "$starter" ? L("你", "You") : s.human || "")
-            : s.role ? L(`分工：${s.role}`, `Role: ${s.role}`)
+            : s.role ? L(E`分工：${s.role}`, E`Role: ${s.role}`)
               : r ? nodeName(r.st.agent, r.hub) : target || "";
           const tone = !states ? "" : !st ? "is-todo" : `is-${st.status}`;
           const fail = g.fails.get(n.id);

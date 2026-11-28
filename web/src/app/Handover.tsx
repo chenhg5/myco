@@ -9,7 +9,7 @@ import { Elapsed, Mushroom } from "@/app/Working";
 import { shortDir, usedFolders } from "@/app/AddToProject";
 import { agentKind, canManage, cliLabel, isCloud, isInbox, isMe, machinesOfHub, nodeName, osInfo } from "@/app/nodes";
 import { hubHasHandover } from "@/app/hubVersion";
-import { L, locale } from "@/lib/i18n";
+import { L, locale, E } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 /*
@@ -119,11 +119,11 @@ export function HandoverDivider({ h, hub }: { h: Handover; hub: AgentRow["hub"] 
   const who = byLabel(h.by, hub);
   const to = sideLabel(h.to, hub);
   const what = h.back
-    ? L(`换回原来的会话 · ${to}`, `Switched back to the earlier session · ${to}`)
-    : L(`换成 ${to} 接着做`, `${to} carries on from here`);
+    ? L(E`换回原来的会话 · ${to}`, E`Switched back to the earlier session · ${to}`)
+    : L(E`换成 ${to} 接着做`, E`${to} carries on from here`);
   return (
     <div className="conv-handover" data-testid="handover-divider" title={h.note || undefined}>
-      <span>{stamp(h.done_at || h.at)} · {what}{who ? L(`（${who}换的）`, ` (by ${who})`) : ""}</span>
+      <span>{stamp(h.done_at || h.at)} · {what}{who ? L(E`（${who}换的）`, E` (by ${who})`) : ""}</span>
     </div>
   );
 }
@@ -162,14 +162,14 @@ export function HandoverHistory({ row, now }: { row: AgentRow; now: number }) {
                 </div>
                 <div className="ho-row-sub">
                   <span title={new Date(h.done_at || h.at).toLocaleString()}>{timeAgo(h.done_at || h.at, now)}</span>
-                  {who && <span>{L(`${who}换的`, `by ${who}`)}</span>}
+                  {who && <span>{L(E`${who}换的`, E`by ${who}`)}</span>}
                   {h.back && <span>{L("换回", "switch back")}</span>}
                   {h.note && <span className="ho-note" title={h.note}>{h.note}</span>}
                 </div>
               </div>
               {entry.show && !entry.why && canGoBack(h, list, row) && (
                 <button type="button" className="app-btn app-btn-small" onClick={() => openHandover({ hubId: row.hub.id, name: row.st.agent.name, back: h })}
-                  title={L(`换回 ${sideLabel(h.from, row.hub)} 那个会话，它自己的上下文还在`, `Switch back to the session on ${sideLabel(h.from, row.hub)}; it still has its own context`)}>
+                  title={L(E`换回 ${sideLabel(h.from, row.hub)} 那个会话，它自己的上下文还在`, E`Switch back to the session on ${sideLabel(h.from, row.hub)}; it still has its own context`)}>
                   {L("换回这个", "Switch back")}
                 </button>
               )}
@@ -308,8 +308,8 @@ export function HandoverDialog({ target, rows, onClose, onDone, onOpenProfile }:
     <Modal open onOpenChange={(o) => !o && close()} className="app-modal-add"
       title={back ? L("换回原来的会话", "Switch back to the earlier session") : L("换一个来接着做", "Hand it over to another session")}
       description={back
-        ? L(`让 ${sideLabel(back.from, hub)} 那个会话重新回答 ${name}。它自己的上下文还在，只补上它离开期间的对话。`, `The session on ${sideLabel(back.from, hub)} answers for ${name} again. It still has its own context; it only catches up on what it missed.`)
-        : L(`换一个会话来接着做 ${name}：名字、聊天记录和项目都不变。`, `Another session carries on as ${name}: its name, chats and projects stay.`)}>
+        ? L(E`让 ${sideLabel(back.from, hub)} 那个会话重新回答 ${name}。它自己的上下文还在，只补上它离开期间的对话。`, E`The session on ${sideLabel(back.from, hub)} answers for ${name} again. It still has its own context; it only catches up on what it missed.`)
+        : L(E`换一个会话来接着做 ${name}：名字、聊天记录和项目都不变。`, E`Another session carries on as ${name}: its name, chats and projects stay.`)}>
       {entry.why ? (
         <div className="ho-body">
           <div className="app-small-note" data-testid="handover-e2e">{L("这个工作区开了端到端加密，Hub 读不了消息，还没法替新的会话写交接说明。这个功能暂时不支持端到端加密的工作区。", "This workspace is end-to-end encrypted: the hub cannot read the messages to write the new session's handover note. Handing over is not available in encrypted workspaces yet.")}</div>
@@ -319,8 +319,8 @@ export function HandoverDialog({ target, rows, onClose, onDone, onOpenProfile }:
         <div className="ho-body" data-testid="handover-done">
           <div className="ws-command-done">
             <Check />
-            <span>{L(`已接手：现在由 ${sideLabel((result?.handover || arrived)?.to, hub) || L("新的会话", "the new session")} 回答 ${name}。原来的会话不会再收到消息。`,
-              `Taken over: ${sideLabel((result?.handover || arrived)?.to, hub) || "the new session"} answers for ${name} now. The earlier session gets no more messages.`)}</span>
+            <span>{L(E`已接手：现在由 ${sideLabel((result?.handover || arrived)?.to, hub) || L("新的会话", "the new session")} 回答 ${name}。原来的会话不会再收到消息。`,
+              E`Taken over: ${sideLabel((result?.handover || arrived)?.to, hub) || "the new session"} answers for ${name} now. The earlier session gets no more messages.`)}</span>
           </div>
           {result?.spawn?.reply && (
             <div className="ho-reply-wrap">
@@ -375,7 +375,7 @@ export function HandoverDialog({ target, rows, onClose, onDone, onOpenProfile }:
                 </div>
                 {machineOld && (
                   <div className="app-small-note" data-testid="handover-machine-old">
-                    {L(`${machine!.name} 上的 myco 太旧，还不会接手。在那台电脑上运行 myco upgrade 再来。`, `The myco on ${machine!.name} is too old to take over. Run myco upgrade there first.`)}
+                    {L(E`${machine!.name} 上的 myco 太旧，还不会接手。在那台电脑上运行 myco upgrade 再来。`, E`The myco on ${machine!.name} is too old to take over. Run myco upgrade there first.`)}
                   </div>
                 )}
               </div>
@@ -404,7 +404,7 @@ export function HandoverDialog({ target, rows, onClose, onDone, onOpenProfile }:
           {way === "link" && link ? (
             <div className="ws-command" data-testid="handover-command">
               <div className="app-field-label">{back
-                ? L(`在原来那个会话（${sideLabel(back.from, hub)}）里运行这一行：`, `Run this in the earlier session (${sideLabel(back.from, hub)}):`)
+                ? L(E`在原来那个会话（${sideLabel(back.from, hub)}）里运行这一行：`, E`Run this in the earlier session (${sideLabel(back.from, hub)}):`)
                 : L("在要接手的会话里运行这一行（比如另一个 claude.ai 账号的云端会话，或者任何一台电脑的终端）：", "Run this in the session that should take over (another claude.ai account's cloud session, or a terminal on any computer):")}</div>
               <div className="seg ws-command-os" role="tablist" aria-label={L("在哪种系统上运行", "Where it runs")}>
                 <button type="button" role="tab" aria-selected={os === "sh"} className={cn("seg-btn", os === "sh" && "active")} onClick={() => setOs("sh")}>{L("Mac / Linux / 云端", "Mac / Linux / cloud")}</button>
@@ -431,7 +431,7 @@ export function HandoverDialog({ target, rows, onClose, onDone, onOpenProfile }:
                   ? <li>{L("现在回答它的会话会停下，不再收消息。", "The session answering it now stops and gets no more messages.")}</li>
                   : <li>{L("名字、聊天记录和项目都不变。新的会话先读一份交接说明：最近 30 条对话和还没做完的事。", "Its name, chats and projects stay. The new session first reads a handover note: the last 30 messages and what is not done yet.")}</li>}
                 {!back && <li>{L("原来的会话会停下，不再收消息；之后在「接手记录」里可以换回来。", "The earlier session stops and gets no more messages; you can switch back under Handovers.")}</li>}
-                {open > 0 && <li>{L(`它手上没做完的 ${open} 件事，交给${back ? "换回去的" : "新的"}会话重新做。`, `The ${open} task${open > 1 ? "s" : ""} it has not finished go to the ${back ? "earlier" : "new"} session to redo.`)}</li>}
+                {open > 0 && <li>{L(E`它手上没做完的 ${open} 件事，交给${back ? "换回去的" : "新的"}会话重新做。`, E`The ${open} task${open > 1 ? "s" : ""} it has not finished go to the ${back ? "earlier" : "new"} session to redo.`)}</li>}
                 {row.st.state === "working" && <li>{L("它现在正在干活，那件事也会交过去重新做。", "It is at work right now; that task goes over too.")}</li>}
               </ul>
               <ErrorText error={error} />

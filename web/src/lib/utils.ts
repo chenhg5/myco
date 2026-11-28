@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -10,13 +10,13 @@ export function timeAgo(iso?: string, now = Date.now()): string {
   if (!iso) return L("从未", "never");
   const s = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
   if (s < 5) return L("刚刚", "just now");
-  if (s < 60) return L(`${s} 秒前`, `${s}s ago`);
+  if (s < 60) return L(E`${s} 秒前`, E`${s}s ago`);
   const m = Math.round(s / 60);
-  if (m < 60) return L(`${m} 分钟前`, `${m} min ago`);
+  if (m < 60) return L(E`${m} 分钟前`, E`${m} min ago`);
   const h = Math.round(m / 60);
-  if (h < 48) return L(`${h} 小时前`, `${h} h ago`);
+  if (h < 48) return L(E`${h} 小时前`, E`${h} h ago`);
   const d = Math.round(h / 24);
-  return L(`${d} 天前`, d === 1 ? "1 day ago" : `${d} days ago`);
+  return L(E`${d} 天前`, d === 1 ? "1 day ago" : E`${d} days ago`);
 }
 
 export function clock(iso: string): string {
