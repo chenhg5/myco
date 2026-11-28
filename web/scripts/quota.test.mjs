@@ -25,7 +25,7 @@ const built = await build({
   format: "esm",
   plugins: [stub],
 });
-const { quotaWindowText, quotaRemainingText, quotaSpent, quotaLiveWindows, quotaHasNumbers, quotaEffectiveStatus, quotaStatusText, quotaSummary, quotaSourceText, quotaOldNote, quotaOutNote, quotaWorst } = await import(
+const { quotaWindowLabel, quotaWindowText, quotaRemainingText, quotaSpent, quotaLiveWindows, quotaHasNumbers, quotaEffectiveStatus, quotaStatusText, quotaSummary, quotaSourceText, quotaOldNote, quotaOutNote, quotaWorst } = await import(
   `data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`
 );
 
@@ -120,3 +120,6 @@ assert.equal(enQuota.quotaSummary(balance, [], now).short, "$17.50 left");
 assert.equal(enQuota.quotaSummary({ ...balance, windows: [unlimitedWindow] }, [], now).short, "Unlimited");
 assert.ok(!enQuota.quotaSummary(balance, [], now).line.includes("reset"));
 console.log("quota: balance and unlimited in Chinese and English passed");
+
+assert.equal(quotaWindowLabel({ name: "monthly_mcp", used: .2 }), "每月 · MCP");
+assert.equal(enQuota.quotaWindowLabel({ name: "monthly_mcp", used: .2 }), "Monthly · MCP");

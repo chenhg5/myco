@@ -28,6 +28,7 @@ function durationLabel(sec: number): string {
  *  it, else by the CLI's own window names; a model's bucket adds the model. */
 export function quotaWindowLabel(w: QuotaWindow): string {
   if (w.balance) return L("余额", "Balance");
+  if (w.name === "monthly_mcp") return `${L("每月", "Monthly")} · MCP`;
   let base: string;
   if (w.duration_sec && w.duration_sec > 0) base = durationLabel(w.duration_sec);
   else if (w.name === "five_hour") base = L("5 小时", "5 hours");
@@ -278,7 +279,7 @@ export function agentQuotaHint(a: Agent, now = Date.now()): { level: "tight" | "
 export function quotaWindowShort(w: QuotaWindow): string {
   if (w.balance) return "";
   const sec = w.duration_sec || (w.name === "five_hour" ? 5 * HOUR : w.name.startsWith("seven_day") || w.name === "weekly" ? 7 * DAY : w.name === "daily" ? DAY : 0);
-  if (w.name === "monthly" || (sec >= 28 * DAY && sec <= 31 * DAY)) return L("月", "mo");
+  if (w.name === "monthly" || w.name === "monthly_mcp" || (sec >= 28 * DAY && sec <= 31 * DAY)) return L("月", "mo");
   if (!sec) return w.label || "";
   if (sec < 2 * DAY) return `${Math.round(sec / HOUR)}h`;
   return `${Math.round(sec / DAY)}d`;

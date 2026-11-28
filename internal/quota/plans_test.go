@@ -78,7 +78,7 @@ func TestPlanParsers(t *testing.T) {
 			}
 			switch tc.name {
 			case "glm":
-				if q.Windows[0].ResetsAt.UnixMilli() != 1795900000000 || q.Windows[1].DurationSec != 604800 || q.Windows[2].ModelScope != "MCP" {
+				if q.Windows[0].ResetsAt.UnixMilli() != 1795900000000 || q.Windows[1].DurationSec != 604800 || q.Windows[2].Name != "monthly_mcp" || q.Windows[2].ModelScope != "" {
 					t.Fatal("wrong GLM period/reset/scope")
 				}
 			case "kimi":

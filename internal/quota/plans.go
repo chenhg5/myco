@@ -103,7 +103,7 @@ func parseGLM(b []byte, q *api.Quota) error {
 		case w.Type == "TOKENS_LIMIT" && unit == 6 && count == 1:
 			name, duration = "weekly", 604800
 		case w.Type == "TIME_LIMIT" && unit == 5 && count == 1:
-			name, scope = "monthly", "MCP"
+			name = "monthly_mcp"
 		default:
 			return errPlanFormat
 		}

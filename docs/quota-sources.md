@@ -28,7 +28,7 @@ Only normalized quota numbers and an opaque machine-local reference reach the Hu
 
 GLM uses `data.limits[]`: `TOKENS_LIMIT/unit=3/number=5` is five hours;
 `TOKENS_LIMIT/unit=6/number=1` is weekly; `TIME_LIMIT/unit=5/number=1` is
-monthly MCP usage, separately scoped as `MCP`. `percentage` is percent used.
+monthly MCP usage (`monthly_mcp`), separate from per-model buckets. `percentage` is percent used.
 `nextResetTime` is optional (epoch milliseconds or an RFC 3339 timestamp).
 A missing period is omitted, never fabricated. Unknown types/periods, including
 unqualified `CREDIT_LIMIT` variants, invalidate the read instead of silently
