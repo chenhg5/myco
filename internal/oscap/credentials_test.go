@@ -64,12 +64,12 @@ func TestCredentialDestinationAndPathRules(t *testing.T) {
 			t.Fatalf("valid %s: %v", path, err)
 		}
 	}
-	for _, path := range []string{"/userfoo", "/repos", "/", "//evil.example/repos/a", "https://evil.example/repos/a", "/repos//a", "/repos/a/../b", "/repos/./b", "/repos/%2e%2e/a", "/repos/%2Fa", "/repos/%5ca", "/repos/%252e/a", "/repos/%252f/a", "/repos/a\\b", "/repos/a?x=y", "/repos/a#fragment", "/repos/%00a", "/repos/a/"} {
+	for _, path := range []string{"/userfoo", "/repos", "/", "//evil.example/repos/a", "https://evil.example/repos/a", "/repos//a", "/repos/a/../b", "/repos/./b", "/repos/%2e%2e/a", "/repos/%2Fa", "/repos/%5ca", "/repos/%252e/a", "/repos/%252f/a", "/repos/a\\b", "/repos/a?x=y", "/repos/a#fragment", "/repos/%00a", "/repos/a%3fq=secret", "/repos/a%23fragment", "/repos/a/"} {
 		if _, err := CredentialRequestURL(e, c.ID, path); err == nil {
 			t.Errorf("accepted %q", path)
 		}
 	}
-	for _, origin := range []string{"http://example.com", "https://u:pw@example.com", "https://example.com/path", "https://example.com?x=y", "https://example.com#f", "https://example.com.", "https://example.com/?"} {
+	for _, origin := range []string{"http://example.com", "https://u:pw@example.com", "https://example.com/path", "https://example.com?x=y", "https://example.com#f", "https://example.com.", "https://example.com/?", "https://example.com:70000"} {
 		if _, err := CredentialOrigin(origin); err == nil {
 			t.Errorf("accepted origin %s", origin)
 		}

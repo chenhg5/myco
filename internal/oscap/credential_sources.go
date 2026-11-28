@@ -129,7 +129,7 @@ func CredentialSources(ctx context.Context, e *Env) []api.CredentialSource {
 // CredentialSourceToken accepts only a source retained in a host confirmation.
 func CredentialSourceToken(ctx context.Context, e *Env, s api.CredentialSource) (string, error) {
 	origin, base, err := CredentialSourceTarget(s.CLI, s.Host)
-	if err != nil || origin != s.Origin || base != s.BasePath || !credentialLoginPattern.MatchString(s.Login) {
+	if err != nil || origin != s.Origin || base != s.BasePath || (!credentialLoginPattern.MatchString(s.Login) || strings.HasPrefix(s.Login, "-")) {
 		return "", errf(CodePermission, "invalid discovered source")
 	}
 	argv := []string{"gh", "auth", "token", "--hostname", s.Host, "--user", s.Login}

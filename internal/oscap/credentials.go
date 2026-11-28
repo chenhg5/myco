@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -163,6 +164,10 @@ func CredentialOrigin(origin string) (string, error) {
 		return "", errf(CodeInvalid, "enter an HTTPS origin without a path or credentials")
 	}
 	if u.Port() != "" {
+		port, err := strconv.Atoi(u.Port())
+		if err != nil || port < 1 || port > 65535 {
+			return "", errf(CodeInvalid, "invalid server port")
+		}
 		if _, err := url.ParseRequestURI("https://" + u.Host); err != nil {
 			return "", errf(CodeInvalid, "invalid server port")
 		}
@@ -185,7 +190,7 @@ func credentialPath(path string) error {
 		}
 	}
 	decoded, err := url.PathUnescape(path)
-	if err != nil {
+	if err != nil || strings.ContainsAny(decoded, "?#\\") {
 		return errf(CodeInvalid, "invalid path encoding")
 	}
 	for _, r := range decoded {
