@@ -11,7 +11,8 @@
     "dev:app": "node mock/app-server.mjs & vite",
     "test:usage": "node scripts/usage.test.mjs",
     "test:quota": "node scripts/quota.test.mjs",
-    "test:preferences": "node scripts/preferences.test.mjs"
+    "test:preferences": "node scripts/preferences.test.mjs",
+    "test:i18n": "node scripts/i18n.test.mjs && node scripts/i18n-catalog.mjs --check"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.1.2",

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CircleHelp, Gavel, Hourglass, ShieldCheck, XCircle } from "lucide-react";
 import type { Notice } from "@/api";
 import { appApi } from "@/appapi";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { timeAgo } from "@/lib/utils";
 import { Modal } from "@/app/dialogs";
 
@@ -135,7 +135,7 @@ export function NoticesPanel({ open, onOpenChange, hubs, nameOf, onGo, onChanged
             </span>
             {readable.length > 0 && (
               <button type="button" className="app-btn" disabled={busy} onClick={() => void readAll()}>
-                {L(`全部标为已读（${readable.length} 条）`, `Mark ${readable.length} as read`)}
+                {L(E`全部标为已读（${readable.length} 条）`, E`Mark ${readable.length} as read`)}
               </button>
             )}
           </div>

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { Check, ImagePlus } from "lucide-react";
 import { Modal } from "@/app/dialogs";
 import { PRESETS, defaultBg, keepImage, ownBg, setBg, useImageUrl, type ChatBg } from "@/app/chatBg";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
@@ -50,7 +50,7 @@ export function ChatBgDialog({ open, onClose, chat, name }: {
       {chat && (
         <div className="seg cbg-scope" role="tablist" aria-label={L("用在哪", "Where")}>
           <button type="button" role="tab" aria-selected={scope === "chat"} className={cn("seg-btn", scope === "chat" && "active")} onClick={() => setScope("chat")}>
-            {name ? L(`和 ${name} 的对话`, `This chat with ${name}`) : L("这个对话", "This chat")}
+            {name ? L(E`和 ${name} 的对话`, E`This chat with ${name}`) : L("这个对话", "This chat")}
           </button>
           <button type="button" role="tab" aria-selected={scope === "all"} className={cn("seg-btn", scope === "all" && "active")} onClick={() => setScope("all")}>
             {L("所有对话的默认", "Default for all")}

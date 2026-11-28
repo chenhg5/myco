@@ -7,7 +7,7 @@ import { thisComputerId } from "@/app/nodes";
 import { forgetMachineInfo } from "@/app/machineInfoCache";
 import { ErrorText } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /**
  * The folders agents may start in on a computer (spawn.dirs in its
@@ -49,7 +49,7 @@ export function MachineDirs({ hubId, hub, machine, info, onChanged, prefill }: {
       const r = await appApi.setMachineDirs(hubId, machine.id, { ...c, here });
       forgetMachineInfo(hubId, machine.id);
       onChanged(r.dirs);
-      if (r.already_allowed?.length) setSaid(L(`${r.already_allowed.join("、")} 本来就在允许的文件夹里。`, `${r.already_allowed.join(", ")} was allowed already.`));
+      if (r.already_allowed?.length) setSaid(L(E`${r.already_allowed.join("、")} 本来就在允许的文件夹里。`, E`${r.already_allowed.join(", ")} was allowed already.`));
       if (c.add) setAdding("");
     } catch (e) { setError(e); } finally { setBusy(""); }
   };
@@ -63,7 +63,7 @@ export function MachineDirs({ hubId, hub, machine, info, onChanged, prefill }: {
           <span key={d} className="pcd-chip mono mdirs-chip">
             {d === "~" ? L("~（整个用户目录）", "~ (all of home)") : d}
             {can && dirs.length > 1 && (
-              <button type="button" className="mdirs-x" disabled={!!busy} aria-label={L(`不再允许 ${d}`, `Stop allowing ${d}`)} title={L("不再允许", "Stop allowing")}
+              <button type="button" className="mdirs-x" disabled={!!busy} aria-label={L(E`不再允许 ${d}`, E`Stop allowing ${d}`)} title={L("不再允许", "Stop allowing")}
                 onClick={() => void change({ remove: [d] })}><X /></button>
             )}
           </span>
@@ -88,8 +88,8 @@ export function MachineDirs({ hubId, hub, machine, info, onChanged, prefill }: {
       <p className="app-small-note mdirs-note">
         {said ? `${said} ` : ""}
         {can
-          ? L(`在${whereZh}上的 ~/.myco/machine.yaml 里改（spawn.dirs），下一个新建的 agent 就按新的来，不用重启。${homeAll ? "现在整个用户目录都允许。" : ""}`,
-            `Changed in ~/.myco/machine.yaml on ${where} (spawn.dirs); the next agent started there follows it, no restart.${homeAll ? " All of home is allowed now." : ""}`)
+          ? L((homeAll ? E`在${whereZh}上的 ~/.myco/machine.yaml 里改（spawn.dirs），下一个新建的 agent 就按新的来，不用重启。现在整个用户目录都允许。` : E`在${whereZh}上的 ~/.myco/machine.yaml 里改（spawn.dirs），下一个新建的 agent 就按新的来，不用重启。`),
+            (homeAll ? E`Changed in ~/.myco/machine.yaml on ${where} (spawn.dirs); the next agent started there follows it, no restart. All of home is allowed now.` : E`Changed in ~/.myco/machine.yaml on ${where} (spawn.dirs); the next agent started there follows it, no restart.`))
           : L("「在线」是说它连着工作区；允许哪些文件夹是那台电脑自己的规定，工作区替它改不了，这样别人拿到工作区的权限也放不开你的电脑。在它上面运行上面的命令，或用它上面的 myco App 改（WSL 的话，用同一台 Windows 上的 App）；这个 App 用 SSH 或 WSL 连上它之后，这里也能改。",
             "Online means it is connected to the workspace; which folders it allows is that computer's own rule, which the workspace cannot change for it, so access to the workspace cannot open up your computer. Run the command there or use the myco app on it (for WSL, the app on the same Windows PC); once this App reaches it over SSH or WSL, it can change it here too.")}
       </p>
@@ -124,7 +124,7 @@ export function AllowFolder({ hubId, hub, machine, dir, onAllowed }: {
             forgetMachineInfo(hubId, machine.id);
             onAllowed(r.dirs);
           } catch (e) { setError(e); } finally { setBusy(false); }
-        }}><FolderPlus />{busy ? L("正在改…", "Saving…") : L(`允许在 ${dir} 开工`, `Allow ${dir}`)}</button>
+        }}><FolderPlus />{busy ? L("正在改…", "Saving…") : L(E`允许在 ${dir} 开工`, E`Allow ${dir}`)}</button>
         <ErrorText error={error} />
       </span>
     );

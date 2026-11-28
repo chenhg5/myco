@@ -28,7 +28,7 @@ import { useContextMenu } from "@/app/ContextMenu";
 import { handoverItem } from "@/app/Handover";
 import { forkItem } from "@/app/Fork";
 import { PaneGrid, dragAgent, leastShare, onePane, paneKeys, placePane, removePane, replacePane, soundLayout, PANE_MIN_W, type DragAgent, type DropAt, type PaneLayout, type PaneSlot } from "@/app/Panes";
-import { L } from "@/lib/i18n";
+import { L, E, locale } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
 
@@ -603,8 +603,8 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             now={now}
             showBack
             backLabel={view.kind === "pair" && view.back
-              ? (() => { const b = view.back; const who = b.kind === "chat" || b.kind === "pair" || b.kind === "thread" ? nameOf(b.agent) : ""; return who ? L(`返回和 ${who} 的对话`, `Back to ${who}`) : L("返回", "Back"); })()
-              : loose ? L("返回", "Back") : L(`返回「${project?.title || project?.name}」`, `Back to ${project?.title || project?.name}`)}
+              ? (() => { const b = view.back; const who = b.kind === "chat" || b.kind === "pair" || b.kind === "thread" ? nameOf(b.agent) : ""; return who ? L(E`返回和 ${who} 的对话`, E`Back to ${who}`) : L("返回", "Back"); })()
+              : loose ? L("返回", "Back") : L(E`返回「${project?.title || project?.name}」`, E`Back to ${project?.title || project?.name}`)}
             // (a conversation opened from a card in another: back to that one)
             onBack={() => setView(view.kind === "pair" && view.back ? view.back : { kind: "home" })}
             role={view.kind === "chat" && view.agent === coordinator ? L("协调者", "Coordinator") : undefined}
@@ -695,7 +695,7 @@ export function ProjectSpace({ space, project, looseRows = [], hubName, rows, no
             rows={rows}
             now={now}
             showBack={!!side.back}
-            backLabel={side.back ? L(`返回和 ${nameOf(side.back.agent)} 的对话`, `Back to ${nameOf(side.back.agent)}`) : undefined}
+            backLabel={side.back ? L(E`返回和 ${nameOf(side.back.agent)} 的对话`, E`Back to ${nameOf(side.back.agent)}`) : undefined}
             // (opened from a card in this pane: back to what was here)
             onBack={() => (side.back ? updateSide(side.id, (x) => ({ ...x.back!, id: x.id })) : closeSide(side.id))}
             headActions={actions}
@@ -972,7 +972,7 @@ function GroupView({ hubId, project, loose, title, agents, memberNames, rowOf, n
           <h2 title={!activity && !loose ? project?.goal || undefined : undefined}>{activity ? L("全部动态", "All activity") : title}</h2>
           <p>
             {activity
-              ? L(`「${title}」里所有成员之间的任务，留着回头查。`, `Every task between the members of ${title}, to look back at.`)
+              ? L(E`「${title}」里所有成员之间的任务，留着回头查。`, E`Every task between the members of ${title}, to look back at.`)
               : loose
               ? L("直接找你的 agent 聊，不用先建项目。想让几个一起做成一件事时，再建个项目把它们放进去。", "Talk to your agents directly, no project needed. When several should work on one thing, start a project and put them in it.")
               : project?.goal || L("给一个成员派活，看它们一起干。", "Give a member a task and watch them work together.")}
@@ -1103,7 +1103,7 @@ function TaskCard({ it, rowOf, nameOf, now, onOpen }: {
         ) : state === "done" ? (
           <span className="sp-card-state is-done">{L("做完了", "Done")}</span>
         ) : null}
-        {it.messages > 2 && <span className="sp-card-count">{L(`共 ${it.messages} 条`, `${it.messages} messages`)}</span>}
+        {it.messages > 2 && <span className="sp-card-count">{L(E`共 ${it.messages} 条`, E`${it.messages} messages`)}</span>}
       </div>
     </button>
   );
@@ -1137,7 +1137,7 @@ function GroupChat({ items, rowOf, nameOf, now, onOpen }: {
       state: answer ? undefined : state });
     if (answer) {
       lines.push({ key: `${it.thread_id}:a`, it, m: answer, to: task.from, quote: firstLine(task.body),
-        tail: between > 0 ? L(`中间还有 ${between} 条进度`, `${between} updates in between`) : undefined });
+        tail: between > 0 ? L(E`中间还有 ${between} 条进度`, E`${between} updates in between`) : undefined });
     }
   }
   lines.sort((a, b) => a.m.created_at.localeCompare(b.m.created_at));
@@ -1181,7 +1181,7 @@ function dayLabel(iso: string, now: number): string {
   const days = Math.round((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86400e3);
   if (days === 0) return L("今天", "Today");
   if (days === 1) return L("昨天", "Yesterday");
-  return L(`${d.getMonth() + 1} 月 ${d.getDate()} 日`, d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+  return d.toLocaleDateString(locale(), { month: "short", day: "numeric" });
 }
 
 /** "14:05" */
@@ -1322,7 +1322,7 @@ function Composer({ hubId, project, agents, onSending, onSent, onCall }: {
               void send();
             }
           }}
-          placeholder={rec ? L(`给 ${nodeName(rec.st.agent, rec.hub)} 派个活…`, `A task for ${nodeName(rec.st.agent, rec.hub)}…`) : ""}
+          placeholder={rec ? L(E`给 ${nodeName(rec.st.agent, rec.hub)} 派个活…`, E`A task for ${nodeName(rec.st.agent, rec.hub)}…`) : ""}
           aria-label={L("任务", "Task")}
         />
         <div className="sp-compose-bar">
@@ -1335,7 +1335,7 @@ function Composer({ hubId, project, agents, onSending, onSent, onCall }: {
                 checked: r.st.agent.name === recipient,
                 onSelect: () => pick(r.st.agent.name),
               })),
-            ])} title={rec ? L(`只有 ${nodeName(rec.st.agent, rec.hub)} 会收到这条，其他成员看得到但不会动手。点一下换一个`, `Only ${nodeName(rec.st.agent, rec.hub)} gets this; the others see it but won't act on it. Click to change`) : L("换一个收件人", "Change who gets it")}>
+            ])} title={rec ? L(E`只有 ${nodeName(rec.st.agent, rec.hub)} 会收到这条，其他成员看得到但不会动手。点一下换一个`, E`Only ${nodeName(rec.st.agent, rec.hub)} gets this; the others see it but won't act on it. Click to change`) : L("换一个收件人", "Change who gets it")}>
               <span className="sp-to-label">{L("发给", "To")}</span>
               {rec && <Avatar agent={rec.st.agent} size={16} badge={false} />}
               <span className="sp-to-name">{rec ? nodeName(rec.st.agent, rec.hub) : ""}</span>
@@ -1351,8 +1351,8 @@ function Composer({ hubId, project, agents, onSending, onSent, onCall }: {
               title={(() => {
                 const who = rec ? nodeName(rec.st.agent, rec.hub) : recipient;
                 return voiceCall && voiceCall.agent !== recipient
-                  ? L(`挂断和 ${voiceCall.agentName} 的通话，改和 ${who} 语音聊天`, `Hang up on ${voiceCall.agentName} and voice chat with ${who}`)
-                  : L(`和 ${who} 语音聊天`, `Voice chat with ${who}`);
+                  ? L(E`挂断和 ${voiceCall.agentName} 的通话，改和 ${who} 语音聊天`, E`Hang up on ${voiceCall.agentName} and voice chat with ${who}`)
+                  : L(E`和 ${who} 语音聊天`, E`Voice chat with ${who}`);
               })()}>
               <AudioLines />
             </button>
@@ -1382,17 +1382,17 @@ function liveLine(r: AgentRow, nameOf: (n: string) => string, now: number): { te
   const asked = open.find((m) => m.asking);
   if ((r.st.asking || 0) > 0) {
     const from = asked ? nameOf(asked.from) : "";
-    return { text: asked && !isMe(asked.from, r.hub) ? L(`等 ${from} 决定`, `Waiting for ${from} to decide`) : L("等你决定", "Needs your decision"),
+    return { text: asked && !isMe(asked.from, r.hub) ? L(E`等 ${from} 决定`, E`Waiting for ${from} to decide`) : L("等你决定", "Needs your decision"),
       meta: asked ? asked.body.replace(/\s+/g, " ").trim() : undefined };
   }
   const doing = open.find((m) => m.status === "acked") || (r.st.state === "working" ? open[0] : undefined);
   if (r.st.state === "working" || doing) {
     const text = a.status_text || (doing ? doing.body.replace(/\s+/g, " ").trim() : "") || L("在干活", "Working");
-    const meta = doing ? [L(`${nameOf(doing.from)}派的`, `from ${nameOf(doing.from)}`), timeAgo(doing.created_at, now)].join(" · ") : undefined;
-    const queued = r.st.queued > 0 ? L(` · 还有 ${r.st.queued} 个排队`, ` · ${r.st.queued} queued`) : "";
+    const meta = doing ? [L(E`${nameOf(doing.from)}派的`, E`from ${nameOf(doing.from)}`), timeAgo(doing.created_at, now)].join(" · ") : undefined;
+    const queued = r.st.queued > 0 ? L(E` · 还有 ${r.st.queued} 个排队`, E` · ${r.st.queued} queued`) : "";
     return { text, meta: meta ? meta + queued : queued.replace(/^ · /, "") || undefined };
   }
-  if (r.st.queued > 0) return { text: L(`${r.st.queued} 个活在排队`, `${r.st.queued} queued`) };
+  if (r.st.queued > 0) return { text: L(E`${r.st.queued} 个活在排队`, E`${r.st.queued} queued`) };
   if (r.st.held > 0) {
     const held = r.st.current?.find((m) => m.status === "held");
     return { text: held ? heldTaskLabel(held, nameOf(held.from)) : L("暂挂中，没人在做", "On hold · no one is working on it") };
@@ -1574,13 +1574,13 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
             <span className="sp-member-name-text">{nodeName(a, r.hub)}</span>
             {a.name === coordinator && <span className="sp-role">{L("协调者", "Coordinator")}</span>}
             {r.st.goal && (
-              <span className="sp-watch-tag sp-goal-tag" title={L(`目标：${r.st.goal.objective}`, `Goal: ${r.st.goal.objective}`)}>
+              <span className="sp-watch-tag sp-goal-tag" title={L(E`目标：${r.st.goal.objective}`, E`Goal: ${r.st.goal.objective}`)}>
                 <Target /><span className="app-sr-only">{r.st.goal.state === "paused" ? L("目标暂停", "goal paused") : L("目标中", "on a goal")}</span>
               </span>
             )}
             {(r.st.watching || 0) > 0 && (
-              <span className="sp-watch-tag" title={L(`在后台盯着 ${r.st.watching} 件事（myco watch）`, `Watching for ${r.st.watching} things in the background (myco watch)`)}>
-                <Eye />{r.st.watching}<span className="app-sr-only">{L(`盯着 ${r.st.watching}`, `watching ${r.st.watching}`)}</span>
+              <span className="sp-watch-tag" title={L(E`在后台盯着 ${r.st.watching} 件事（myco watch）`, E`Watching for ${r.st.watching} things in the background (myco watch)`)}>
+                <Eye />{r.st.watching}<span className="app-sr-only">{L(E`盯着 ${r.st.watching}`, E`watching ${r.st.watching}`)}</span>
               </span>
             )}
           </span>
@@ -1603,7 +1603,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
     <aside className="sp-side" aria-label={L("成员", "Members")}>
       <div className="sp-side-group">
         <div className="sp-side-title">
-          <span><Users />{L(`成员 ${agents.length}`, `Members ${agents.length}`)}</span>
+          <span><Users />{L(E`成员 ${agents.length}`, E`Members ${agents.length}`)}</span>
           <span className="sp-side-tools">
             <button type="button" className="sp-side-add" onClick={onAddAgent} title={L("添加 agent", "Add an agent")} aria-label={L("添加 agent", "Add an agent")}><Plus /></button>
             {groupsNeedUpgrade && !groups && (
@@ -1636,7 +1636,7 @@ function MembersPanel({ agents, workspaces, loose, selected, coordinator, nameOf
       </div>
       <div className="sp-side-group">
         <div className="sp-side-title">
-          <span>{L(`终端 ${workspaces.length}`, `Terminals ${workspaces.length}`)}</span>
+          <span>{L(E`终端 ${workspaces.length}`, E`Terminals ${workspaces.length}`)}</span>
           <button type="button" className="sp-side-add" onClick={onAddWorkspace} title={L("加一个终端", "Add a terminal")} aria-label={L("加一个终端", "Add a terminal")}><Plus /></button>
         </div>
         {workspaces.map(row)}

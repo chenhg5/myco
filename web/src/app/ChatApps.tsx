@@ -5,7 +5,7 @@ import type { AgentRow } from "@/app/types";
 import { agentKind, nodeName } from "@/app/nodes";
 import { CopyButton } from "@/app/copy";
 import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const PLATFORM: Record<string, () => string> = {
@@ -92,8 +92,8 @@ export function ChatAppsPanel({ row, mayManage }: { row: AgentRow; mayManage: bo
   return (
     <>
       <div className="ch" data-testid="chat-apps">
-        <p className="ch-intro">{L(`让别人在飞书、Lark 或 Slack 里直接找 ${name}：机器人就是它本人，在聊天软件里跟它说话就行，进度和结果都回到那里。`,
-          `Let people reach ${name} in Feishu, Lark or Slack: the bot is ${name} itself; talk to it there, and its progress and answers come back there.`)}</p>
+        <p className="ch-intro">{L(E`让别人在飞书、Lark 或 Slack 里直接找 ${name}：机器人就是它本人，在聊天软件里跟它说话就行，进度和结果都回到那里。`,
+          E`Let people reach ${name} in Feishu, Lark or Slack: the bot is ${name} itself; talk to it there, and its progress and answers come back there.`)}</p>
         <div className="ch-head">{L("已接入", "Connected")}</div>
         {bridges && !bridges.length ? (
           <div className="ch-none">{L("还没有接入任何渠道，从下面选一个。", "No channels yet: pick one below.")}</div>
@@ -115,13 +115,13 @@ export function ChatAppsPanel({ row, mayManage }: { row: AgentRow; mayManage: bo
                 </div>
                 {b.claim && (
                   <div className="ch-claim im-claim">
-                    {L(`在${/[A-Za-z]$/.test(label(b)) ? ` ${label(b)} ` : label(b)}里私聊这个机器人，发下面这一行，你就成了它的主人（别人发给它的消息才会交给 ${name}）：`, `Send this line to the bot in a direct message in ${label(b)} to become its owner (then what others write to it reaches ${name}):`)}
+                    {L((/[A-Za-z]$/.test(label(b)) ? E`在 ${label(b)} 里私聊这个机器人，发下面这一行，你就成了它的主人（别人发给它的消息才会交给 ${name}）：` : E`在${label(b)}里私聊这个机器人，发下面这一行，你就成了它的主人（别人发给它的消息才会交给 ${name}）：`), E`Send this line to the bot in a direct message in ${label(b)} to become its owner (then what others write to it reaches ${name}):`)}
                     <span className="app-command"><code>/claim {b.claim}</code><CopyButton value={`/claim ${b.claim}`} /></span>
                   </div>
                 )}
                 {b.claim_expired && (
                   <div className="ch-claim im-claim">
-                    {L(`${label(b)}${sp(b)}机器人还没有主人，认领码已经失效（过期或错太多次）。`, `The ${label(b)} bot has no owner yet, and its claim code no longer works (it expired, or was mistyped too often). `)}
+                    {L(E`${label(b)}${sp(b)}机器人还没有主人，认领码已经失效（过期或错太多次）。`, E`The ${label(b)} bot has no owner yet, and its claim code no longer works (it expired, or was mistyped too often). `)}
                     <button type="button" className="app-btn app-btn-small" disabled={busy} onClick={() => void renew(b)}>{L("重新生成认领码", "New claim code")}</button>
                   </div>
                 )}
@@ -135,7 +135,7 @@ export function ChatAppsPanel({ row, mayManage }: { row: AgentRow; mayManage: bo
             <div className="ch-grid">
               {APPS.filter((app) => !bridges.some((b) => b.platform === app.id)).map((app) => (
                 <button key={app.id} type="button" className="ch-tile" data-platform={app.id} onClick={() => setAdding(app.id)}
-                  aria-label={L(`绑定${/[A-Za-z]$/.test(PLATFORM[app.id]()) ? " " : ""}${PLATFORM[app.id]()}`, `Bind ${PLATFORM[app.id]()}`)}>
+                  aria-label={L((/[A-Za-z]$/.test(PLATFORM[app.id]()) ? E`绑定 ${PLATFORM[app.id]()}` : E`绑定${PLATFORM[app.id]()}`), E`Bind ${PLATFORM[app.id]()}`)}>
                   <span className="ch-tile-top"><b>{PLATFORM[app.id]()}</b><Plus aria-hidden /></span>
                   <span className="ch-tile-how">{app.how()}</span>
                 </button>
@@ -152,9 +152,9 @@ export function ChatAppsPanel({ row, mayManage }: { row: AgentRow; mayManage: bo
       </div>
 
       <Modal open={adding !== ""} onOpenChange={(o) => !o && setAdding("")}
-        title={adding === "slack" ? L(`给 ${name} 绑定 Slack 机器人`, `A Slack bot for ${name}`)
-          : adding === "lark" ? L(`给 ${name} 绑定 Lark 机器人`, `A Lark bot for ${name}`)
-          : L(`给 ${name} 绑定飞书机器人`, `A Feishu bot for ${name}`)}
+        title={adding === "slack" ? L(E`给 ${name} 绑定 Slack 机器人`, E`A Slack bot for ${name}`)
+          : adding === "lark" ? L(E`给 ${name} 绑定 Lark 机器人`, E`A Lark bot for ${name}`)
+          : L(E`给 ${name} 绑定飞书机器人`, E`A Feishu bot for ${name}`)}
         description={adding === "slack"
           ? L("在 Slack 里建一个应用（设置都已填好），装到你的工作区，再把两个令牌粘到这里。", "Make an app in Slack (its settings are filled in), install it to your workspace, and paste its two tokens here.")
           : adding === "lark"
@@ -165,7 +165,7 @@ export function ChatAppsPanel({ row, mayManage }: { row: AgentRow; mayManage: bo
       </Modal>
 
       <Modal open={!!editing} onOpenChange={(o) => !o && setEditing(null)} wide
-        title={editing ? L(`${label(editing)}${sp(editing)}机器人的接待设定`, `Instructions for the ${label(editing)} bot`) : ""}
+        title={editing ? L(E`${label(editing)}${sp(editing)}机器人的接待设定`, E`Instructions for the ${label(editing)} bot`) : ""}
         description={L("写给接待它的模型：对谁怎么说话、能答什么、不能做什么。只对这个机器人生效，和语音聊天分开。", "For the model that answers as the bot: how to talk, what it may answer, what it must not do. This bot only; voice chats have their own.")}>
         {editing && <PromptForm bridge={editing} onDone={() => { setEditing(null); void load(); }} onCancel={() => setEditing(null)} />}
       </Modal>

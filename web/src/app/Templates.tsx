@@ -8,7 +8,7 @@ import type { Page, Template } from "@/api";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { openPage } from "@/app/pages";
 import { CardsSkeleton, PageHero, SectionHead, SectionSkeleton } from "@/app/PageHero";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 /*
@@ -51,9 +51,9 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
   const syncNow = () => {
     setSync({ busy: true });
     appApi.syncApps(hubId).then((r) => {
-      setSync({ text: r.error ? L(`没拉到新的（${r.error}）`, `Could not fetch (${r.error})`)
-        : r.updated?.length ? L(`更新了 ${r.updated.length} 个：${r.updated.join("、")}`, `Updated ${r.updated.length}: ${r.updated.join(", ")}`)
-        : L(`已是最新，${r.apps} 个官方应用`, `Up to date: ${r.apps} official apps`) });
+      setSync({ text: r.error ? L(E`没拉到新的（${r.error}）`, E`Could not fetch (${r.error})`)
+        : r.updated?.length ? L(E`更新了 ${r.updated.length} 个：${r.updated.join("、")}`, E`Updated ${r.updated.length}: ${r.updated.join(", ")}`)
+        : L(E`已是最新，${r.apps} 个官方应用`, E`Up to date: ${r.apps} official apps`) });
       load();
     }, (e) => setSync({ text: e instanceof ApiError && e.status === 404 ? L("这个 Hub 还不会自己更新官方应用：升级到 v0.20.7 或更新", "This hub cannot update its official apps yet: upgrade it to v0.20.7 or later") : e instanceof Error ? e.message : String(e) }));
   };
@@ -83,7 +83,7 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
     const t = templateDisplay(source);
     return (
     <button key={t.id} type="button" className="tp-card" onClick={() => setUsing(t)} data-testid={`template-${t.slug}`}
-      title={L(`新建一份${t.name}`, `New ${t.name}`)}>
+      title={L(E`新建一份${t.name}`, E`New ${t.name}`)}>
       <span className={cn("tp-icon", `is-${t.kind} on-${shelfOf(t)}`)}><AppIcon t={t} /></span>
       <span className="tp-card-text">
         <span className="tp-card-name">{t.name}</span>
@@ -155,7 +155,7 @@ export function TemplatesPage({ hubId, projects, now }: { hubId: string; project
               <button key={key} type="button" role="tab" aria-selected={shelf === key} className={cn("tp-chip", shelf === key && "is-on")} onClick={() => setShelf(key)}>{L(zh, en)}</button>
             ))}
           </div>
-          {nothing && <p className="tp-hint">{L(`没有找到「${q}」`, `Nothing matches "${q}"`)}</p>}
+          {nothing && <p className="tp-hint">{L(E`没有找到「${q}」`, E`Nothing matches "${q}"`)}</p>}
           {shelf !== "own" && (
             <div data-testid="templates-official">
               {(shelf === "all" ? shelves : shelves.filter(([key]) => key === shelf)).map(([key, zh, en]) => {
@@ -223,7 +223,7 @@ function UseTemplate({ hubId, template, projects, first, onClose, onMade }: {
     }
   };
   return (
-    <Modal open={!!template} onOpenChange={(o) => !o && !busy && onClose()} title={template ? L(`新建一份${templateDisplay(template).name}`, `New ${templateDisplay(template).name}`) : ""}
+    <Modal open={!!template} onOpenChange={(o) => !o && !busy && onClose()} title={template ? L(E`新建一份${templateDisplay(template).name}`, E`New ${templateDisplay(template).name}`) : ""}
       description={template ? templateDisplay(template).description : undefined} wide className="tp-use">
       {template && <Shots hubId={hubId} template={template} />}
       <form onSubmit={make} className="pin-edit">
@@ -235,7 +235,7 @@ function UseTemplate({ hubId, template, projects, first, onClose, onMade }: {
           <span className="app-field-label">{L("放在哪", "Where")}</span>
           <select className="app-select-field" value={project} onChange={(e) => setProject(e.target.value)} data-testid="template-project">
             <option value="">{L("不放进项目（只有你和你的 agent 能看到）", "No project (you and your agents)")}</option>
-            {projects.map((p) => <option key={p.name} value={p.name}>{L(`项目「${p.title}」：项目里的人和 agent 都能用`, `Project ${p.title}: everyone in it`)}</option>)}
+            {projects.map((p) => <option key={p.name} value={p.name}>{L(E`项目「${p.title}」：项目里的人和 agent 都能用`, E`Project ${p.title}: everyone in it`)}</option>)}
           </select>
         </label>
         {first && <p className="app-small-note tp-sample-note" data-testid="template-sample-note">{L("这是你在这个工作区的第一份，会带上一些示例内容，看看怎么用；不要的直接删掉。", "Your first one here comes with some sample content, to show how it is used; delete what you don't need.")}</p>}
@@ -288,7 +288,7 @@ function Shots({ hubId, template }: { hubId: string; template: Template }) {
     <div className="tp-shots" data-testid="template-shots">
       <div className={cn("tp-shot", !ready[src] && "is-loading")}
         onKeyDown={(e) => { if (e.key === "ArrowLeft") { e.preventDefault(); go(-1); } else if (e.key === "ArrowRight") { e.preventDefault(); go(1); } }}>
-        <img key={src} src={src} alt={L(`${templateDisplay(template).name}的样子（第 ${i + 1} 张）`, `${templateDisplay(template).name}, screenshot ${i + 1}`)} draggable={false}
+        <img key={src} src={src} alt={L(E`${templateDisplay(template).name}的样子（第 ${i + 1} 张）`, E`${templateDisplay(template).name}, screenshot ${i + 1}`)} draggable={false}
           onLoad={() => setReady((r) => ({ ...r, [src]: true }))} onError={() => setReady((r) => ({ ...r, [src]: true }))} />
         {shots.length > 1 && (
           <>
@@ -300,7 +300,7 @@ function Shots({ hubId, template }: { hubId: string; template: Template }) {
       {shots.length > 1 && (
         <div className="tp-shot-dots" role="tablist" aria-label={L("截图", "Screenshots")}>
           {shots.map((s, k) => (
-            <button key={s.src} type="button" role="tab" aria-selected={k === i} aria-label={L(`第 ${k + 1} 张`, `Screenshot ${k + 1}`)}
+            <button key={s.src} type="button" role="tab" aria-selected={k === i} aria-label={L(E`第 ${k + 1} 张`, E`Screenshot ${k + 1}`)}
               className={cn("tp-shot-dot", k === i && "is-on")} onClick={() => setI(k)} />
           ))}
         </div>

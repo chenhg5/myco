@@ -773,7 +773,7 @@ export const appApi = {
   proxy: () => request<ProxySetting>("GET", "app/proxy"),
   putProxy: (p: ProxyInput) => request<ProxySetting>("PUT", "app/proxy", p),
   testProxy: (p: ProxyInput & { url?: string }) => request<{ ok: boolean; ms?: number; reason?: string; error?: string }>("POST", "app/proxy/test", p),
-  translate: (text: string, to: "zh" | "en") => request<{ text: string; provider: string }>("POST", "app/translate", { text, to }),
+  translate: (text: string, to: import("@/lib/i18n").Lang) => request<{ text: string; provider: string }>("POST", "app/translate", { text, to }),
   translateConfig: () => request<TranslateConfig>("GET", "app/translate/config"),
   putTranslateConfig: (c: { provider: string; base_url?: string; model?: string; key?: string; clear_key?: boolean }) =>
     request<TranslateConfig>("PUT", "app/translate/config", c),
@@ -1375,7 +1375,7 @@ export const appApi = {
   noticePrefs: (hubId: string) => request<NoticePrefs>("GET", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`),
   setNoticePrefs: (hubId: string, p: NoticePrefs) => request<NoticePrefs>("PUT", `app/hubs/${encodeURIComponent(hubId)}/notice-prefs`, p),
   /** The language these pages show, for what the desktop app draws itself (its tray menu). */
-  putUILang: (lang: "zh" | "en") => request<{ lang: string }>("PUT", "app/ui-lang", { lang }),
+  putUILang: (lang: import("@/lib/i18n").Lang) => request<{ lang: string }>("PUT", "app/ui-lang", { lang }),
   // Workspaces of a hub's server (hubs from v0.19.9 serve several at /w/<name>)
   workspaces: (hubId: string) =>
     request<WorkspaceState>("GET", `app/hubs/${enc(hubId)}/workspaces`),

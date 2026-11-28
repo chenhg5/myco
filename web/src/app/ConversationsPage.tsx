@@ -15,7 +15,7 @@ import { heldTaskLabel, groupsOf, isMe, possiblyStuck, tagsOf, nodeName } from "
 import { parseExecResult } from "@/app/Markdown";
 import { cn, timeAgo } from "@/lib/utils";
 import { summarize } from "@/app/summary";
-import { L, locale } from "@/lib/i18n";
+import { L, locale, E } from "@/lib/i18n";
 import { Busy, RowsSkeleton, TextSkeleton } from "@/app/Skeleton";
 
 /** A row of the recent list, with the hub it comes from. */
@@ -501,7 +501,7 @@ export function ConversationsPage({ hubs, hub, rows, now, onOpen, onNew, onInspe
       <div className="conv-list-head">
         {project ? (
           <span className="conv-list-count">
-            {firstLoad ? <TextSkeleton width={64} /> : L(`${shown.length} 个对话`, `${shown.length} conversation${shown.length === 1 ? "" : "s"}`)}
+            {firstLoad ? <TextSkeleton width={64} /> : L(E`${shown.length} 个对话`, (shown.length === 1 ? E`${shown.length} conversation` : E`${shown.length} conversations`))}
           </span>
         ) : (
           <div className="seg conv-side" role="tablist" aria-label={L("对话范围", "Which conversations")}>

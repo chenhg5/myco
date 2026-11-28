@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronRight, MoreHorizontal } from "lucide-react";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { AgentRow } from "@/app/types";
 import { Avatar } from "@/app/persona";
@@ -146,7 +146,7 @@ const asking = (rs: AgentRow[]) => rs.filter((r) => (r.st.asking || 0) > 0).leng
 /** A group's state in a few words: who is at work, who asks you. */
 function summary(rs: AgentRow[]): string {
   const w = working(rs), a = asking(rs), off = rs.filter((r) => r.st.state === "offline").length;
-  return [a ? L(`${a} 个在问你`, `${a} asking you`) : "", w ? L(`${w} 个在干活`, `${w} at work`) : "",
+  return [a ? L(E`${a} 个在问你`, E`${a} asking you`) : "", w ? L(E`${w} 个在干活`, E`${w} at work`) : "",
     !w && !a ? (off === rs.length && rs.length ? L("都不在线", "all offline") : L("都空闲", "all idle")) : ""].filter(Boolean).join(" · ");
 }
 
@@ -253,7 +253,7 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
     <span className="mg-faces" aria-hidden>{rs.slice(0, n).map((r) => <Avatar key={r.st.agent.name} agent={r.st.agent} size={16} badge={false} />)}</span>
   );
   const more = (g: Group) => (!g.other && ctl.canEdit ? (
-    <span className="mg-more" role="button" tabIndex={0} aria-label={L(`分组「${g.name}」`, `Group ${g.name}`)}
+    <span className="mg-more" role="button" tabIndex={0} aria-label={L(E`分组「${g.name}」`, E`Group ${g.name}`)}
       onClick={(e) => { e.stopPropagation(); groupMenu(e.currentTarget, g.name); }}
       onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); groupMenu(e.currentTarget, g.name); } }}><MoreHorizontal /></span>
   ) : null);
@@ -273,7 +273,7 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
               onClick={() => setChip(g.name)} {...groupDragProps(g)} {...dropProps(g, true)}>{g.name}<span>{g.rows.length}</span></button>
           ))}
         </div>
-        {ctl.error && <p className="mg-error" role="alert">{L(`分组没存上：${ctl.error}`, `Groups not saved: ${ctl.error}`)}</p>}
+        {ctl.error && <p className="mg-error" role="alert">{L(E`分组没存上：${ctl.error}`, E`Groups not saved: ${ctl.error}`)}</p>}
         {lead}
         {shown.map(row)}
         {menu.element}
@@ -284,7 +284,7 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
   if (style === "faces") {
     return (
       <div className="mg mg-faces-style">
-        {ctl.error && <p className="mg-error" role="alert">{L(`分组没存上：${ctl.error}`, `Groups not saved: ${ctl.error}`)}</p>}
+        {ctl.error && <p className="mg-error" role="alert">{L(E`分组没存上：${ctl.error}`, E`Groups not saved: ${ctl.error}`)}</p>}
         {lead}
         {groups.map((g) => {
           const open = opened.has(g.name);
@@ -310,7 +310,7 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
 
   return (
     <div className="mg mg-fold-style">
-      {ctl.error && <p className="mg-error" role="alert">{L(`分组没存上：${ctl.error}`, `Groups not saved: ${ctl.error}`)}</p>}
+      {ctl.error && <p className="mg-error" role="alert">{L(E`分组没存上：${ctl.error}`, E`Groups not saved: ${ctl.error}`)}</p>}
       {lead}
       {groups.map((g) => {
         const open = !folded.has(g.name);
@@ -323,7 +323,7 @@ export function GroupedMembers({ rows, ctl, style, row, foldKey, onNewGroup, onR
               <span className="mg-count">{g.rows.length}</span>
               <span className="mg-head-end">
                 {!open && g.rows.length > 0 && faces(g.rows)}
-                {(a > 0 || (!open && w > 0)) && <span className="mg-busy">{a > 0 ? L(`${a} 个在问你`, `${a} asking`) : L(`${w} 个在干活`, `${w} at work`)}</span>}
+                {(a > 0 || (!open && w > 0)) && <span className="mg-busy">{a > 0 ? L(E`${a} 个在问你`, E`${a} asking`) : L(E`${w} 个在干活`, E`${w} at work`)}</span>}
                 {more(g)}
               </span>
             </button>

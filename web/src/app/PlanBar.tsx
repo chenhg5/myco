@@ -1,7 +1,7 @@
 import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ListChecks, X } from "lucide-react";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { PlanCard, type PlanItem } from "@/app/TraceView";
 
@@ -63,9 +63,9 @@ export function PlanBar({ taskId, items, live }: {
         <button type="button" className="plan-bar-toggle" onClick={toggle} aria-expanded={open}
           title={open ? L("收起计划", "Fold the plan") : L("展开计划", "Show the whole plan")}>
           <ListChecks className="plan-bar-icon" />
-          <span className="plan-bar-count">{L(`计划 ${done}/${items.length}`, `Plan ${done}/${items.length}`)}</span>
+          <span className="plan-bar-count">{L(E`计划 ${done}/${items.length}`, E`Plan ${done}/${items.length}`)}</span>
           <span className="plan-bar-now">
-            {all ? L("全部完成", "All done") : doing ? (live ? L(`正在：${doing.text}`, `Now: ${doing.text}`) : L(`下一步：${doing.text}`, `Next: ${doing.text}`)) : ""}
+            {all ? L("全部完成", "All done") : doing ? (live ? L(E`正在：${doing.text}`, E`Now: ${doing.text}`) : L(E`下一步：${doing.text}`, E`Next: ${doing.text}`)) : ""}
           </span>
           <span className="plan-bar-track" aria-hidden><span style={{ width: `${Math.round((done / items.length) * 100)}%` }} /></span>
           <ChevronDown className="plan-bar-chev" />

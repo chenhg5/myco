@@ -5,7 +5,7 @@ import type { AgentRow } from "@/app/types";
 import { ErrorText, Modal } from "@/app/dialogs";
 import { addToProject } from "@/app/AddToProject";
 import { canManage, isInbox, machineOfRow, nodeName } from "@/app/nodes";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /*
  * 复制一份: a new agent whose session is a copy of this one's (Claude Code
@@ -32,8 +32,8 @@ export function forkEntry(row: AgentRow | undefined): { show: boolean; why?: str
   const machine = machineOfRow(row);
   if (!machine) return { show: false };
   if (!canManage(row.hub, machine.owner_id)) return { show: true, why: L("只有那台电脑的主人能在上面开会话", "Only that computer's owner can start sessions on it") };
-  if (!machine.online) return { show: true, why: L(`「${machine.name}」不在线`, `“${machine.name}” is away`) };
-  if (!machine.can_spawn) return { show: true, why: L(`「${machine.name}」现在开不了新会话`, `“${machine.name}” cannot start sessions now`) };
+  if (!machine.online) return { show: true, why: L(E`「${machine.name}」不在线`, E`“${machine.name}” is away`) };
+  if (!machine.can_spawn) return { show: true, why: L(E`「${machine.name}」现在开不了新会话`, E`“${machine.name}” cannot start sessions now`) };
   return { show: true };
 }
 
@@ -104,10 +104,10 @@ export function ForkDialog({ target, rows, onClose, onDone }: {
     }
   };
   return (
-    <Modal open onOpenChange={(o) => { if (!o && !busy) onClose(); }} title={L(`复制一份「${nodeName(row.st.agent, row.hub)}」`, `Fork “${nodeName(row.st.agent, row.hub)}”`)}
+    <Modal open onOpenChange={(o) => { if (!o && !busy) onClose(); }} title={L(E`复制一份「${nodeName(row.st.agent, row.hub)}」`, E`Fork “${nodeName(row.st.agent, row.hub)}”`)}
       description={L(
-        `复制它现在的会话，做成一个新的 agent：之前聊过的它都记得，在同一台电脑（${machine?.name || ""}）、同一个文件夹里干活。原来的照常用，两边互不影响。`,
-        `Its session is copied into a new agent: it remembers everything said so far and works on the same computer (${machine?.name || ""}) in the same folder. The original carries on; the two do not affect each other.`)}>
+        E`复制它现在的会话，做成一个新的 agent：之前聊过的它都记得，在同一台电脑（${machine?.name || ""}）、同一个文件夹里干活。原来的照常用，两边互不影响。`,
+        E`Its session is copied into a new agent: it remembers everything said so far and works on the same computer (${machine?.name || ""}) in the same folder. The original carries on; the two do not affect each other.`)}>
       <form onSubmit={(e) => void go(e)} data-testid="fork-dialog">
         <label className="app-field">
           <span className="app-field-label">{L("名字", "Name")}</span>
@@ -117,7 +117,7 @@ export function ForkDialog({ target, rows, onClose, onDone }: {
         {project && (
           <label className="app-check-line">
             <input type="checkbox" checked={inProject} onChange={(e) => setInProject(e.target.checked)} />
-            <span>{L(`也放进「${project.title || project.name}」`, `Also put it in “${project.title || project.name}”`)}</span>
+            <span>{L(E`也放进「${project.title || project.name}」`, E`Also put it in “${project.title || project.name}”`)}</span>
           </label>
         )}
         {why && <div className="app-small-note">{why}</div>}

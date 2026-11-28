@@ -3,11 +3,13 @@ package console
 import (
 	"net/http"
 
-	"github.com/myco-ai/myco/internal/client"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 )
 
 // The language the App's pages show (Settings › Appearance), for what the
@@ -15,7 +17,7 @@ import (
 // when they load and when it changes; it is kept on this computer, so the
 // menu starts in it next time.
 //
-//	GET /app/ui-lang         {lang}   "zh", "en" or "" (not said yet)
+//	GET /app/ui-lang         {lang}   a supported BCP-47 language ID or "" (not said yet)
 //	PUT /app/ui-lang {lang}  {lang}
 
 type uiLang struct {
@@ -25,7 +27,7 @@ type uiLang struct {
 	lang string
 }
 
-// UILang is the language the pages last said ("zh", "en", or "" when they
+// UILang is the language the pages last said (a supported ID, or "" when they
 // have not said yet: the system's, then).
 func (b *Backend) UILang() string {
 	u := b.uiLangState()
@@ -48,8 +50,8 @@ func (b *Backend) uiLangState() *uiLang {
 }
 
 func cleanUILang(s string) string {
-	switch s = strings.TrimSpace(s); s {
-	case "zh", "en":
+	s = strings.TrimSpace(s)
+	if api.UILanguage(s).Valid() {
 		return s
 	}
 	return ""
@@ -68,7 +70,7 @@ func (b *Backend) uiLangRoutes(m *http.ServeMux) {
 		}
 		l := cleanUILang(in.Lang)
 		if l == "" {
-			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "lang is zh or en"})
+			writeErr(w, &client.Error{Status: http.StatusBadRequest, Code: "invalid_argument", Message: "lang must be zh, zh-Hant, en, ja, ko, es or pt-BR"})
 			return
 		}
 		u := b.uiLangState()

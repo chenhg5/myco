@@ -7,7 +7,7 @@ import { ErrorText } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
 import { hubAtLeast } from "@/app/hubVersion";
 import { ver } from "@/app/nodes";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /*
  * Bringing myco up to date from the App: a computer (its machine node
@@ -45,13 +45,13 @@ export function upgradeHow(m: Machine, here: boolean): How {
 export async function upgradeComputer(hubId: string, m: Machine, here: boolean): Promise<string> {
   if (here) {
     const r = await appApi.upgradeMyco();
-    return L(`已升级到 ${ver(r.version)}，后台已重启`, `Upgraded to ${ver(r.version)}; restarted`);
+    return L(E`已升级到 ${ver(r.version)}，后台已重启`, E`Upgraded to ${ver(r.version)}; restarted`);
   }
   const r = await appApi.upgradeMachine(hubId, m.id);
   if (!r.to) return L("已经是最新的了", "Already up to date");
   return r.restarting
-    ? L(`已升级到 ${ver(r.to)}，它的后台几秒后重启`, `Upgraded to ${ver(r.to)}; its runner restarts in a few seconds`)
-    : L(`已升级到 ${ver(r.to)}；它的后台不是服务，要手动重启一次`, `Upgraded to ${ver(r.to)}; restart its runner by hand`);
+    ? L(E`已升级到 ${ver(r.to)}，它的后台几秒后重启`, E`Upgraded to ${ver(r.to)}; its runner restarts in a few seconds`)
+    : L(E`已升级到 ${ver(r.to)}；它的后台不是服务，要手动重启一次`, E`Upgraded to ${ver(r.to)}; restart its runner by hand`);
 }
 
 /** A computer's version, and the way to bring it up to date. */
@@ -81,7 +81,7 @@ export function MachineUpgrade({ hubId, machine, here, latest, onDone }: {
       <ArrowUpCircle />
       <div>
         <div className="mu-text">
-          {done || L(`myco ${ver(machine.myco_version)} 不是最新（最新 ${ver(latest)}）`, `myco ${ver(machine.myco_version)} is not the latest (${ver(latest)})`)}
+          {done || L(E`myco ${ver(machine.myco_version)} 不是最新（最新 ${ver(latest)}）`, E`myco ${ver(machine.myco_version)} is not the latest (${ver(latest)})`)}
         </div>
         {!done && how !== "none" && !tooOld && (
           <>
@@ -132,7 +132,7 @@ export function UpgradeAll({ items, latest, onDone }: {
     <div className="app-notice mu" data-testid="upgrade-all">
       <ArrowUpCircle />
       <div>
-        <div className="mu-text">{L(`${old.length} 台电脑的 myco 不是最新（最新 ${ver(latest)}）`, `${old.length} computer${old.length > 1 ? "s" : ""} not on the latest myco (${ver(latest)})`)}</div>
+        <div className="mu-text">{L(E`${old.length} 台电脑的 myco 不是最新（最新 ${ver(latest)}）`, (old.length > 1 ? E`${old.length} computers not on the latest myco (${ver(latest)})` : E`${old.length} computer not on the latest myco (${ver(latest)})`))}</div>
         <ul className="mu-list">
           {old.map((x) => (
             <li key={`${x.hubId}/${x.m.id}`}>
@@ -147,7 +147,7 @@ export function UpgradeAll({ items, latest, onDone }: {
         </ul>
         {able.length > 0 && (
           <button type="button" className="app-btn app-btn-small app-btn-primary" disabled={!!busy} onClick={() => void go()}>
-            {busy ? <><span className="app-spinner" />{L("正在升级…", "Upgrading…")}</> : L(`全部升级（${able.length} 台）`, `Upgrade all (${able.length})`)}
+            {busy ? <><span className="app-spinner" />{L("正在升级…", "Upgrading…")}</> : L(E`全部升级（${able.length} 台）`, E`Upgrade all (${able.length})`)}
           </button>
         )}
       </div>
@@ -172,7 +172,7 @@ export function HubUpgrade({ hubId, version, local, manages, latest, onDone }: {
     try {
       if (local) {
         const r = await appApi.upgradeMyco();
-        setDone(L(`已升级到 ${ver(r.version)} 并重启`, `Upgraded to ${ver(r.version)} and restarted`));
+        setDone(L(E`已升级到 ${ver(r.version)} 并重启`, E`Upgraded to ${ver(r.version)} and restarted`));
       } else if (hubId) {
         const r = await appApi.upgradeHub(hubId);
         // It restarts on its own: wait for the new version to answer.
@@ -183,7 +183,7 @@ export function HubUpgrade({ hubId, version, local, manages, latest, onDone }: {
           const v = hs?.find((h) => h.id === hubId)?.hub_version;
           if (v && hubAtLeast(v, want)) break;
         }
-        setDone(L(`已升级到 ${ver(r.to)}`, `Upgraded to ${ver(r.to)}`));
+        setDone(L(E`已升级到 ${ver(r.to)}`, E`Upgraded to ${ver(r.to)}`));
       }
       onDone?.();
     } catch (e) {
@@ -196,7 +196,7 @@ export function HubUpgrade({ hubId, version, local, manages, latest, onDone }: {
     <div className="app-notice mu" data-testid="hub-upgrade">
       <ArrowUpCircle />
       <div>
-        <div className="mu-text">{done || L(`工作区的 myco ${ver(version)} 不是最新（最新 ${ver(latest)}）`, `The workspace runs myco ${ver(version)}; ${ver(latest)} is out`)}</div>
+        <div className="mu-text">{done || L(E`工作区的 myco ${ver(version)} 不是最新（最新 ${ver(latest)}）`, E`The workspace runs myco ${ver(version)}; ${ver(latest)} is out`)}</div>
         {!done && !tooOld && (
           <>
             <div className="mu-note">{L("升级时工作区会重启，大约半分钟连不上，消息不会丢。", "It restarts while upgrading: about half a minute away; no messages are lost.")}</div>

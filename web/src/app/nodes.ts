@@ -6,7 +6,7 @@ import {
 import type { Agent, AgentStatus, Machine, Message, ModelSource, RuntimeAccess } from "@/api";
 import type { AgentRow, NodeKind } from "@/app/types";
 import type { HubOverview } from "@/appapi";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { currentSlots } from "@/app/RunnerQueue";
 import { isSuperagent, SHROOM } from "@/app/superagentMark";
 
@@ -98,7 +98,7 @@ export function cloudLabel(a: Agent): string {
   const cli = a.runtime?.cli || a.binding.harness || "";
   const service = cli.startsWith("claude") ? "claude.ai" : cli.startsWith("codex") ? "Codex" : "";
   const detail = [service, a.runtime?.account].filter(Boolean).join(" · ");
-  return detail ? L(`云端（${detail}）`, `Cloud (${detail})`) : L("云端", "Cloud");
+  return detail ? L(E`云端（${detail}）`, E`Cloud (${detail})`) : L("云端", "Cloud");
 }
 
 export function machinesOfHub(hub: AgentRow["hub"]): Machine[] {
@@ -167,7 +167,7 @@ export function machineSubtitle(m: Machine): string {
     osInfo(m.os).label,
     m.arch,
     ver(m.myco_version),
-    L(`${m.agents.length} 个节点`, `${m.agents.length} node${m.agents.length === 1 ? "" : "s"}`),
+    L(E`${m.agents.length} 个节点`, (m.agents.length === 1 ? E`${m.agents.length} node` : E`${m.agents.length} nodes`)),
     m.legacy ? L("升级 myco 后识别", "Upgrade myco to identify") : "",
   ].filter(Boolean).join(" · ");
 }
@@ -274,10 +274,10 @@ export function lastActivityAt(m: { active_at?: string; updated_at: string }): n
  *  then hours, then days. Not a running timer: it does not count seconds. */
 export function quietFor(now: number, at: number): string {
   const mins = Math.max(1, Math.floor((now - at) / 60_000));
-  if (mins < 60) return L(`${mins} 分钟`, `${mins} min`);
+  if (mins < 60) return L(E`${mins} 分钟`, E`${mins} min`);
   const hours = Math.floor(mins / 60);
-  if (hours < 48) return L(`${hours} 小时`, `${hours} h`);
-  return L(`${Math.floor(hours / 24)} 天`, `${Math.floor(hours / 24)} d`);
+  if (hours < 48) return L(E`${hours} 小时`, E`${hours} h`);
+  return L(E`${Math.floor(hours / 24)} 天`, E`${Math.floor(hours / 24)} d`);
 }
 
 /** Whether a node handles messages only while one of its sessions runs: an
@@ -308,7 +308,7 @@ export function possiblyStuck(
 }
 
 export function heldTaskLabel(m: Pick<Message, "asking" | "held_for">, sender: string): string {
-  if (m.asking) return L(`暂挂：在等 ${sender} 回答`, `On hold: waiting for ${sender} to answer`);
+  if (m.asking) return L(E`暂挂：在等 ${sender} 回答`, E`On hold: waiting for ${sender} to answer`);
   if (m.held_for === "reply") return L("暂挂：在等其他 agent 回复", "On hold: waiting for another agent to reply");
   return L("暂挂中，没人在做", "On hold · no one is working on it");
 }
@@ -367,12 +367,12 @@ function friendlyName(a: Agent, machine?: string): string {
   const folder = dir.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "";
   const where = folder && folder !== "~" ? folder : "";
   if (agentKind(a) === "shell") return [machine || L("电脑", "Computer"), where].filter(Boolean).join(" · ");
-  return where ? L(`${where} 助手`, `${where} assistant`) : L("助手", "Assistant");
+  return where ? L(E`${where} 助手`, E`${where} assistant`) : L("助手", "Assistant");
 }
 
 function ordinal(n: number): string {
   const zh = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
-  return L(n <= 10 ? `${zh[n]}号` : `${n}号`, `#${n}`);
+  return L(n <= 10 ? E`${zh[n]}号` : E`${n}号`, E`#${n}`);
 }
 
 /** A node's aliases as one short line for a row subtitle: "@a, @b +1".

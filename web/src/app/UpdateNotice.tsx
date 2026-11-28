@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowUpCircle, X } from "lucide-react";
 import { ApiError, appApi, type AppUpdate } from "@/appapi";
 import { ErrorText, type ErrorSummary } from "@/app/dialogs";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 const DISMISSED_KEY = "myco-update-dismissed";
 const CHECK_EVERY = 6 * 60 * 60 * 1000;
@@ -75,11 +75,11 @@ export function UpdateNotice({ onOpenSettings }: { onOpenSettings: () => void })
     <div className="app-update-notice" role="status">
       <ArrowUpCircle className="app-update-icon" />
       <div className="app-update-text">
-        <b>{step === "relaunching" ? L(`已安装 ${u.latest}`, `Installed ${u.latest}`) : L(`新版本 ${u.latest}`, `myco ${u.latest} is out`)}</b>
+        <b>{step === "relaunching" ? L(E`已安装 ${u.latest}`, E`Installed ${u.latest}`) : L(E`新版本 ${u.latest}`, E`myco ${u.latest} is out`)}</b>
         <span>
           {step === "installing" ? L("正在下载并安装…", "Downloading and installing…")
             : step === "relaunching" ? L("正在重新打开…", "Reopening…")
-            : L(`当前 ${u.current}`, `You have ${u.current}`)}
+            : L(E`当前 ${u.current}`, E`You have ${u.current}`)}
         </span>
         {error !== null && <ErrorText error={error} summary={updateFailure(error)} />}
         {step === "idle" && (

@@ -11,7 +11,7 @@ import (
 // relabelled), and myco's: settings, a new project, connecting a workspace
 // or a computer, search, the sidebar, help. What the page does is asked for
 // with a "myco-menu" event (AppMode).
-func appMenu(app *application.App, zh trayText, send func(cmd string)) *application.Menu {
+func appMenu(app *application.App, zh trayLocale, send func(cmd string)) *application.Menu {
 	m := app.NewMenu()
 	do := func(cmd string) func(*application.Context) { return func(*application.Context) { send(cmd) } }
 	role := func(sub *application.Menu, r application.Role, label string) {

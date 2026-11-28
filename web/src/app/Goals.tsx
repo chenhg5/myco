@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Pause, Play, Target, Timer, X } from "lucide-react";
 import { appApi, errorMessage } from "@/appapi";
 import type { Goal } from "@/api";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog, Modal } from "@/app/dialogs";
 import { useContextMenu } from "@/app/ContextMenu";
@@ -74,11 +74,11 @@ function useNow(on: boolean) {
 
 function span(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
-  if (s < 60) return L(`${s} 秒`, `${s}s`);
+  if (s < 60) return L(E`${s} 秒`, E`${s}s`);
   const m = Math.floor(s / 60);
-  if (m < 60) return L(`${m} 分钟`, `${m} min`);
+  if (m < 60) return L(E`${m} 分钟`, E`${m} min`);
   const h = Math.floor(m / 60);
-  return m % 60 ? L(`${h} 小时 ${m % 60} 分`, `${h} h ${m % 60} min`) : L(`${h} 小时`, `${h} h`);
+  return m % 60 ? L(E`${h} 小时 ${m % 60} 分`, E`${h} h ${m % 60} min`) : L(E`${h} 小时`, E`${h} h`);
 }
 const clock = (iso?: string) => {
   if (!iso) return "";
@@ -111,15 +111,15 @@ export function GoalBar({ hubId, goal, onChanged }: { hubId: string; goal: Goal 
   const backedOff = goal.every_sec > goal.base_every_sec;
   const next = goal.next_wake_at ? Date.parse(goal.next_wake_at) : NaN;
   const parts = [
-    L(`第 ${goal.round}/${goal.max_rounds} 轮`, `Round ${goal.round} of ${goal.max_rounds}`),
+    L(E`第 ${goal.round}/${goal.max_rounds} 轮`, E`Round ${goal.round} of ${goal.max_rounds}`),
     paused
       ? L("已暂停", "Paused")
       : !Number.isNaN(next)
         ? next > now
-          ? L(`下次唤醒 ${clock(goal.next_wake_at)}（还有 ${span(next - now)}）`, `next ${clock(goal.next_wake_at)} (in ${span(next - now)})`)
+          ? L(E`下次唤醒 ${clock(goal.next_wake_at)}（还有 ${span(next - now)}）`, E`next ${clock(goal.next_wake_at)} (in ${span(next - now)})`)
           : L("等它空闲就唤醒", "wakes once it is idle")
         : "",
-    L(`已进行 ${span(now - Date.parse(goal.started_at))}`, `${span(now - Date.parse(goal.started_at))} so far`),
+    L(E`已进行 ${span(now - Date.parse(goal.started_at))}`, E`${span(now - Date.parse(goal.started_at))} so far`),
   ].filter(Boolean);
   return (
     <div className={cn("watch-bar goal-bar", open && "is-open", paused && "is-paused")} data-testid="goal-bar">
@@ -127,7 +127,7 @@ export function GoalBar({ hubId, goal, onChanged }: { hubId: string; goal: Goal 
         <button type="button" className="watch-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}
           title={open ? L("收起", "Fold") : L("看详细", "Details")}>
           <Target className="watch-eye goal-icon" />
-          <span className="watch-what">{L(`目标：${short(goal.objective)}`, `Goal: ${short(goal.objective)}`)}</span>
+          <span className="watch-what">{L(E`目标：${short(goal.objective)}`, E`Goal: ${short(goal.objective)}`)}</span>
           <span className="watch-time">{parts.join(" · ")}</span>
           <ChevronDown className="watch-chev" />
         </button>
@@ -150,8 +150,8 @@ export function GoalBar({ hubId, goal, onChanged }: { hubId: string; goal: Goal 
       {(paused || backedOff) && (
         <div className={cn("goal-note", paused ? "is-paused" : "is-backoff")}>
           {paused
-            ? L(`暂停了，等你决定：${goal.outcome || "连续几轮没有进展"}`, `Paused, waiting for you: ${goal.outcome || "several rounds without progress"}`)
-            : L(`连续 ${goal.no_progress} 轮没有进展，间隔放宽到 ${span(goal.every_sec * 1000)}`, `${goal.no_progress} rounds without progress: now every ${span(goal.every_sec * 1000)}`)}
+            ? L(E`暂停了，等你决定：${goal.outcome || L("连续几轮没有进展", "several rounds without progress")}`, E`Paused, waiting for you: ${goal.outcome || L("连续几轮没有进展", "several rounds without progress")}`)
+            : L(E`连续 ${goal.no_progress} 轮没有进展，间隔放宽到 ${span(goal.every_sec * 1000)}`, E`${goal.no_progress} rounds without progress: now every ${span(goal.every_sec * 1000)}`)}
         </div>
       )}
       {open && (
@@ -161,13 +161,13 @@ export function GoalBar({ hubId, goal, onChanged }: { hubId: string; goal: Goal 
             <dt>{L("算达成", "Done when")}</dt><dd>{goal.done_when}</dd>
             {goal.last_summary && <><dt>{L("上一轮", "Last round")}</dt><dd>{goal.last_summary}</dd></>}
             {goal.next_step && <><dt>{L("下一步", "Next")}</dt><dd>{goal.next_step}</dd></>}
-            <dt>{L("期限", "Until")}</dt><dd>{L(`${when(goal.deadline)}，最多 ${goal.max_rounds} 轮，每 ${span(goal.base_every_sec * 1000)}`, `${when(goal.deadline)}, at most ${goal.max_rounds} rounds, every ${span(goal.base_every_sec * 1000)}`)}</dd>
+            <dt>{L("期限", "Until")}</dt><dd>{L(E`${when(goal.deadline)}，最多 ${goal.max_rounds} 轮，每 ${span(goal.base_every_sec * 1000)}`, E`${when(goal.deadline)}, at most ${goal.max_rounds} rounds, every ${span(goal.base_every_sec * 1000)}`)}</dd>
           </dl>
           {!!goal.rounds?.length && (
             <ol className="goal-rounds">
               {[...goal.rounds].reverse().map((r) => (
                 <li key={r.round} className={cn("goal-round", !r.ended_at ? "is-now" : !r.progressed && "is-stuck", r.blocked && "is-blocked")}>
-                  <span className="goal-round-n">{L(`第 ${r.round} 轮`, `Round ${r.round}`)}</span>
+                  <span className="goal-round-n">{L(E`第 ${r.round} 轮`, E`Round ${r.round}`)}</span>
                   <span className="goal-round-time">{clock(r.started_at)}</span>
                   <span className="goal-round-tag">{!r.ended_at ? L("进行中", "Running") : r.blocked ? L("遇阻", "Blocked") : r.progressed ? L("有进展", "Progress") : L("没进展", "No progress")}</span>
                   <span className="goal-round-text">{r.summary || (!r.ended_at ? L("这一轮还没报告", "Not reported yet") : "")}</span>
@@ -181,7 +181,7 @@ export function GoalBar({ hubId, goal, onChanged }: { hubId: string; goal: Goal 
       {menu.element}
       <ConfirmDialog open={stopping} onOpenChange={(o) => { if (!o) { setStopping(false); setError(""); } }}
         title={L("停止这个目标？", "Stop this goal?")}
-        description={L(`「${short(goal.objective, 60)}」。停了以后不再按时唤醒它，做到哪算哪，它会收到一条消息。`, `“${short(goal.objective, 60)}”. It is no longer woken on schedule; what is done stays done, and it gets a message.`)}
+        description={L(E`「${short(goal.objective, 60)}」。停了以后不再按时唤醒它，做到哪算哪，它会收到一条消息。`, E`“${short(goal.objective, 60)}”. It is no longer woken on schedule; what is done stays done, and it gets a message.`)}
         confirmLabel={L("停止", "Stop")} busy={busy} error={stopping ? error : undefined}
         onConfirm={() => void run(() => appApi.goalAction(hubId, goal.id, "stop")).then((ok) => { if (ok) setStopping(false); })} />
     </div>
@@ -214,8 +214,8 @@ export function GoalDialog({ open, onOpenChange, hubId, agent, name, project, on
   };
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={L("设定目标", "Set a goal")} className="goal-dialog"
-      description={L(`${name} 空闲时会被按时唤醒，围绕这个目标一轮一轮往前推，直到做到、做不到或到期。重大动作仍会先问你。`,
-        `${name} is woken on schedule while idle to push this goal forward, round by round, until it is done, cannot be done, or time is up. Big steps still ask you first.`)}>
+      description={L(E`${name} 空闲时会被按时唤醒，围绕这个目标一轮一轮往前推，直到做到、做不到或到期。重大动作仍会先问你。`,
+        E`${name} is woken on schedule while idle to push this goal forward, round by round, until it is done, cannot be done, or time is up. Big steps still ask you first.`)}>
       <label className="app-field">
         <span className="app-field-label">{L("目标", "Goal")}</span>
         <textarea className="app-input goal-textarea" rows={3} value={objective} onChange={(e) => setObjective(e.target.value)}
@@ -260,16 +260,16 @@ export function GoalDialog({ open, onOpenChange, hubId, agent, name, project, on
 export function GoalEnded({ g, nameOf }: { g: Goal; nameOf: (n: string) => string }) {
   const [open, setOpen] = useState(false);
   const what = short(g.objective, 40);
-  const text = g.state === "achieved" ? L(`目标达成：${what}`, `Goal achieved: ${what}`)
-    : g.state === "abandoned" ? L(`目标放弃了：${what}`, `Goal given up: ${what}`)
-    : g.outcome === "round_limit" || (g.state === "expired" && g.round >= g.max_rounds) ? L(`目标轮次用完了：${what}`, `Goal out of rounds: ${what}`)
-    : g.state === "expired" ? L(`目标到期了：${what}`, `Goal out of time: ${what}`)
-    : L(`${g.ended_by ? nameOf(g.ended_by) : "有人"}停止了目标：${what}`, `${g.ended_by ? nameOf(g.ended_by) : "Someone"} stopped the goal: ${what}`);
+  const text = g.state === "achieved" ? L(E`目标达成：${what}`, E`Goal achieved: ${what}`)
+    : g.state === "abandoned" ? L(E`目标放弃了：${what}`, E`Goal given up: ${what}`)
+    : g.outcome === "round_limit" || (g.state === "expired" && g.round >= g.max_rounds) ? L(E`目标轮次用完了：${what}`, E`Goal out of rounds: ${what}`)
+    : g.state === "expired" ? L(E`目标到期了：${what}`, E`Goal out of time: ${what}`)
+    : L((g.ended_by ? E`${nameOf(g.ended_by)}停止了目标：${what}` : E`有人停止了目标：${what}`), (g.ended_by ? E`${nameOf(g.ended_by)} stopped the goal: ${what}` : E`Someone stopped the goal: ${what}`));
   return (
     <div className={cn("goal-ended", `is-${g.state}`, open && "is-open")} data-goal={g.id}>
       <button type="button" className="goal-ended-line" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <Target />
-        <span>{text}{L(` · ${g.round} 轮`, ` · ${g.round} rounds`)}</span>
+        <span>{text}{L(E` · ${g.round} 轮`, E` · ${g.round} rounds`)}</span>
         <span className="watch-ended-time">{when(g.ended_at)}</span>
       </button>
       {open && (

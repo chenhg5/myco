@@ -9,7 +9,7 @@ import { PageHero, SectionHead, SectionSkeleton } from "@/app/PageHero";
 import { ErrorText } from "@/app/dialogs";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { useContextMenu } from "@/app/ContextMenu";
-import { L, locale } from "@/lib/i18n";
+import { L, locale, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { compactUsage, emptyUsage, summarizeUsage, usageDays, usageRange, type UsageAgent, type UsageResponse, type UsageTotals } from "@/lib/usage";
 import "@/app/usage.css";
@@ -95,7 +95,7 @@ function DailyChart({ from, to, totals, total }: { from: string; to: string; tot
           <span className="usage-readout-key"><span className="usage-avg-key" aria-hidden />{L("日均", "Daily average")}</span>
           <b>{compactUsage(avg)}</b>
           <span className="usage-readout-parts">
-            {peak > 0 && peakDay && <span>{L(`最多 ${dayText(peakDay)} ${compactUsage(peak)}`, `Peak ${dayText(peakDay)} ${compactUsage(peak)}`)}</span>}
+            {peak > 0 && peakDay && <span>{L(E`最多 ${dayText(peakDay)} ${compactUsage(peak)}`, E`Peak ${dayText(peakDay)} ${compactUsage(peak)}`)}</span>}
             {trend !== null && <span>{L("最近 7 天比前 7 天", "Last 7 days vs the 7 before")} <em className="usage-trend">{trend >= 0 ? "↑" : "↓"} {Math.abs(trend * 100).toFixed(0)}%</em></span>}
           </span>
         </>}
@@ -174,10 +174,10 @@ export function UsagePage({ hubId, projects, rows, onOpenAgent }: {
   const nDays = usageDays(range.from, range.to).length;
   const unreported = summary.agents.filter(([, s]) => s.total > 0 && !s.cost).length;
   const metrics = [
-    { label: L("总 token", "Total tokens"), value: compactUsage(t.total), hint: exact(t.total), sub: L(`日均 ${compactUsage(t.total / nDays)}`, `${compactUsage(t.total / nDays)} a day`) },
-    { label: L("输出 token", "Output tokens"), value: compactUsage(t.output), hint: exact(t.output), sub: t.total ? L(`占总量 ${percent(t.output, t.total)}`, `${percent(t.output, t.total)} of the total`) : "" },
-    { label: L("调用次数", "Calls"), value: compactUsage(t.calls), hint: exact(t.calls), sub: L(`日均 ${compactUsage(t.calls / nDays)}`, `${compactUsage(t.calls / nDays)} a day`) },
-    { label: L("已上报费用", "Reported cost"), value: money(t.cost), hint: costNote(), sub: unreported ? L(`${unreported} 个成员没有上报费用`, `${unreported} ${unreported === 1 ? "member" : "members"} reported no cost`) : t.cost ? L("都已上报", "All reported") : "" },
+    { label: L("总 token", "Total tokens"), value: compactUsage(t.total), hint: exact(t.total), sub: L(E`日均 ${compactUsage(t.total / nDays)}`, E`${compactUsage(t.total / nDays)} a day`) },
+    { label: L("输出 token", "Output tokens"), value: compactUsage(t.output), hint: exact(t.output), sub: t.total ? L(E`占总量 ${percent(t.output, t.total)}`, E`${percent(t.output, t.total)} of the total`) : "" },
+    { label: L("调用次数", "Calls"), value: compactUsage(t.calls), hint: exact(t.calls), sub: L(E`日均 ${compactUsage(t.calls / nDays)}`, E`${compactUsage(t.calls / nDays)} a day`) },
+    { label: L("已上报费用", "Reported cost"), value: money(t.cost), hint: costNote(), sub: unreported ? L(E`${unreported} 个成员没有上报费用`, (unreported === 1 ? E`${unreported} member reported no cost` : E`${unreported} members reported no cost`)) : t.cost ? L("都已上报", "All reported") : "" },
   ];
   const open = (name: string) => onOpenAgent(name);
   return <div className="pc au usage-page">
@@ -187,7 +187,7 @@ export function UsagePage({ hubId, projects, rows, onOpenAgent }: {
       <div className="wf-chips usage-range" role="group" aria-label={L("时间范围", "Date range")}>
         {[7, 30, 90].map((n) => <button key={n} type="button" className={cn("wf-chip", days === n && "is-on")} aria-pressed={days === n} onClick={() => {
           setDays(n); try { localPreferences.setItem(RANGE_KEY, String(n)); } catch { /* optional */ }
-        }}>{L(`${n} 天`, `${n} days`)}</button>)}
+        }}>{L(E`${n} 天`, E`${n} days`)}</button>)}
       </div>
       <select className="app-select-field" aria-label={L("项目", "Project")} value={project} onChange={(e) => changeProject(e.target.value)}>
         <option value="">{L("全部项目", "All projects")}</option>
@@ -231,7 +231,7 @@ export function UsagePage({ hubId, projects, rows, onOpenAgent }: {
                 const who = [info.owner, models].filter(Boolean).join(" · ");
                 return <tr key={name} onClick={() => open(name)} onContextMenu={(e) => menu.open(e, [{ label: L("打开会话", "Open conversation"), onSelect: () => open(name) }])}>
                   <th scope="row">
-                    <button type="button" className="usage-member" title={L(`打开 ${info.display_name || name} 的会话`, `Open conversation with ${info.display_name || name}`)} onClick={(e) => { e.stopPropagation(); open(name); }}>
+                    <button type="button" className="usage-member" title={L(E`打开 ${info.display_name || name} 的会话`, E`Open conversation with ${info.display_name || name}`)} onClick={(e) => { e.stopPropagation(); open(name); }}>
                       <Avatar agent={known || avatarAgent(info)} size={28} />
                       <span className="usage-member-text">
                         <span className="usage-member-name">{info.display_name || name}</span>

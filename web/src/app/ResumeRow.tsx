@@ -6,7 +6,7 @@ import { ConfirmDialog, ErrorText, Modal } from "@/app/dialogs";
 import { CopyButton } from "@/app/copy";
 import { hubHasResume } from "@/app/hubVersion";
 import { timeAgo } from "@/lib/utils";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 
 /** The agent's resume line: a command that brings the same agent (same name,
  *  id and history) back in a new sandbox. Shown to those who may manage it;
@@ -77,8 +77,8 @@ export function ResumeRow({ row, now, mayManage, onRefresh }: {
             {has
               ? used
                 ? L(
-                  `上次重新接入：${timeAgo(used, now)}${env ? ` · 在 ${env}` : ""}`,
-                  `Last resumed ${timeAgo(used, now)}${env ? ` · in ${env}` : ""}`,
+                  (env ? E`上次重新接入：${timeAgo(used, now)} · 在 ${env}` : E`上次重新接入：${timeAgo(used, now)}`),
+                  (env ? E`Last resumed ${timeAgo(used, now)} · in ${env}` : E`Last resumed ${timeAgo(used, now)}`),
                 )
                 : L("还没用过", "Not used yet")
               : L("还没有链接", "No link yet")}

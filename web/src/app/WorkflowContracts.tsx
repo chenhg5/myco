@@ -5,7 +5,7 @@ import type { AgentRow } from "@/app/types";
 import { nodeName } from "@/app/nodes";
 import { Avatar } from "@/app/persona";
 import { edgesOf, stepKind } from "@/app/WorkflowGraph";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -35,20 +35,20 @@ export const typeWords = (t: string): string => ({
 /** The limits a field has, as short chips. */
 function limits(s: WfSchema): string[] {
   const out: string[] = [];
-  if (Array.isArray(s.enum)) out.push(L(`之一：${s.enum.map(String).join(" / ")}`, `one of: ${s.enum.map(String).join(" / ")}`));
-  if (s.const !== undefined) out.push(L(`固定：${String(s.const)}`, `exactly: ${String(s.const)}`));
-  if (typeof s.pattern === "string") out.push(L(`格式 ${s.pattern}`, `pattern ${s.pattern}`));
+  if (Array.isArray(s.enum)) out.push(L(E`之一：${s.enum.map(String).join(" / ")}`, E`one of: ${s.enum.map(String).join(" / ")}`));
+  if (s.const !== undefined) out.push(L(E`固定：${String(s.const)}`, E`exactly: ${String(s.const)}`));
+  if (typeof s.pattern === "string") out.push(L(E`格式 ${s.pattern}`, E`pattern ${s.pattern}`));
   for (const [k, zh, en] of [["minLength", "至少", "≥"], ["maxLength", "最多", "≤"]] as const) {
-    if (typeof s[k] === "number") out.push(L(`${zh} ${s[k]} 个字`, `${en} ${s[k]} chars`));
+    if (typeof s[k] === "number") out.push(L(E`${zh} ${s[k]} 个字`, E`${en} ${s[k]} chars`));
   }
   for (const [k, zh, en] of [["minimum", "≥", "≥"], ["maximum", "≤", "≤"], ["exclusiveMinimum", ">", ">"], ["exclusiveMaximum", "<", "<"]] as const) {
-    if (typeof s[k] === "number") out.push(L(`${zh} ${s[k]}`, `${en} ${s[k]}`));
+    if (typeof s[k] === "number") out.push(L(E`${zh} ${s[k]}`, E`${en} ${s[k]}`));
   }
   for (const [k, zh, en] of [["minItems", "至少", "≥"], ["maxItems", "最多", "≤"]] as const) {
-    if (typeof s[k] === "number") out.push(L(`${zh} ${s[k]} 项`, `${en} ${s[k]} items`));
+    if (typeof s[k] === "number") out.push(L(E`${zh} ${s[k]} 项`, E`${en} ${s[k]} items`));
   }
-  if (s.items && typeOf(s.items)) out.push(L(`每项是${typeWords(typeOf(s.items))}`, `of ${typeWords(typeOf(s.items))}`));
-  if (s.default !== undefined) out.push(L(`默认 ${JSON.stringify(s.default)}`, `default ${JSON.stringify(s.default)}`));
+  if (s.items && typeOf(s.items)) out.push(L(E`每项是${typeWords(typeOf(s.items))}`, E`of ${typeWords(typeOf(s.items))}`));
+  if (s.default !== undefined) out.push(L(E`默认 ${JSON.stringify(s.default)}`, E`default ${JSON.stringify(s.default)}`));
   if (s.format && s.format !== "textarea") out.push(String(s.format));
   return out;
 }
@@ -95,10 +95,10 @@ export function ContractsSection({ def, hubId, rows }: { def: WorkflowDef; hubId
   const gets = (s: WfStepDef): string => {
     if (s.inputSchema) return "";
     if (s.id === entry) return L("运行时填的输入", "The run's inputs");
-    if (s.join) return L(`等 ${(typeof s.join === "object" ? s.join.from : edges.filter((e) => e.to === s.id).map((e) => e.from)).join("、")} 都做完，按步骤收到它们的结果`, "Each step it waits for, by id");
+    if (s.join) return L(E`等 ${(typeof s.join === "object" ? s.join.from : edges.filter((e) => e.to === s.id).map((e) => e.from)).join("、")} 都做完，按步骤收到它们的结果`, "Each step it waits for, by id");
     const into = edges.filter((e) => e.to === s.id);
     const mapped = into.filter((e) => e.map);
-    if (mapped.length) return L(`边上组装的：${Object.keys(mapped[0].map || {}).join("、")}`, `Built on the edge: ${Object.keys(mapped[0].map || {}).join(", ")}`);
+    if (mapped.length) return L(E`边上组装的：${Object.keys(mapped[0].map || {}).join("、")}`, E`Built on the edge: ${Object.keys(mapped[0].map || {}).join(", ")}`);
     return into.length ? L("上一步交回的结果", "What the step before handed back") : L("运行时填的输入", "The run's inputs");
   };
   return (
@@ -116,7 +116,7 @@ export function ContractsSection({ def, hubId, rows }: { def: WorkflowDef; hubId
             <div className="wfc-step-head">
               <span className="wf-step-icon">{kind === "agent" && r ? <Avatar agent={r.st.agent} size={20} badge={false} /> : kind === "computer" ? <Monitor /> : kind === "human" ? <UserCheck /> : <Bot />}</span>
               <b>{s.title || s.id}</b>
-              <span className="wfc-who">{s.role ? L(`分工：${s.role}`, `Role: ${s.role}`) : kind === "human" ? L("你来决定", "You decide") : r ? nodeName(r.st.agent, r.hub) : s.agent || s.computer}</span>
+              <span className="wfc-who">{s.role ? L(E`分工：${s.role}`, E`Role: ${s.role}`) : kind === "human" ? L("你来决定", "You decide") : r ? nodeName(r.st.agent, r.hub) : s.agent || s.computer}</span>
             </div>
             <div className="wfc-io">
               <div className="wfc-side">
@@ -125,8 +125,8 @@ export function ContractsSection({ def, hubId, rows }: { def: WorkflowDef; hubId
               </div>
               <div className="wfc-side">
                 <span className="wfc-label"><ArrowUpFromLine />{L("交回", "Hands back")}</span>
-                {kind === "human" ? <div className="wfc-empty">{L(`选一个：${(s.options || []).join(" / ")}，可以带一句话`, `One of: ${(s.options || []).join(" / ")}, with a word`)}</div>
-                  : kind === "computer" ? <div className="wfc-empty">{L(`退出码、输出${s.parse === "json" ? "，输出按 JSON 读进 json" : ""}；退出码不是 0 算失败`, `Exit code and output${s.parse === "json" ? ", stdout read as JSON" : ""}; non-zero fails`)}</div>
+                {kind === "human" ? <div className="wfc-empty">{L(E`选一个：${(s.options || []).join(" / ")}，可以带一句话`, E`One of: ${(s.options || []).join(" / ")}, with a word`)}</div>
+                  : kind === "computer" ? <div className="wfc-empty">{L((s.parse === "json" ? E`退出码、输出，输出按 JSON 读进 json；退出码不是 0 算失败` : E`退出码、输出；退出码不是 0 算失败`), (s.parse === "json" ? E`Exit code and output, stdout read as JSON; non-zero fails` : E`Exit code and output; non-zero fails`))}</div>
                     : <SchemaView schema={c} empty={L("一段文字（没有约定结构）", "Text (no contract)")} />}
               </div>
             </div>

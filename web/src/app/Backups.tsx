@@ -3,7 +3,7 @@ import { appApi, isOldHub, type BackupsView } from "@/appapi";
 import type { Whoami } from "@/api";
 import { CopyButton } from "@/app/copy";
 import { ErrorText, Modal } from "@/app/dialogs";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import { bytes, cn, timeAgo } from "@/lib/utils";
 
 /** A workspace's backups, for its owner: the workspace makes one a day and
@@ -33,7 +33,7 @@ export function BackupRow({ hubId, me }: { hubId: string; me?: Whoami }) {
         <span className="app-kv-label">{L("备份", "Backups")}</span>
         <span className="app-kv-value">
           <span className="app-status-text">
-            {last ? L(`最近一次 ${timeAgo(last.created_at)}`, `Last ${timeAgo(last.created_at)}`) : L("还没有", "None yet")}
+            {last ? L(E`最近一次 ${timeAgo(last.created_at)}`, E`Last ${timeAgo(last.created_at)}`) : L("还没有", "None yet")}
             {view.auto && L(" · 这台电脑也留了一份", " · copies kept here")}
           </span>
           <button type="button" className="app-link-btn" onClick={() => setOpen(true)}>{L("管理", "Manage")}</button>
@@ -69,14 +69,14 @@ function BackupDialog({ hubId, view, onClose, onChanged }: { hubId: string; view
   const local = view.local[0];
   return (
     <Modal open onOpenChange={(o) => !o && !busy && onClose()} title={L("工作区备份", "Workspace backups")}
-      description={L(`工作区每天自动备份一份，在服务器上保留最近 ${view.keep} 份。备份里有所有对话和文件，只有你（主人）能看到和下载。`,
-        `The workspace backs itself up once a day and keeps the last ${view.keep} on its server. A backup holds every conversation and file; only you, its owner, can see and download them.`)}>
+      description={L(E`工作区每天自动备份一份，在服务器上保留最近 ${view.keep} 份。备份里有所有对话和文件，只有你（主人）能看到和下载。`,
+        E`The workspace backs itself up once a day and keeps the last ${view.keep} on its server. A backup holds every conversation and file; only you, its owner, can see and download them.`)}>
       <div className="app-setting-rows" data-testid="backup-dialog">
         <div className="app-kv">
           <span className="app-kv-label">{L("服务器上", "On the server")}</span>
           <span className="app-kv-value">
             {last
-              ? L(`${view.backups.length} 份，最近一次 ${timeAgo(last.created_at)}（${bytes(last.size)}）`, `${view.backups.length}, the last ${timeAgo(last.created_at)} (${bytes(last.size)})`)
+              ? L(E`${view.backups.length} 份，最近一次 ${timeAgo(last.created_at)}（${bytes(last.size)}）`, E`${view.backups.length}, the last ${timeAgo(last.created_at)} (${bytes(last.size)})`)
               : L("还没有，第一份在工作区启动后几分钟内做好", "None yet; the first is made a few minutes after the workspace starts")}
           </span>
         </div>
@@ -84,7 +84,7 @@ function BackupDialog({ hubId, view, onClose, onChanged }: { hubId: string; view
           <span className="app-kv-label">{L("这台电脑上", "On this computer")}</span>
           <span className="app-kv-value">
             {local
-              ? L(`${view.local.length} 份，最近一次 ${timeAgo(local.created_at)}`, `${view.local.length}, the last ${timeAgo(local.created_at)}`)
+              ? L(E`${view.local.length} 份，最近一次 ${timeAgo(local.created_at)}`, E`${view.local.length}, the last ${timeAgo(local.created_at)}`)
               : L("还没有", "None yet")}
             <span className="app-kv-sub mono clip" title={view.dir}>{view.dir}</span>
           </span>
@@ -108,7 +108,7 @@ function BackupDialog({ hubId, view, onClose, onChanged }: { hubId: string; view
           "Put the backup file on the server and run this with the workspace stopped (a server installed with install-hub.sh stops and starts it for you). What was there is moved aside, not deleted.")}</p>
         <div className="app-command"><code>{restoreCommand(view)}</code><CopyButton value={restoreCommand(view)} /></div>
       </details>
-      {saved && <p className="app-small-note" data-testid="backup-saved">{L(`已保存到 ${saved}`, `Saved to ${saved}`)}</p>}
+      {saved && <p className="app-small-note" data-testid="backup-saved">{L(E`已保存到 ${saved}`, E`Saved to ${saved}`)}</p>}
       <ErrorText error={error} />
       <div className="app-modal-actions">
         {view.local.length > 0 && (

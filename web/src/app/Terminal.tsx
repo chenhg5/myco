@@ -4,7 +4,7 @@ import type { Message, TraceStep } from "@/api";
 import { appApi, isOldHub } from "@/appapi";
 import { execDuration, parseExecResult } from "@/app/Markdown";
 import { cn } from "@/lib/utils";
-import { L, locale } from "@/lib/i18n";
+import { L, locale, E } from "@/lib/i18n";
 
 function stamp(iso: string): string {
   const d = new Date(iso);
@@ -147,7 +147,7 @@ function TailOutput({ text }: { text: string }) {
   return (
     <>
       <button type="button" className="term-more" onClick={() => setOpen(true)}>
-        {L(`… 前面还有 ${hidden} 行`, `… ${hidden} more lines above`)}
+        {L(E`… 前面还有 ${hidden} 行`, E`… ${hidden} more lines above`)}
       </button>
       <pre className="term-out">{lines.slice(-TAIL_LINES).join("\n")}</pre>
     </>
@@ -171,7 +171,7 @@ function Output({ head, res, plain }: { head?: React.ReactNode; res: ExecResult;
 /** In a record, how a command that failed ended, under its output. */
 function ExitLine({ res }: { res: ExecResult | null }) {
   if (!res || typeof res.exit_code !== "number" || res.exit_code === 0) return null;
-  return <div className="term-exit is-code">{L(`退出码 ${res.exit_code}`, `exit ${res.exit_code}`)}{res.timed_out ? L("（超时）", " (timed out)") : ""}</div>;
+  return <div className="term-exit is-code">{L(E`退出码 ${res.exit_code}`, E`exit ${res.exit_code}`)}{res.timed_out ? L("（超时）", " (timed out)") : ""}</div>;
 }
 
 const GROUP_MS = 10 * 60 * 1000;
@@ -234,7 +234,7 @@ function Command({ head, task, answer, hubId, onGrow, plain, cwd, afterFail }: {
   const pending = !answer && task.status !== "done" && task.status !== "failed";
   const stopped = !answer && task.status === "failed" && task.error === STOPPED;
   const code = typeof res?.exit_code === "number" && res.exit_code !== 0
-    ? L(`退出码 ${res.exit_code}`, `exit ${res.exit_code}`) + (res.timed_out ? L("（超时）", " (timed out)") : "") : "";
+    ? L(E`退出码 ${res.exit_code}`, E`exit ${res.exit_code}`) + (res.timed_out ? L("（超时）", " (timed out)") : "") : "";
   // When and how long are a hover away; a terminal shows neither.
   const when = [stamp(task.created_at), took, plain ? code : ""].filter(Boolean).join(" · ");
   return (

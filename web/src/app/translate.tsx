@@ -2,7 +2,7 @@ import { localPreferences } from "@/lib/localPreferences";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { appApi } from "@/appapi";
 import { MessageContent, type InlineFiles } from "@/app/Markdown";
-import { L, lang } from "@/lib/i18n";
+import { L, lang, type Lang } from "@/lib/i18n";
 
 /*
  * Reading what an agent wrote in the language of the App: each answer and
@@ -14,8 +14,8 @@ import { L, lang } from "@/lib/i18n";
  * keychain. Until one has a key there is no 翻译 and nothing is translated.
  */
 
-type To = "zh" | "en";
-export const appTo = (): To => (lang() === "zh" ? "zh" : "en");
+type To = Lang;
+export const appTo = (): To => lang();
 
 // ---- settings and per-message choices (kept on this computer) ----
 
@@ -65,19 +65,10 @@ const useChoice = (id: string) => {
 
 // ---- is it in another language? ----
 
-/** Whether text is mostly in a language other than the App's: Chinese
- *  characters against Latin words, leaving out code, paths and links. */
-export function inOtherLanguage(text: string, to: To = appTo()): boolean {
-  const prose = text
-    .replace(/```[\s\S]*?(```|$)/g, " ")
-    .replace(/`[^`\n]*`/g, " ")
-    .replace(/https?:\/\/\S+/g, " ")
-    .replace(/[\w.-]*[/\\][\w./\\-]+/g, " ");
-  const han = (prose.match(/[㐀-鿿豈-﫿]/g) || []).length;
-  const words = (prose.match(/[A-Za-z]{2,}/g) || []).length;
-  if (to === "zh") return words >= 4 && han < words * 0.5;
-  return han >= 6 && han > words * 2;
-}
+// Script checks are conservative: Latin text cannot distinguish English,
+// Spanish and Portuguese reliably. Manual translation remains available.
+import { inOtherLanguage as detectOtherLanguage } from "@/lib/i18n/message-language";
+export const inOtherLanguage = (text: string, to: To = appTo()): boolean => detectOtherLanguage(text, to);
 
 // ---- translations (each text once) ----
 

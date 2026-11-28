@@ -5,7 +5,7 @@ import { Marked } from "marked";
 import { ChevronDown } from "lucide-react";
 import { copyText } from "@/app/copy";
 import { cn } from "@/lib/utils";
-import { L } from "@/lib/i18n";
+import { L, E } from "@/lib/i18n";
 import type { Attachment } from "@/api";
 import { appApi } from "@/appapi";
 import { Lightbox, type Picture } from "@/app/lightbox";
@@ -135,7 +135,7 @@ const md = new Marked({
         // (drawn where the message's files are not known: its words only)
         if (!parsing) return escapeHtml(text || "");
         const a = findAttachment(parsing, href.slice("attachment:".length));
-        if (!a) return `<span class="md-img-missing">${escapeHtml(L(`没找到附件：${text || href}`, `Attachment not found: ${text || href}`))}</span>`;
+        if (!a) return `<span class="md-img-missing">${escapeHtml(L(E`没找到附件：${text || href}`, E`Attachment not found: ${text || href}`))}</span>`;
         src = appApi.attachmentUrl(parsing.hubId, a.file_id);
         att = ` data-att="${escapeAttr(a.file_id)}"`;
       }
@@ -305,7 +305,7 @@ export function Markdown({ text, files, growing, zoom = true }: { text: string; 
       const note = document.createElement("button");
       note.type = "button";
       note.className = "md-img-missing";
-      note.textContent = img.alt ? L(`图片没加载出来：${img.alt} · 点一下重试`, `Image didn't load: ${img.alt} · click to retry`) : L("图片没加载出来 · 点一下重试", "Image didn't load · click to retry");
+      note.textContent = img.alt ? L(E`图片没加载出来：${img.alt} · 点一下重试`, E`Image didn't load: ${img.alt} · click to retry`) : L("图片没加载出来 · 点一下重试", "Image didn't load · click to retry");
       note.title = img.currentSrc || img.src;
       note.onclick = (e) => { e.stopPropagation(); img.dataset.tries = "0"; img.src = withRetry(img.dataset.src0 || img.src, Date.now()); note.replaceWith(img); };
       img.replaceWith(note);
@@ -355,7 +355,7 @@ function ExecBlock({ data }: { data: ExecResult }) {
     <div className="md-exec">
       <div className="md-exec-head">
         <span className={cn("md-exit", ok && "ok", failed && "bad")}>
-          {typeof code === "number" ? L(`退出码 ${code}`, `Exit code ${code}`) : L("已结束", "Finished")}
+          {typeof code === "number" ? L(E`退出码 ${code}`, E`Exit code ${code}`) : L("已结束", "Finished")}
         </span>
         {took && <span className="md-exec-meta">{took}</span>}
       </div>
@@ -386,7 +386,7 @@ function PrettyJSON({ data }: { data: unknown }) {
       <summary>
         <ChevronDown />
         <span>{L("JSON 数据", "JSON data")}</span>
-        <span className="md-json-meta">{L(`${lines} 行`, `${lines} line${lines === 1 ? "" : "s"}`)}</span>
+        <span className="md-json-meta">{L(E`${lines} 行`, (lines === 1 ? E`${lines} line` : E`${lines} lines`))}</span>
       </summary>
       <pre>{text}</pre>
     </details>
@@ -467,7 +467,7 @@ export function MessageContent({ body, foldId, files, growing }: { body: string;
         <RenderedBody body={body} files={files} growing={growing} />
       </div>
       <button type="button" className="md-fold-btn" onClick={() => setOpen((o) => !o)}>
-        {open ? L("收起", "Show less") : L(`展开（共 ${lines} 行）`, `Show all (${lines} lines)`)}
+        {open ? L("收起", "Show less") : L(E`展开（共 ${lines} 行）`, E`Show all (${lines} lines)`)}
       </button>
     </div>
   );
