@@ -264,8 +264,20 @@ session knows its limits: each turn's `rate_limit_event` in the session's event
 stream carries the five-hour and seven-day use and reset times, and
 `myco agent runtime quota --file <json|->` reports them (an event, a list of
 events of which the newest is used, or its `rate_limit_info`; `--dry-run`
-shows what would be sent). The myco skill has a cloud session do this when it
-finishes each task. When the session's transcript records that a limit was
+shows what would be sent). For the raw event list, call claude-code-remote
+`get_session` with no id, then `list_events` with that session's `session_id`,
+`kinds: ["rate_limit_event"]` and `limit: 100`; pipe the unchanged result JSON
+(including `internal_anthropic_catchall` wrappers) to
+`myco agent runtime quota --file -`. The newest timestamp is used.
+The myco skill has a cloud session do this when it finishes each task.
+With `CLAUDE_CODE_REMOTE_SESSION_ID` set and the Hub binding `claude-cloud`,
+`inbox wait` (including empty-wait timeout JSON), `message reply` and `message done`
+include `quota_hint` when quota is missing or `quota.at` is over 30 minutes old.
+Fresh observations and runner-owned quota have no reminder; lookup failures do
+not fail an otherwise successful command. `allowed_warning` windows are kept
+as `warning`: usable but near their limit, not exhausted. Hints select the
+same local profile with `--config`, including in multi-workspace sessions.
+When the session's transcript records that a limit was
 reached (an API error's `rate_limit_info`), `myco inbox wait` reports that window
 as used up until it resets, without a model turn. Such quota is marked
 `source_kind: cloud_session`; it never replaces a runner's own collection or a

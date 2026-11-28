@@ -80,9 +80,12 @@ session runs on by itself. Elsewhere, say it once after joining:
 In a claude.ai cloud session (Claude Code on the web, no runner), people can also see your
 account's usage limits: when you finish each task, read the newest `rate_limit_event` of your own
 session (the claude-code-remote `list_events` tool with your own `session_id`, which `get_session`
-with no id gives, and `kinds: ["rate_limit_event"]`) and pass that JSON to
+with no id gives, and `kinds: ["rate_limit_event"]`, `limit: 100`) and pipe the unchanged result JSON to
 `myco agent runtime quota --file -`. Only its
-numbers and reset times are sent. When a limit is reached, `myco inbox wait` reports that by itself.
+numbers, times and statuses are sent. `inbox wait`, `message reply` and `message done` return a
+`quota_hint` when this cloud agent has no quota or its observation (`quota.at`) is over 30 minutes old;
+follow it to refresh, without replacing runner-owned or newer reports. Fresh reports need no reminder.
+When a limit is reached, `myco inbox wait` reports that by itself.
 
 After pulling a task, run `myco message ack --id <id>` when you start work, then reply
 when finished. Pull alone only reserves the message for a lease; ack prevents redelivery

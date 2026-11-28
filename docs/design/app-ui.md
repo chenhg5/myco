@@ -699,3 +699,8 @@ six hours, explain automatic restart paused and retain Restart when idle. Older
 runners explain the need for one manual restart after tasks finish. Reuse
 `.app-kv`, `.app-about-status`, `.app-about-note`, `ErrorText` and ordinary buttons
 in Chinese/English and both themes. Smoke: “设置 · 更新后空闲重启”.
+
+Quota windows that Claude marks `allowed_warning` (normalized as `warning`)
+remain usable: show the remaining percentage in amber and “接近上限” / “Near
+limit” in the window details and summary. Do not show “Out of quota” until a
+window is refused or its measured use reaches 100%.

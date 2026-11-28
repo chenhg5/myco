@@ -266,7 +266,7 @@ type QuotaWindow struct {
 	Label    string     `json:"label,omitempty"`
 	Used     float64    `json:"used"`
 	ResetsAt *time.Time `json:"resets_at,omitempty"`
-	// Status: allowed, or why work is refused.
+	// Status: allowed, warning (near the limit but still usable), or why work is refused.
 	Status string `json:"status,omitempty"`
 }
 

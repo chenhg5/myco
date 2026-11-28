@@ -55,12 +55,12 @@ export function quotaLeft(w: QuotaWindow): number {
 
 /** A window with no room left: its status says so, or it is 100% used. */
 export function quotaSpent(w: QuotaWindow): boolean {
-  return (!!w.status && w.status !== "allowed") || w.used >= 1;
+  return (!!w.status && !["allowed", "allowed_warning", "warning"].includes(w.status)) || w.used >= 1;
 }
 
-/** A window worth a warning: 90% used or more, or spent. */
+/** Warn at the provider's threshold, 90% used, or when spent. */
 export function quotaTight(w: QuotaWindow): boolean {
-  return quotaSpent(w) || w.used >= 0.9;
+  return quotaSpent(w) || w.status === "warning" || w.status === "allowed_warning" || w.used >= 0.9;
 }
 
 /** "3:40", "周五" or "11 月 20 日": when a window resets. */
@@ -94,7 +94,7 @@ export function resetIn(iso: string | undefined, now = Date.now()): string {
 export function quotaWindowText(w: QuotaWindow, now = Date.now()): string {
   const reset = resetIn(w.resets_at, now);
   if (quotaSpent(w)) return [L("额度用完", "Out of quota"), reset].filter(Boolean).join(" · ");
-  return [L(E`剩 ${quotaLeft(w)}%`, E`${quotaLeft(w)}% left`), reset].filter(Boolean).join(" · ");
+  return [L(E`剩 ${quotaLeft(w)}%`, E`${quotaLeft(w)}% left`), quotaTight(w) ? L("接近上限", "Near limit") : "", reset].filter(Boolean).join(" · ");
 }
 
 /** The windows that still describe the account: one whose reset time has
@@ -236,6 +236,7 @@ export function quotaSummary(q: Quota, machines: Machine[] = [], now = Date.now(
   const what = quotaSpent(worst) ? L("用完了", "out") : L(E`剩 ${quotaLeft(worst)}%`, E`${quotaLeft(worst)}% left`);
   const label = quotaWindowLabel(worst);
   let line = L((reset ? E`额度：${label}${what}（${src}）${"，" + reset}` : E`额度：${label}${what}（${src}）`), (reset ? E`Usage: ${label} ${what} (${src})${"; " + reset}` : E`Usage: ${label} ${what} (${src})`));
+  if (quotaTight(worst) && !quotaSpent(worst)) line += " · " + L("接近上限", "Near limit");
   if (old) line += L(E`。${quotaOldNote(q, now)}`, E`. ${quotaOldNote(q, now)}`);
   else if (status) line += L(E`。${status}，${quotaStaleNote(q, now)}`, E`. ${status}; ${quotaStaleNote(q, now)}`);
   else if (stale) line += L(E`（${quotaStaleNote(q, now)}）`, E` (${quotaStaleNote(q, now)})`);
@@ -280,7 +281,7 @@ export function quotaWindowShort(w: QuotaWindow): string {
  *  under 5% or spent. */
 export function quotaPillLevel(w: QuotaWindow): "ok" | "low" | "out" {
   if (quotaSpent(w) || quotaLeft(w) < 5) return "out";
-  return quotaLeft(w) < 20 ? "low" : "ok";
+  return quotaTight(w) || quotaLeft(w) < 20 ? "low" : "ok";
 }
 
 /** "已用完，3:40 重置": what the composer says before a send while the

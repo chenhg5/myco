@@ -6684,7 +6684,7 @@ async function runMatrix(browser, size, scheme) {
         source: "claude", provider: "claude", source_kind: "cloud_session", status: "ok", at, checked_at: at,
         windows: [
           { name: "five_hour", used: 0.17, status: "allowed", duration_sec: 18000, resets_at: new Date(Date.now() + 3 * 3600e3).toISOString() },
-          { name: "seven_day", used: 0.48, status: "allowed", duration_sec: 604800, resets_at: new Date(Date.now() + 4 * 86400e3).toISOString() },
+          { name: "seven_day", used: 0.81, status: "warning", duration_sec: 604800, resets_at: new Date(Date.now() + 4 * 86400e3).toISOString() },
         ],
       };
       const put = (v) => {
@@ -6705,23 +6705,26 @@ async function runMatrix(browser, size, scheme) {
         const card = page.locator(".mb-card", { hasText: "Myco (Grok)" });
         const tag = card.locator(".app-quota-tag");
         await tag.waitFor({ timeout: 15_000 });
-        if (!compactText(await tag.innerText()).includes("剩 52%")) throw new Error(`会话上报的额度应在成员卡上显示最紧的窗口「剩 52%」，实际「${await tag.innerText()}」`);
+        if (!compactText(await tag.innerText()).includes("剩 19%")) throw new Error(`会话上报的额度应在成员卡上显示最紧的窗口「剩 19%」，实际「${await tag.innerText()}」`);
         if (!(await tag.getAttribute("title")).includes("会话上报")) throw new Error(`额度应说明是会话上报的，实际「${await tag.getAttribute("title")}」`);
+        if (await tag.getAttribute("data-quota") !== "tight" || !(await tag.getAttribute("title")).includes("接近上限")) throw new Error("warning 应显示接近上限，不应显示额度用完");
         await card.click();
         await page.locator(".ms").waitFor({ timeout: 10_000 });
         await clickVisible(page, page.locator(".ms .ms-fold"));
         const body = page.locator(".ms .ms-fold-body");
         await body.getByText("模型由它自己的会话管理，myco 改不了；额度是它的会话上报的。").waitFor({ timeout: 5_000 });
         const rows = compactText(await body.locator(".app-quota").allInnerTexts().then((x) => x.join(" | ")));
-        if (!rows.includes("剩 83%") || !rows.includes("剩 52%")) throw new Error(`卡片的额度应列出两个窗口，实际「${rows}」`);
+        if (!rows.includes("剩 83%") || !rows.includes("剩 19%")) throw new Error(`卡片的额度应列出两个窗口，实际「${rows}」`);
+        if (!rows.includes("接近上限") || rows.includes("额度用完")) throw new Error(`warning 仍可使用，应说接近上限：${rows}`);
         await settle(page, 200);
+        await body.locator(".app-quota").last().scrollIntoViewIfNeeded();
         await shot(page, size, scheme, "member-quota-session");
         await page.keyboard.press("Escape");
         await page.locator(".ms").waitFor({ state: "hidden" });
         await openMember(page, narrow, "聊天", "Myco (Grok)");
         const pill = page.locator(".conv-detail [data-testid=quota-pill]");
         await pill.waitFor({ timeout: 10_000 });
-        if (!compactText(await pill.innerText()).includes("剩 52%")) throw new Error(`输入框的额度应是「剩 52%」，实际「${await pill.innerText()}」`);
+        if (!compactText(await pill.innerText()).includes("剩 19%")) throw new Error(`输入框的额度应是「剩 19%」，实际「${await pill.innerText()}」`);
 
         // A cloud session cannot auto-report its usage (claude.ai never runs
         // a status line), so its last numbers are usually over an hour old.
@@ -6739,13 +6742,13 @@ async function runMatrix(browser, size, scheme) {
         const oldTag = page.locator(".mb-card", { hasText: "Myco (Grok)" }).locator(".app-quota-tag");
         await oldTag.waitFor({ timeout: 15_000 });
         const oldTagText = compactText(await oldTag.innerText());
-        if (!oldTagText.includes("剩 52%") || !oldTagText.includes("小时前")) throw new Error(`一小时前的额度应灰显并写年龄，实际「${oldTagText}」`);
+        if (!oldTagText.includes("剩 19%") || !oldTagText.includes("小时前")) throw new Error(`一小时前的额度应灰显并写年龄，实际「${oldTagText}」`);
         if ((await oldTag.getAttribute("data-quota")) !== "old") throw new Error(`一小时前的额度不该显示为当前额度，实际 data-quota=${await oldTag.getAttribute("data-quota")}`);
         await openMember(page, narrow, "聊天", "Myco (Grok)");
         const oldPill = page.locator(".conv-detail [data-testid=quota-pill]");
         await oldPill.waitFor({ timeout: 10_000 });
         const oldPillText = compactText(await oldPill.innerText());
-        if (!oldPillText.includes("剩 52%") || !oldPillText.includes("小时前")) throw new Error(`输入框应保留一小时前的额度并写年龄，实际「${oldPillText}」`);
+        if (!oldPillText.includes("剩 19%") || !oldPillText.includes("小时前")) throw new Error(`输入框应保留一小时前的额度并写年龄，实际「${oldPillText}」`);
         if (!(await oldPill.getAttribute("class") || "").includes("is-old")) throw new Error("一小时前的额度不该显示成当前额度");
         if (await page.locator(".conv-detail .conv-quota-out").count()) throw new Error("一小时前的额度不该按当前额度提示用完");
         const oldTitle = await oldPill.getAttribute("title") || "";
@@ -6758,8 +6761,27 @@ async function runMatrix(browser, size, scheme) {
         if (!compactText(await oldMenu.innerText()).includes("超过一小时没更新")) throw new Error(`打开应说明额度已超过一小时没更新，实际「${await oldMenu.innerText()}」`);
         await page.keyboard.press("Escape");
         await page.locator(".conv-detail .quota-pill-scrim").click({ force: true }).catch(() => {});
+        // The warning has the same meaning in English, including the
+        // remaining percentage. Capture the same details in both languages.
+        quota.at = at;
+        quota.checked_at = at;
+        await page.goto(`${r.base}/?lang=en`, { waitUntil: "domcontentloaded" });
+        await page.locator(".app-shell").waitFor();
+        await go(page, "Members", narrow);
+        const englishCard = page.locator(".mb-card", { hasText: "Myco (Grok)" });
+        await englishCard.scrollIntoViewIfNeeded();
+        await englishCard.click();
+        await page.locator(".ms").waitFor();
+        await clickVisible(page, page.locator(".ms .ms-fold"));
+        const englishWindow = page.locator(".ms .app-quota", { hasText: "Weekly" });
+        await englishWindow.scrollIntoViewIfNeeded();
+        const englishText = await englishWindow.innerText();
+        if (!englishText.includes("19% left") || !englishText.includes("Near limit") || englishText.includes("Out of quota")) throw Error(`English warning: ${englishText}`);
+        await shot(page, size, scheme, "member-quota-session-en");
       } finally {
         await page.unroute(routeURL);
+        await page.goto(`${r.base}/?lang=zh`, { waitUntil: "domcontentloaded" });
+        await page.locator(".app-shell").waitFor();
       }
       // (back where the next step starts: the members page)
       await go(page, "成员", narrow);

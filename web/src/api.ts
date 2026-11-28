@@ -17,7 +17,7 @@ export interface QuotaWindow {
   used: number;
   /** absent when the source does not say */
   resets_at?: string;
-  /** "allowed" while there is room; anything else means the window is spent. */
+  /** "allowed" or "warning" (legacy "allowed_warning") while still usable; other statuses refuse work. */
   status?: string;
   /** the window's length (5 hours: 18000; a week: 604800) */
   duration_sec?: number;

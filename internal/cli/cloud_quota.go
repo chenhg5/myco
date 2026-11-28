@@ -98,7 +98,7 @@ func sessionQuota(q *harness.Quota, now time.Time) *api.Quota {
 		}
 		aw := api.QuotaWindow{Name: w.Name, Used: w.Used, Status: w.Status}
 		if aw.Status == "allowed_warning" {
-			aw.Status = "allowed"
+			aw.Status = "warning"
 		}
 		switch {
 		case w.Name == "five_hour":
@@ -225,4 +225,45 @@ func sameQuota(a, b *api.Quota) bool {
 		}
 	}
 	return true
+}
+
+// cloudQuotaHint is best effort: quota discovery must not fail a completed
+// reply or delay inbox delivery indefinitely. The Hub binding authenticates
+// the agent's harness; a remote-session environment alone is not sufficient.
+func cloudQuotaHint(ctx context.Context, c *client.Client, getenv func(string) string, now time.Time, configPath ...string) string {
+	if c == nil || getenv == nil || getenv("CLAUDE_CODE_REMOTE_SESSION_ID") == "" {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	me, err := c.Me(ctx)
+	if err != nil || me.Binding.Harness != "claude-cloud" {
+		return ""
+	}
+	var q *api.Quota
+	if me.Runtime != nil {
+		q = me.Runtime.Quota
+	}
+	hint := sessionQuotaHint(q, now)
+	// A reply may have selected another workspace's identity. Make the
+	// follow-up report use that same profile rather than the session default.
+	if hint != "" && len(configPath) > 0 && configPath[0] != "" {
+		quoted := "'" + strings.ReplaceAll(configPath[0], "'", "'\\''") + "'"
+		hint = strings.Replace(hint, "myco agent runtime quota --file -", "myco agent runtime quota --file - --config "+quoted, 1)
+	}
+	return hint
+}
+
+func sessionQuotaHint(q *api.Quota, now time.Time) string {
+	if q != nil && (q.ProfileRef != "" || (!q.At.IsZero() && now.Sub(q.At) <= 30*time.Minute)) {
+		return ""
+	}
+	return `Refresh this cloud session's quota: call claude-code-remote.get_session with no id; use its session_id in claude-code-remote.list_events with kinds ["rate_limit_event"] and limit 100. Pipe the unchanged result JSON to myco agent runtime quota --file -. Only normalized usage numbers, times and statuses are reported; no account or tokens.`
+}
+
+func (e *env) withQuotaHint(c *client.Client, out map[string]any) map[string]any {
+	if hint := cloudQuotaHint(e.in.Ctx, c, e.in.Getenv, time.Now(), e.cfgPath); hint != "" {
+		out["quota_hint"] = hint
+	}
+	return out
 }

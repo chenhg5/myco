@@ -188,7 +188,7 @@ func (r *runtimeReporter) Quota(q harness.Quota) {
 		}
 		aw := api.QuotaWindow{Name: w.Name, Label: w.Label, Used: w.Used, Status: w.Status, DurationSec: w.DurationSec}
 		if aw.Status == "allowed_warning" {
-			aw.Status = "allowed"
+			aw.Status = "warning"
 		}
 		if w.Name == "five_hour" {
 			aw.DurationSec = 18000

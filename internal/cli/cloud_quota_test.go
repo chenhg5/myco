@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +12,7 @@ import (
 	"time"
 
 	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/client"
 	"github.com/myco-ai/myco/internal/harness/claude"
 )
 
@@ -191,3 +195,149 @@ func TestAgentRuntimeQuotaAndInboxWaitReportTheSessionsLimits(t *testing.T) {
 }
 
 func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
+
+const warningRateLimitEvent = `{"created_at":"2026-11-28T12:11:24.557854Z","rate_limit_event":{"internal_anthropic_catchall":{"rate_limit_info":{"isUsingOverage":false,"overageStatus":"rejected","rateLimitType":"seven_day","resetsAt":1796090400,"status":"allowed_warning","surpassedThreshold":0.75,"unifiedWindows":{"five_hour":{"resetsAt":1795885200,"status":"allowed","utilization":0},"seven_day":{"resetsAt":1796090400,"status":"allowed_warning","surpassedThreshold":0.75,"utilization":0.81}},"utilization":0.81}}}}`
+
+func TestRawCloudListEventsWarning(t *testing.T) {
+	for _, raw := range []string{warningRateLimitEvent, "[" + warningRateLimitEvent + "]", `{"ccr":{"data":[` + warningRateLimitEvent + `]}}`} {
+		info, at, ok := newestRateLimitInfo([]byte(raw))
+		if !ok || at.Format(time.RFC3339Nano) != "2026-11-28T12:11:24.557854Z" {
+			t.Fatalf("event timestamp: %v %v", at, ok)
+		}
+		q := sessionQuota(claude.RateLimitQuota(info, at), at.Add(time.Minute))
+		if q == nil || len(q.Windows) != 2 || q.Windows[0].Used != 0 || q.Windows[1].Used != .81 || q.Windows[1].Status != "warning" {
+			t.Fatalf("warning lost: %+v", q)
+		}
+		b, _ := json.Marshal(q)
+		for _, field := range []string{"internal_anthropic", "session_id", "overage", "surpassedThreshold"} {
+			if strings.Contains(string(b), field) {
+				t.Fatalf("raw metadata leaked: %s", b)
+			}
+		}
+	}
+}
+
+func TestSessionQuotaHintFreshness(t *testing.T) {
+	now := time.Date(2026, 11, 28, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name string
+		q    *api.Quota
+		want bool
+	}{
+		{"missing", nil, true}, {"zero", &api.Quota{}, true},
+		{"stale", &api.Quota{At: now.Add(-30*time.Minute - time.Nanosecond)}, true},
+		{"boundary", &api.Quota{At: now.Add(-30 * time.Minute)}, false},
+		{"fresh", &api.Quota{At: now.Add(-time.Minute)}, false},
+		{"newer", &api.Quota{At: now.Add(time.Minute)}, false},
+		{"runner", &api.Quota{ProfileRef: "qp_demo"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sessionQuotaHint(tc.q, now); (got != "") != tc.want {
+				t.Fatalf("hint %q", got)
+			}
+		})
+	}
+}
+
+func TestCloudQuotaHintsThroughCommands(t *testing.T) {
+	hub := newHub(t)
+	dir := t.TempDir()
+	cloud := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(dir, "cloud.yaml"), "CLAUDE_CODE_REMOTE_SESSION_ID": "demo-session"}}
+	sender := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(dir, "sender.yaml")}}
+	must := func(h *harnessT, args ...string) string {
+		t.Helper()
+		code, out, e := h.run(args...)
+		if code != 0 {
+			t.Fatalf("%v: %d %s %s", args, code, out, e)
+		}
+		return out
+	}
+	must(cloud, "agent", "register", "--name", "cloud", "--harness", "claude-cloud", "--session-id", "demo-session")
+	must(sender, "agent", "register", "--name", "sender")
+	hasHint := func(out string, want bool) {
+		t.Helper()
+		var v map[string]any
+		if err := json.Unmarshal([]byte(out), &v); err != nil {
+			t.Fatal(err)
+		}
+		_, got := v["quota_hint"]
+		if got != want {
+			t.Fatalf("want hint %v: %s", want, out)
+		}
+	}
+	for _, verb := range []string{"reply", "done"} {
+		out := must(sender, "message", "send", "--to", "cloud", "--body", "demo")
+		var sent struct {
+			Message api.Message `json:"message"`
+		}
+		if err := json.Unmarshal([]byte(out), &sent); err != nil {
+			t.Fatal(err)
+		}
+		hasHint(must(cloud, "inbox", "wait", "--timeout", "1ms"), true)
+		must(cloud, "inbox", "pull")
+		must(cloud, "message", "ack", "--id", sent.Message.ID)
+		args := []string{"message", verb, "--id", sent.Message.ID}
+		if verb == "reply" {
+			args = append(args, "--body", "done")
+		}
+		hasHint(must(cloud, args...), true)
+	}
+	code, out, stderr := cloud.run("inbox", "wait", "--timeout", "1ms")
+	if code != ExitTimeout {
+		t.Fatalf("timeout: %d %s", code, out)
+	}
+	hasHint(out+stderr, true)
+	delete(cloud.env, "CLAUDE_CODE_REMOTE_SESSION_ID")
+	_, out, stderr = cloud.run("inbox", "wait", "--timeout", "1ms")
+	hasHint(out+stderr, false)
+	cloud.env["CLAUDE_CODE_REMOTE_SESSION_ID"] = "demo-session"
+	fresh := strings.NewReplacer("2026-11-28T12:11:24.557854Z", time.Now().UTC().Format(time.RFC3339Nano), "1795885200", itoa(time.Now().Add(time.Hour).Unix()), "1796090400", itoa(time.Now().Add(24*time.Hour).Unix())).Replace(warningRateLimitEvent)
+	file := filepath.Join(dir, "events.json")
+	if err := os.WriteFile(file, []byte(`{"ccr":{"data":[`+fresh+`]}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	must(cloud, "agent", "runtime", "quota", "--file", file)
+	_, out, stderr = cloud.run("inbox", "wait", "--timeout", "1ms")
+	hasHint(out+stderr, false)
+}
+
+func TestCloudQuotaHintRequiresRemoteSessionAndHubBinding(t *testing.T) {
+	calls := 0
+	harness := "claude-cloud"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		json.NewEncoder(w).Encode(api.Agent{Binding: api.Binding{Harness: harness}})
+	}))
+	defer srv.Close()
+	c, err := client.New(srv.URL, "demo-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	get := func(string) string { return "" }
+	if cloudQuotaHint(context.Background(), c, get, time.Now()) != "" || calls != 0 {
+		t.Fatal("non-cloud environment made a request")
+	}
+	get = func(k string) string {
+		if k == "CLAUDE_CODE_REMOTE_SESSION_ID" {
+			return "demo"
+		}
+		return ""
+	}
+	for _, h := range []string{"claude", "codex", "inbox", ""} {
+		harness = h
+		if cloudQuotaHint(context.Background(), c, get, time.Now()) != "" {
+			t.Fatalf("hint for %q", h)
+		}
+	}
+	harness = "claude-cloud"
+	if got := cloudQuotaHint(context.Background(), c, get, time.Now()); !strings.Contains(got, "limit 100") || !strings.Contains(got, "get_session with no id") {
+		t.Fatalf("missing instructions: %q", got)
+	}
+	if hint := cloudQuotaHint(context.Background(), c, get, time.Now(), "/demo/a'b.yaml"); !strings.Contains(hint, "--config '/demo/a'\\''b.yaml'") {
+		t.Fatalf("wrong report profile: %q", hint)
+	}
+	srv.Close()
+	if cloudQuotaHint(context.Background(), c, get, time.Now()) != "" {
+		t.Fatal("failed discovery returned a hint")
+	}
+}
