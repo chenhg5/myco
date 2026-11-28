@@ -4,6 +4,32 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
+## v0.23.13
+
+Brief release notes, generated from commit titles. Formal notes will follow.
+- App: ` App: a computer card still says when an agent must sign in again ` (82cdab82)
+- App: ` Keep language menus open through scroll and keyboard checks ` (aaf1caac)
+- App: ` Fix native language picker crash and fill recent app rows ` (c3c9c14b)
+- Hub: ` Add server-side code-host filters and repository history ` (4d93c58d)
+- Hub: ` Keep workflow projections scoped to GET responses ` (5b2d53c3)
+- CLI, Hub: ` Add compact workflow run and selected-step reads ` (6f255ba0)
+- Hub: ` Keep failed quota queries eligible for agent selection ` (66400426)
+- App: ` App: an hour-old quota keeps its last numbers, greyed ` (2dd13a8d)
+
+**中文**
+
+简要说明，直接列出提交原标题；正式说明稍后补充。
+- 桌面应用：` App: a computer card still says when an agent must sign in again ` (82cdab82)
+- 桌面应用：` Keep language menus open through scroll and keyboard checks ` (aaf1caac)
+- 桌面应用：` Fix native language picker crash and fill recent app rows ` (c3c9c14b)
+- Hub：` Add server-side code-host filters and repository history ` (4d93c58d)
+- Hub：` Keep workflow projections scoped to GET responses ` (5b2d53c3)
+- 命令行、Hub：` Add compact workflow run and selected-step reads ` (6f255ba0)
+- Hub：` Keep failed quota queries eligible for agent selection ` (66400426)
+- 桌面应用：` App: an hour-old quota keeps its last numbers, greyed ` (2dd13a8d)
+
+https://github.com/myco-ai/myco/compare/dd1daf374e3730a288039c770b0fd36325fbca1a...9dc9e2f7444c62002ff6facac8474ed23387726d
+
 ## v0.23.12
 
 Brief release notes, generated from commit titles. Formal notes will follow.
