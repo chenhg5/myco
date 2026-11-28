@@ -6569,6 +6569,42 @@ async function runMatrix(browser, size, scheme) {
         const pill = page.locator(".conv-detail [data-testid=quota-pill]");
         await pill.waitFor({ timeout: 10_000 });
         if (!compactText(await pill.innerText()).includes("剩 52%")) throw new Error(`输入框的额度应是「剩 52%」，实际「${await pill.innerText()}」`);
+
+        // A cloud session cannot auto-report its usage (claude.ai never runs
+        // a status line), so its last numbers are usually over an hour old.
+        // They stay: greyed, with their age, never as the account's current
+        // use (never ok, and no "used up" line above the box).
+        const old = new Date(Date.now() - 3 * 3600e3).toISOString();
+        quota.at = old;
+        quota.checked_at = old;
+        // (the App keeps the overview it already loaded: reload to read it
+        // again, as a later visit would)
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await page.locator(".app-shell").waitFor({ timeout: 20_000 });
+        await settle(page);
+        await go(page, "成员", narrow);
+        const oldTag = page.locator(".mb-card", { hasText: "Myco (Grok)" }).locator(".app-quota-tag");
+        await oldTag.waitFor({ timeout: 15_000 });
+        const oldTagText = compactText(await oldTag.innerText());
+        if (!oldTagText.includes("剩 52%") || !oldTagText.includes("小时前")) throw new Error(`一小时前的额度应灰显并写年龄，实际「${oldTagText}」`);
+        if ((await oldTag.getAttribute("data-quota")) !== "old") throw new Error(`一小时前的额度不该显示为当前额度，实际 data-quota=${await oldTag.getAttribute("data-quota")}`);
+        await openMember(page, narrow, "聊天", "Myco (Grok)");
+        const oldPill = page.locator(".conv-detail [data-testid=quota-pill]");
+        await oldPill.waitFor({ timeout: 10_000 });
+        const oldPillText = compactText(await oldPill.innerText());
+        if (!oldPillText.includes("剩 52%") || !oldPillText.includes("小时前")) throw new Error(`输入框应保留一小时前的额度并写年龄，实际「${oldPillText}」`);
+        if (!(await oldPill.getAttribute("class") || "").includes("is-old")) throw new Error("一小时前的额度不该显示成当前额度");
+        if (await page.locator(".conv-detail .conv-quota-out").count()) throw new Error("一小时前的额度不该按当前额度提示用完");
+        const oldTitle = await oldPill.getAttribute("title") || "";
+        if (!oldTitle.includes("小时前") || !oldTitle.includes("可能已过时")) throw new Error(`悬停应写观察时间和可能过时，实际「${oldTitle}」`);
+        await settle(page, 200);
+        await shot(page, size, scheme, "member-quota-old");
+        await oldPill.click();
+        const oldMenu = page.locator(".conv-detail .quota-pill-menu");
+        await oldMenu.waitFor({ timeout: 5_000 });
+        if (!compactText(await oldMenu.innerText()).includes("超过一小时没更新")) throw new Error(`打开应说明额度已超过一小时没更新，实际「${await oldMenu.innerText()}」`);
+        await page.keyboard.press("Escape");
+        await page.locator(".conv-detail .quota-pill-scrim").click({ force: true }).catch(() => {});
       } finally {
         await page.unroute(routeURL);
       }

@@ -7094,6 +7094,8 @@ body.is-resizing {
 .app-quota-tag.is-spent { color: var(--red); }
 .app-quota-tag.is-action { color: var(--amber); }
 .app-quota-tag.is-stale:not(.is-action) { opacity: .75; }
+/* Last known numbers, too old to be current: grey, never amber or red. */
+.app-quota-tag.is-old { color: var(--muted); }
 .sp-member-meta:has(.sp-member-quota) { display: flex; align-items: center; gap: 6px; }
 .sp-member-meta .sp-member-quota { margin-left: auto; }
 .sp-member-meta-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -8362,6 +8364,9 @@ body.is-resizing {
 .quota-pill-icon { width: 12px; height: 12px; flex: none; }
 .quota-pill.is-low { color: var(--amber); }
 .quota-pill.is-out { color: var(--red); }
+/* Last known numbers (with their age) or none to show: quiet, never amber. */
+.quota-pill.is-old { color: var(--muted); opacity: .8; }
+.quota-pill.is-unknown { color: var(--muted); opacity: .8; }
 .quota-pill.is-stale { opacity: .75; }
 .quota-pill-row {
   display: flex;
@@ -8375,6 +8380,7 @@ body.is-resizing {
 .quota-pill-row.is-low > span:last-child { color: var(--amber); }
 .quota-pill-row.is-out > span:last-child { color: var(--red); }
 .quota-pill-status { color: var(--amber); }
+.quota-pill-status.is-quiet { color: var(--muted); }
 /* Out of quota: said above the box before a send (it is not stopped). */
 .dot.over { background: var(--red); }
 .run-pill-menu,

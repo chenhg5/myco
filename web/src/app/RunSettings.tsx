@@ -8,7 +8,7 @@ import { ChevronDown, ChevronRight, Shield, ShieldOff, TriangleAlert } from "luc
 import { hubAfter0194 } from "@/app/hubVersion";
 import { ConfirmDialog, ErrorText } from "@/app/dialogs";
 import { LocalShellAccess } from "@/app/LocalShellAccess";
-import { quotaHasNumbers, quotaLiveWindows, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaTight, quotaWindowLabel, quotaWindowText } from "@/app/quota";
+import { quotaHasNumbers, quotaLiveWindows, quotaSourceText, quotaSpent, quotaStaleNote, quotaStatusText, quotaTight, quotaUnreadable, quotaWindowLabel, quotaWindowText } from "@/app/quota";
 import { cn, timeAgo } from "@/lib/utils";
 import { L, E } from "@/lib/i18n";
 
@@ -664,6 +664,7 @@ function QuotaRows({ quota, row, now }: { quota: NonNullable<Runtime["quota"]>; 
   const has = quotaHasNumbers(quota, now);
   const status = quotaStatusText(quota, now);
   const stale = quotaStaleNote(quota, now);
+  const unreadable = quotaUnreadable(quota);
   const source = quotaSourceText(quota, machinesOfHub(row.hub));
   const windows = has ? quotaLiveWindows(quota, now) : [];
   const main = windows.filter((w) => !w.model_scope);
@@ -686,7 +687,13 @@ function QuotaRows({ quota, row, now }: { quota: NonNullable<Runtime["quota"]>; 
       {(status || !has) && (
         <div className={cn("app-quota-status", action && "is-action")} role="status">
           <TriangleAlert aria-hidden />
-          <span>{status || L("还没有额度数据", "No usage yet")}{has ? L("，下面是上次取到的。", "; below is the last read.") : L("，所以不显示数字。", ", so no numbers are shown.")}</span>
+          <span>
+            {has
+              ? <>{status || L("还没有额度数据", "No usage yet")}{L("，下面是上次取到的。", "; below is the last read.")}</>
+              : unreadable || action
+                ? <>{status || L("还没有额度数据", "No usage yet")}{L("，所以不显示数字。", ", so no numbers are shown.")}</>
+                : <>{L("额度未知", "Usage unknown")}{status ? L(E`：${status}`, E`: ${status}`) : ""}{L("，没有可显示的数字。", "; no numbers to show.")}</>}
+          </span>
         </div>
       )}
       {(main.length ? main : scoped).map(one)}

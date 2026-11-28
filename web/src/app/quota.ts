@@ -113,19 +113,19 @@ export function quotaHasNumbers(q: Quota, now = Date.now()): boolean {
   return quotaLiveWindows(q, now).length > 0 && Number.isFinite(at) && at > Date.UTC(2000, 0, 1);
 }
 
-/** When the numbers were observed: a runner's shared snapshot may keep a
- *  weekly window's older time on purpose, so where it has a profile the
- *  collection time is the freshness signal; a session report carries the
- *  time it observed. */
-function quotaObservedAt(q: Quota): number {
-  return new Date(q.profile_ref ? q.checked_at || q.at : q.at).getTime();
+/** When the numbers were observed, as the timestamp the App shows: a
+ *  runner's shared snapshot may keep a weekly window's older time on
+ *  purpose, so where it has a profile the collection time is the freshness
+ *  signal; a session report carries the time it observed. */
+export function quotaObservedAt(q: Quota): string {
+  return q.profile_ref ? q.checked_at || q.at : q.at;
 }
 
 /** The status to show: a read nobody refreshed for an hour counts as
  *  unknown, never as ok. */
 export function quotaEffectiveStatus(q: Quota, now = Date.now()): string {
   if (q.status && q.status !== "ok") return q.status;
-  const at = quotaObservedAt(q);
+  const at = new Date(quotaObservedAt(q)).getTime();
   if (!Number.isFinite(at) || now - at > 3600e3) return "unknown";
   return q.status || "ok";
 }
@@ -168,7 +168,14 @@ export function quotaStaleNote(quota: Quota, now: number): string | undefined {
   if (!quotaHasNumbers(quota, now)) return undefined;
   const at = new Date(quota.at).getTime();
   if (!quotaFailed(quota, now) && now - at <= 3600e3) return undefined;
-  return L(E`${timeAgo(quota.at, now)}取到的数据`, E`data from ${timeAgo(quota.at, now)}`);
+  return L(E`${timeAgo(quota.at, now)}取到的数据，可能已过时`, E`data from ${timeAgo(quota.at, now)}, may be out of date`);
+}
+
+/** Last known numbers whose read is no longer current: when they were
+ *  read, and that the account may have moved on since. */
+export function quotaOldNote(q: Quota, now = Date.now()): string | undefined {
+  if (quotaEffectiveStatus(q, now) !== "unknown" || !quotaHasNumbers(q, now)) return undefined;
+  return L(E`上次更新：${timeAgo(quotaObservedAt(q), now)}，可能已过时`, E`last updated ${timeAgo(quotaObservedAt(q), now)}; may be out of date`);
 }
 
 const providerNames: Record<string, string> = { codex: "Codex", claude: "Claude", opencode_go: "OpenCode Go", minimax: "MiniMax" };
@@ -207,17 +214,19 @@ export function quotaWorst(q: Quota, now = Date.now()): QuotaWindow | undefined 
   });
 }
 
-export type QuotaLevel = "ok" | "tight" | "spent" | "action" | "failed";
+export type QuotaLevel = "ok" | "tight" | "spent" | "action" | "failed" | "old";
 
 /** One line for a member: the tightest window left, whose usage, when it
  *  resets, and what is wrong. `short` fits a tag; `line` is the whole say. */
 export function quotaSummary(q: Quota, machines: Machine[] = [], now = Date.now()): { level: QuotaLevel; short: string; line: string; stale: boolean } {
   const src = quotaSourceText(q, machines);
   const status = quotaStatusText(q, now);
-  // Numbers nobody refreshed for an hour are unknown, not ok: do not show
-  // them as the account's current use.
-  const unknown = quotaEffectiveStatus(q, now) === "unknown";
-  const worst = !unknown && quotaHasNumbers(q, now) ? quotaWorst(q, now) : undefined;
+  const has = quotaHasNumbers(q, now);
+  // Numbers nobody refreshed for an hour are no longer current, but they are
+  // still the last thing anyone knows: show them greyed, with their age,
+  // never as today's use and never as ok.
+  const old = has && quotaEffectiveStatus(q, now) === "unknown";
+  const worst = has ? quotaWorst(q, now) : undefined;
   const stale = !!quotaStaleNote(q, now);
   if (!worst) {
     const why = status || L("还没有额度数据", "No usage yet");
@@ -227,14 +236,16 @@ export function quotaSummary(q: Quota, machines: Machine[] = [], now = Date.now(
   const what = quotaSpent(worst) ? L("用完了", "out") : L(E`剩 ${quotaLeft(worst)}%`, E`${quotaLeft(worst)}% left`);
   const label = quotaWindowLabel(worst);
   let line = L((reset ? E`额度：${label}${what}（${src}）${"，" + reset}` : E`额度：${label}${what}（${src}）`), (reset ? E`Usage: ${label} ${what} (${src})${"; " + reset}` : E`Usage: ${label} ${what} (${src})`));
-  if (status) line += L(E`。${status}，${quotaStaleNote(q, now)}`, E`. ${status}; ${quotaStaleNote(q, now)}`);
+  if (old) line += L(E`。${quotaOldNote(q, now)}`, E`. ${quotaOldNote(q, now)}`);
+  else if (status) line += L(E`。${status}，${quotaStaleNote(q, now)}`, E`. ${status}; ${quotaStaleNote(q, now)}`);
   else if (stale) line += L(E`（${quotaStaleNote(q, now)}）`, E` (${quotaStaleNote(q, now)})`);
-  const level: QuotaLevel = quotaNeedsAction(q) ? "action" : quotaSpent(worst) ? "spent" : quotaTight(worst) ? "tight" : "ok";
+  const level: QuotaLevel = quotaNeedsAction(q) ? "action" : old ? "old" : quotaSpent(worst) ? "spent" : quotaTight(worst) ? "tight" : "ok";
+  const age = old ? timeAgo(quotaObservedAt(q), now) : "";
   return {
     level,
-    short: quotaNeedsAction(q) ? actionShort(q) : quotaSpent(worst) ? L("额度用完", "Out of quota") : L(E`剩 ${quotaLeft(worst)}%`, E`${quotaLeft(worst)}% left`),
+    short: quotaNeedsAction(q) ? actionShort(q) : quotaSpent(worst) ? L(E`额度用完${age ? " · " + age : ""}`, E`Out of quota${age ? " · " + age : ""}`) : L(E`剩 ${quotaLeft(worst)}%${age ? " · " + age : ""}`, E`${quotaLeft(worst)}% left${age ? " · " + age : ""}`),
     line,
-    stale: stale || quotaFailed(q, now),
+    stale: stale || old || quotaFailed(q, now),
   };
 }
 
@@ -250,8 +261,9 @@ export function agentQuotaHint(a: Agent, now = Date.now()): { level: "tight" | "
   const quota = a.runtime?.quota;
   if (!quota || quotaUnreadable(quota)) return undefined;
   const s = quotaSummary(quota, [], now);
-  if (s.level === "ok" || s.level === "failed") return undefined;
-  return { level: s.level === "tight" ? "tight" : "spent", text: s.short, title: s.line };
+  // Only a current warning: old numbers are not a reason to act.
+  if (s.level !== "tight" && s.level !== "spent") return undefined;
+  return { level: s.level, text: s.short, title: s.line };
 }
 
 /** A window's name in a few characters for the composer: "5h", "7d", "月". */
