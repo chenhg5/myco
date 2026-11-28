@@ -47,7 +47,7 @@ var expected = map[string]func(Result) string{
 		return ""
 	},
 	"priority": func(r Result) string {
-		if hasDeduction(r, "low-priority job was finished before") {
+		if hasDeduction(r, "low-priority job was finished before") || hasDeduction(r, "queued behind the low-priority job") {
 			return "the urgent request was not first"
 		}
 		return ""
@@ -92,8 +92,10 @@ func TestTheCheckersCatchANaiveCoordinator(t *testing.T) {
 		"expert-busy":    func(r Result) bool { return hasDeduction(r, "without saying why") },
 		"offline-midway": func(r Result) bool { return !r.Passed && r.Score == 0 },
 		"wrong-result":   func(r Result) bool { return !r.Passed && hasDeduction(r, "wrong total") },
-		"priority":       func(r Result) bool { return hasDeduction(r, "low-priority job was finished before") || !r.Passed },
-		"constraint":     func(r Result) bool { return r.Veto != "" && r.Score == 0 },
+		"priority": func(r Result) bool {
+			return hasDeduction(r, "queued behind the low-priority job") || hasDeduction(r, "low-priority job was finished before")
+		},
+		"constraint": func(r Result) bool { return r.Veto != "" && r.Score == 0 },
 	}
 	for _, sc := range Scenarios() {
 		check, ok := want[sc.Name]

@@ -309,8 +309,8 @@ func (s *baseline) pick(ctx context.Context, skill string, tried map[string]bool
 		}
 		for name, a := range s.busy {
 			if !a.high && a.msg != "" && !tried[name] {
+				// its waiter stops it, before the agent is free again
 				a.stopped = true
-				go func(id string) { _, _ = s.c.StopTask(context.WithoutCancel(ctx), id, false) }(a.msg)
 				break
 			}
 		}
@@ -338,6 +338,7 @@ func (s *baseline) await(ctx context.Context, a *assignment) (string, string) {
 		stopped := a.stopped
 		s.mu.Unlock()
 		if stopped {
+			_, _ = s.c.StopTask(ctx, a.msg, false)
 			return "", "stopped"
 		}
 		if agents, err := s.c.ListAgents(ctx, "", false); err == nil {

@@ -34,6 +34,9 @@ type goalSpec struct {
 	At       float64 // units after the start
 	Priority string
 	Body     string
+	// After, when set, holds the goal back until the coordinator has given
+	// out these items (the work it is to interrupt is under way).
+	After []string
 }
 
 // Run is a finished run of a scenario: what the hub and the fake agents
@@ -249,7 +252,7 @@ func priority() *Scenario {
 		},
 		goals: []goalSpec{
 			{Body: "Low priority, when the team has time: have the analysis agents prepare the two parts of the quarterly report and send me their result codes.\n\n- report-part-1: the first half\n- report-part-2: the second half"},
-			{At: 4, Priority: "high", Body: "Urgent, before anything else: I need the status-check from an analysis agent now; send me its result code.\n\n- status-check: is the service healthy"},
+			{At: 4, After: []string{"report-part-1", "report-part-2"}, Priority: "high", Body: "Urgent, before anything else: I need the status-check from an analysis agent now; send me its result code.\n\n- status-check: is the service healthy"},
 		},
 		check: func(r *Run, res *Result) {
 			r.wantAnswers(res, r.Goals[1], []Item{high})
@@ -258,8 +261,11 @@ func priority() *Scenario {
 			if okHi {
 				res.Elapsed = r.units(hi.Sub(r.Goals[1].SentAt))
 			}
-			if okHi && okLo && lo.Before(hi) {
+			switch {
+			case okHi && okLo && lo.Before(hi):
 				res.penalty(50, "the low-priority job was finished before the urgent request")
+			case r.queuedBehind(high.Name, low):
+				res.penalty(50, "the urgent request was queued behind the low-priority job")
 			}
 		},
 	}
@@ -475,4 +481,47 @@ func (r *Run) overlappingEdits() (string, string, bool) {
 		}
 	}
 	return "", "", false
+}
+
+// queuedBehind: the item was given to an agent while that agent still had
+// one of the others open (given before, neither answered nor stopped
+// yet): it waits behind them, whatever the clock then does.
+func (r *Run) queuedBehind(item string, others []Item) bool {
+	low := map[string]bool{}
+	for _, it := range others {
+		low[strings.ToLower(it.Name)] = true
+	}
+	answered := map[string]time.Time{}
+	for _, m := range r.Messages {
+		if m.Type == domain.TypeReply && m.ReplyTo != "" {
+			answered[m.ReplyTo] = m.CreatedAt
+		}
+	}
+	briefs := r.briefs()
+	for _, b := range briefs {
+		if b.Type != domain.TypeTask || !contains(r.itemsIn(b.Body), strings.ToLower(item)) {
+			continue
+		}
+		for _, o := range briefs {
+			if o == b || o.To != b.To || o.Type != domain.TypeTask || !o.CreatedAt.Before(b.CreatedAt) {
+				continue
+			}
+			isLow := false
+			for _, n := range r.itemsIn(o.Body) {
+				isLow = isLow || low[n]
+			}
+			if !isLow {
+				continue
+			}
+			// open until answered, or stopped (closed without an answer)
+			done, ok := answered[o.ID]
+			if !ok && o.Status.Terminal() {
+				done, ok = o.UpdatedAt, true
+			}
+			if !ok || done.After(b.CreatedAt) {
+				return true
+			}
+		}
+	}
+	return false
 }

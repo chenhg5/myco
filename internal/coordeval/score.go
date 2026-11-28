@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/infra/sqlite"
 )
 
 // Result is a scenario's score and what it is made of (coordinator-tools,
@@ -227,7 +228,7 @@ func RunScenario(ctx context.Context, sc *Scenario, coord Coordinator, opts RunO
 	deadline := start.Add(w.Units(sc.Deadline))
 	pending := append([]goalSpec(nil), sc.goals...)
 	for ctx.Err() == nil && time.Now().Before(deadline) {
-		for len(pending) > 0 && time.Since(start) >= w.Units(pending[0].At) {
+		for len(pending) > 0 && time.Since(start) >= w.Units(pending[0].At) && w.briefed(ctx, pending[0].After) {
 			if _, err := w.SendGoal(ctx, pending[0].Body, pending[0].Priority); err != nil {
 				stop()
 				return Result{}, nil, fmt.Errorf("%s: sending the goal: %w", sc.Name, err)
@@ -259,6 +260,38 @@ func RunScenario(ctx context.Context, sc *Scenario, coord Coordinator, opts RunO
 		}
 	}
 	return score(r), r, nil
+}
+
+// briefed reports whether the coordinator has given out every one of
+// these items (to anyone).
+func (w *World) briefed(ctx context.Context, items []string) bool {
+	if len(items) == 0 {
+		return true
+	}
+	db, err := sqlite.Open(w.db)
+	if err != nil {
+		return false
+	}
+	defer db.Close()
+	rows, err := db.QueryContext(ctx, `SELECT body FROM messages WHERE from_agent=? AND type='task'`, Lead)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	seen := map[string]bool{}
+	for rows.Next() {
+		var body string
+		if rows.Scan(&body) != nil {
+			continue
+		}
+		lower := strings.ToLower(body)
+		for _, it := range items {
+			if strings.Contains(lower, strings.ToLower(it)) {
+				seen[it] = true
+			}
+		}
+	}
+	return len(seen) == len(items)
 }
 
 func allAnswered(ctx context.Context, w *World) bool {
