@@ -59,7 +59,7 @@ function duration(from: string, to: string | undefined, now: number): string {
   const m = Math.round(s / 60);
   if (m < 60) return L(E`${m} 分钟`, E`${m} min`);
   const h = Math.floor(m / 60);
-  return L(E`${h} 小时${m % 60 ? ` ${m % 60} 分` : ""}`, E`${h}h${m % 60 ? ` ${m % 60}m` : ""}`);
+  return L((m % 60 ? E`${h} 小时 ${m % 60} 分` : E`${h} 小时`), (m % 60 ? E`${h}h ${m % 60}m` : E`${h}h`));
 }
 
 /** How long until: 5 分钟, 3 小时, 2 天. */
@@ -575,7 +575,7 @@ function StartDialog({ hubId, wf, onClose, onStarted }: { hubId: string; wf: Wor
           {missing && def && <span className="app-modal-hint">{L(E`还没填「${def.inputs?.properties?.[missing]?.title || missing}」`, E`Fill in "${def.inputs?.properties?.[missing]?.title || missing}"`)}</span>}
           <button type="button" className="app-btn" onClick={onClose} disabled={busy}>{L("取消", "Cancel")}</button>
           <button type="submit" className="app-btn app-btn-primary" disabled={busy || !!missing || !def}
-            title={L(E`开始运行（${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}↵）`, (navigator.platform.includes("Mac") ? E`Start (⌘↵)` : E`Start (Ctrl+↵)`))}>
+            title={L((navigator.platform.includes("Mac") ? E`开始运行（⌘↵）` : E`开始运行（Ctrl+↵）`), (navigator.platform.includes("Mac") ? E`Start (⌘↵)` : E`Start (Ctrl+↵)`))}>
             <Play />{busy ? L("正在开始…", "Starting…") : L("开始运行", "Start")}
           </button>
         </div>

@@ -177,10 +177,10 @@ export function WatchBar({ hubId, watches, onChanged }: {
 export function WatchEnded({ w, nameOf }: { w: Watch; nameOf: (n: string) => string }) {
   const took = w.ended_at ? span(Date.parse(w.ended_at) - Date.parse(w.started_at)) : "";
   const text = w.state === "met"
-    ? L(E`盯到了：${w.what}${took ? `（${took}）` : ""}`, E`Got it: ${w.what}${took ? ` (after ${took})` : ""}`)
+    ? L((took ? E`盯到了：${w.what}（${took}）` : E`盯到了：${w.what}`), (took ? E`Got it: ${w.what} (after ${took})` : E`Got it: ${w.what}`))
     : w.state === "expired"
       ? L(E`盯了 ${took} 没等到：${w.what}`, E`Watched ${took}, it did not come: ${w.what}`)
-      : L(E`${w.ended_by ? nameOf(w.ended_by) : "有人"}停止了盯：${w.what}`, E`${w.ended_by ? nameOf(w.ended_by) : "Someone"} stopped watching: ${w.what}`);
+      : L((w.ended_by ? E`${nameOf(w.ended_by)}停止了盯：${w.what}` : E`有人停止了盯：${w.what}`), (w.ended_by ? E`${nameOf(w.ended_by)} stopped watching: ${w.what}` : E`Someone stopped watching: ${w.what}`));
   return (
     <div className={cn("watch-ended", `is-${w.state}`)} data-watch={w.id} title={w.outcome || undefined}>
       <Eye />

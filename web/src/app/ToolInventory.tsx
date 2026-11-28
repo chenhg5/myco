@@ -41,7 +41,7 @@ export function ToolInventory({ tools, mcpBlocked = false }: { tools: ToolLists;
           note={mcpBlocked ? L("在工作区权限下用不了：到「设置」里打开「允许 MCP 工具」。", "Not available with workspace access: turn on Allow MCP tools in Settings.") : undefined}
           rows={mcp.map((m, i) => (
             <Row key={`m-${i}`} name={m.name}
-              meta={[m.transport === "stdio" ? L("本地", "Local") : L(E`远程${m.host ? ` · ${m.host}` : ""}`, E`Remote${m.host ? ` · ${m.host}` : ""}`), scope(m.scope)].join(" · ")}
+              meta={[m.transport === "stdio" ? L("本地", "Local") : L((m.host ? E`远程 · ${m.host}` : E`远程`), (m.host ? E`Remote · ${m.host}` : E`Remote`)), scope(m.scope)].join(" · ")}
               tag={m.enabled === false ? L("未启用", "Disabled") : undefined} off={m.enabled === false} />
           ))} />
       )}

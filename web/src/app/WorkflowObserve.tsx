@@ -28,7 +28,7 @@ export function msWords(ms?: number): string {
   const m = Math.floor(s / 60);
   if (m < 60) return s % 60 && m < 10 ? L(E`${m} 分 ${s % 60} 秒`, E`${m}m ${s % 60}s`) : L(E`${m} 分钟`, E`${m} min`);
   const h = Math.floor(m / 60);
-  return L(E`${h} 小时${m % 60 ? ` ${m % 60} 分` : ""}`, E`${h}h${m % 60 ? ` ${m % 60}m` : ""}`);
+  return L((m % 60 ? E`${h} 小时 ${m % 60} 分` : E`${h} 小时`), (m % 60 ? E`${h}h ${m % 60}m` : E`${h}h`));
 }
 
 const count = (n?: number) => !n ? "0" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
@@ -109,7 +109,7 @@ export function WorkflowStatsSection({ hubId, wf, stamp, now, onOpenRun }: {
       </SectionHead>
       <div className="au-stats wfo-stats" data-testid="workflow-stats">
         <div className="au-stat"><span>{L("跑了", "Runs")}</span><b>{stats.total}</b>
-          <small className="wfo-foot">{L(E`完成 ${by.succeeded || 0} · 失败 ${by.failed || 0}${by.cancelled ? ` · 取消 ${by.cancelled}` : ""}`, E`${by.succeeded || 0} done · ${by.failed || 0} failed${by.cancelled ? ` · ${by.cancelled} cancelled` : ""}`)}</small></div>
+          <small className="wfo-foot">{L((by.cancelled ? E`完成 ${by.succeeded || 0} · 失败 ${by.failed || 0} · 取消 ${by.cancelled}` : E`完成 ${by.succeeded || 0} · 失败 ${by.failed || 0}`), (by.cancelled ? E`${by.succeeded || 0} done · ${by.failed || 0} failed · ${by.cancelled} cancelled` : E`${by.succeeded || 0} done · ${by.failed || 0} failed`))}</small></div>
         <div className="au-stat"><span>{L("成功率", "Success rate")}</span><b className={cn(!ended && "is-quiet")}>{ended ? `${Math.round(stats.success_rate * 100)}%` : "—"}</b>
           <small className="wfo-foot">{L(E`${ended} 次跑完的里面`, E`of ${ended} ended`)}</small></div>
         <div className="au-stat"><span>{L("用时（中位）", "Time (median)")}</span><b className={cn(!stats.duration_ms.n && "is-quiet")}>{msWords(stats.duration_ms.p50)}</b>
@@ -432,7 +432,7 @@ export function StepLogDialog({ hubId, runId, step, onClose }: { hubId: string; 
   const st = log?.step || step;
   return (
     <Modal open onOpenChange={(o) => !o && onClose()} wide className="wfo-log-modal"
-      title={L(E`日志 · ${step.title || step.step}${step.attempt > 1 ? ` 第 ${step.attempt} 次` : ""}`, E`Log · ${step.title || step.step}${step.attempt > 1 ? ` #${step.attempt}` : ""}`)}
+      title={L((step.attempt > 1 ? E`日志 · ${step.title || step.step} 第 ${step.attempt} 次` : E`日志 · ${step.title || step.step}`), (step.attempt > 1 ? E`Log · ${step.title || step.step} #${step.attempt}` : E`Log · ${step.title || step.step}`))}
       description={[st.target, msWords(st.duration_ms), st.attempts && st.attempts > 1 ? L(E`发了 ${st.attempts} 次任务`, E`${st.attempts} tasks sent`) : "", costWords(st.usage) !== "—" ? costWords(st.usage) : ""].filter(Boolean).join(" · ")}>
       <div data-testid="workflow-step-log">
         {step.kind === "agent" && (

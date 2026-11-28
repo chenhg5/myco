@@ -68,7 +68,7 @@ func newTrayMenu(app *application.App, h http.Handler, show, quit func()) *trayM
 	return t
 }
 
-// setLang redraws the menu in Chinese (zh) or English.
+// setLang redraws the menu in the selected interface language.
 func (t *trayMenu) setLang(language string) {
 	t.mu.Lock()
 	if t.zh == trayLanguage(language) {

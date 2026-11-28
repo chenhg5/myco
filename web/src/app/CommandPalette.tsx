@@ -8,7 +8,7 @@ import { isMe, nodeName } from "@/app/nodes";
 import { Avatar, isWorkspace } from "@/app/persona";
 import { recentChats } from "@/app/recentChats";
 import { SeekMushroom } from "@/app/Working";
-import { L } from "@/lib/i18n";
+import { E, L } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 
 /*
@@ -209,13 +209,13 @@ export function CommandPalette({ open, onOpenChange, rows, hubs, projects, now, 
 }
 
 // What the mushroom says while it looks, a new line every couple of seconds.
-const SEEK_LINES: ((q: string) => [string, string])[] = [
-  (q) => [`翻遍聊天记录，找「${q}」`, `Leafing through chats for “${q}”`],
-  () => ["顺着菌丝一路摸过去", "Following the mycelium along"],
-  () => ["挨个问问成员和项目", "Asking every member and project"],
-  (q) => [`「${q}」…好像在哪见过`, `“${q}”… seen that somewhere`],
-  () => ["翻翻最近的消息", "Turning over recent messages"],
-  () => ["快找到了", "Nearly there"],
+const SEEK_LINES: ((q: string) => string)[] = [
+  (q) => L(E`翻遍聊天记录，找「${q}」`, E`Leafing through chats for “${q}”`),
+  () => L("顺着菌丝一路摸过去", "Following the mycelium along"),
+  () => L("挨个问问成员和项目", "Asking every member and project"),
+  (q) => L(E`「${q}」…好像在哪见过`, E`“${q}”… seen that somewhere`),
+  () => L("翻翻最近的消息", "Turning over recent messages"),
+  () => L("快找到了", "Nearly there"),
 ];
 
 /** Searching with nothing found yet: the mushroom paces with its magnifying
@@ -227,12 +227,12 @@ function Seeking({ q }: { q: string }) {
     return () => window.clearInterval(t);
   }, []);
   const short = [...q.trim()].length > 12 ? `${[...q.trim()].slice(0, 12).join("")}…` : q.trim();
-  const [zh, en] = SEEK_LINES[i](short);
+  const line = SEEK_LINES[i](short);
   return (
     <div className="cp-seek" role="status">
       <div className="seek-track"><span className="seek-walker"><SeekMushroom /></span></div>
       {/* keyed, so each new line fades in */}
-      <span key={i} className="work-verb cp-seek-line">{L(zh, en)}</span>
+      <span key={i} className="work-verb cp-seek-line">{line}</span>
     </div>
   );
 }

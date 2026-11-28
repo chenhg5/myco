@@ -1857,6 +1857,20 @@ requests return 400, oversized metadata/images 413, a competing writer 503 and
 profile I/O failures 500. Failed saves preserve previously committed metadata.
 No local filesystem paths, image payloads or preference values are logged.
 
+### Local App interface language
+
+`GET /app/ui-lang` returns `{lang}` (empty before the web interface has selected a
+language). `PUT /app/ui-lang` accepts `{lang}` with `zh`, `zh-Hant`, `en`, `ja`, `ko`,
+`es` or `pt-BR`, saves the resolved language, and updates native menu/notification
+labels. Unknown IDs return `400 invalid_argument`. The `myco-lang` local preference
+stores the person's choice, including `system`; the web interface resolves System
+before calling this route. No Hub/runner protocol changes are needed. Older desktop
+backends can reject newer IDs without preventing the web interface from rendering.
+
+The existing optional `POST /app/translate` accepts `{text, to}` with the same seven
+resolved IDs and returns `{text, provider}`. It requires the configured translation
+service's key; interface localization itself never calls it. See [Interface languages](i18n.md).
+
 ### Runtime account identity
 
 `Runtime.account` is an optional email identity hint reported by newer runners

@@ -10,8 +10,9 @@ export function LanguageSelect({ value, onChange, className }: {
 }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(languageProblem);
+  const [retryChoice, setRetryChoice] = useState(value);
   const choose = async (choice: LangChoice) => {
-    setBusy(true); setFailed(false);
+    setRetryChoice(choice); setBusy(true); setFailed(false);
     try { await onChange(choice); } catch { setFailed(true); } finally { setBusy(false); }
   };
   return <div className={cn("language-control", className)}>
@@ -21,6 +22,6 @@ export function LanguageSelect({ value, onChange, className }: {
       {LANGUAGES.map((language) => <option key={language.id} value={language.id}>{language.name}</option>)}
     </select>
     {busy && <span className="app-kv-note" role="status">{L("正在切换语言", "Changing language")}</span>}
-    {failed && <span className="app-kv-note err" role="alert">{L("语言包暂时无法加载，请重试。", "The language pack could not be loaded. Please try again.")} <button type="button" className="app-kv-link" onClick={() => void choose(value)} disabled={busy}>{L("重试", "Retry")}</button></span>}
+    {failed && <span className="app-kv-note err" role="alert" data-testid="language-error">{L("语言包暂时无法加载，请重试。", "The language pack could not be loaded. Please try again.")} <button type="button" className="app-kv-link" data-testid="language-retry" onClick={() => void choose(retryChoice)} disabled={busy}>{L("重试", "Retry")}</button></span>}
   </div>;
 }

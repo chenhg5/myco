@@ -124,8 +124,8 @@ export function ConcurrencyLimit({ hubId, machine, here, owns, slots, onChanged,
         <div className="cc-text">
           {titled && <b>{L("同时干活", "At once")}</b>}
           <span>{limit === undefined ? L("正在问它…", "Asking it…")
-            : L(E`最多 ${limit} 个 agent 同时干活${inUse !== undefined ? `，现在 ${inUse} 个在跑` : ""}${waiting ? `，${waiting} 个在排队` : ""}`,
-              E`Up to ${limit} agents at once${inUse !== undefined ? `; ${inUse} running` : ""}${waiting ? `, ${waiting} waiting` : ""}`)}</span>
+            : L((inUse !== undefined ? (waiting ? E`最多 ${limit} 个 agent 同时干活，现在 ${inUse} 个在跑，${waiting} 个在排队` : E`最多 ${limit} 个 agent 同时干活，现在 ${inUse} 个在跑`) : (waiting ? E`最多 ${limit} 个 agent 同时干活，${waiting} 个在排队` : E`最多 ${limit} 个 agent 同时干活`)),
+              (inUse !== undefined ? (waiting ? E`Up to ${limit} agents at once; ${inUse} running, ${waiting} waiting` : E`Up to ${limit} agents at once; ${inUse} running`) : (waiting ? E`Up to ${limit} agents at once, ${waiting} waiting` : E`Up to ${limit} agents at once`)))}</span>
         </div>
         {owns && !state?.tooOld && limit !== undefined && (
           <div className="cc-edit">

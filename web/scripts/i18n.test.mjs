@@ -64,3 +64,13 @@ console.log("Seven-language matching, lazy packs, placeholders, persistence and 
 ({ module:m,settings }=await instance("future-locale",["en-US"]));await m.initializeLanguage();navigator.languages=["ja-JP"];window.dispatchEvent(new Event("languagechange"));await new Promise(r=>setTimeout(r,0));assert.equal(settings.get("myco-lang"),"future-locale","automatic host changes never overwrite an unknown future preference");
 
 assert.equal(formatMessage(E`Literal {0}, ${"value {1}"}`.source, ["value {1}"]), "Literal {0}, value {1}");
+
+const scriptSource=(await readFile(new URL("../src/lib/i18n/message-language.ts",import.meta.url),"utf8")).replace('"./locales"',JSON.stringify(localeURL));
+const {code:scriptCode}=await transform(scriptSource,{loader:"ts",format:"esm"});
+const {inOtherLanguage}=await import(asURL(scriptCode));
+assert.equal(inOtherLanguage("This is an English sentence to translate", "zh-Hant"),true);
+assert.equal(inOtherLanguage("これは日本語のメッセージです", "ja"),false);
+assert.equal(inOtherLanguage("한국어 메시지입니다", "ja"),true);
+assert.equal(inOtherLanguage("이것은 한국어 메시지입니다", "en"),true);
+assert.equal(inOtherLanguage("Este es un mensaje en español", "pt-BR"),false,"Latin languages require explicit translation rather than guessing");
+assert.equal(inOtherLanguage("```\nconst original = someCode();\n```", "zh"),false);

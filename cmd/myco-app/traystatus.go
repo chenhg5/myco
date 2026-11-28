@@ -3,11 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/myco-ai/myco/internal/api"
-	"github.com/myco-ai/myco/internal/uilocale"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/uilocale"
 )
 
 // trayStatus counts agents across all hubs. Only agents: machine and shell
