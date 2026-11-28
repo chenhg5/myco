@@ -83,8 +83,10 @@ func TestAgentPickAvailabilityAndEvidence(t *testing.T) {
 			t.Fatalf("%s incorrectly blocked", status)
 		}
 	}
-	if quotaAvailability(&domain.Quota{At: now, Windows: []domain.QuotaWindow{{Status: "allowed_warning", Used: 1}}}, now) != "available" {
-		t.Fatal("warning blocked")
+	for _, status := range []string{"allowed_warning", "warning"} {
+		if quotaAvailability(&domain.Quota{At: now, Windows: []domain.QuotaWindow{{Status: status, Used: 1}}}, now) != "available" {
+			t.Fatalf("%s blocked", status)
+		}
 	}
 	past := now.Add(-time.Second)
 	if quotaAvailability(&domain.Quota{At: now, Windows: []domain.QuotaWindow{{Used: 1, ResetsAt: &past}}}, now) != "available" {

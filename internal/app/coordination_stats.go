@@ -223,11 +223,11 @@ func quotaAvailability(q *domain.Quota, now time.Time) string {
 		if w.ResetsAt != nil && !w.ResetsAt.After(now) {
 			continue
 		}
-		if blocked(w.Status) || (w.Used >= 1 && w.Status != "allowed" && w.Status != "allowed_warning") {
+		if blocked(w.Status) || (w.Used >= 1 && w.Status != "allowed" && w.Status != "allowed_warning" && w.Status != "warning") {
 			return "blocked"
 		}
 	}
-	if q.Status != "" && q.Status != "ok" && q.Status != "allowed" && q.Status != "allowed_warning" && q.Status != "available" {
+	if q.Status != "" && q.Status != "ok" && q.Status != "allowed" && q.Status != "allowed_warning" && q.Status != "warning" && q.Status != "available" {
 		return "unknown"
 	}
 	return "available"
