@@ -4,25 +4,40 @@ One section per release (`## vX.Y.Z`, newest first): the changes users notice, i
 
 更新记录：每次发版一节，英文在前，`**中文**` 下面是同样的中文。
 
-## v0.23.14
+## v0.23.15
 
 Brief release notes, generated from commit titles. Formal notes will follow.
-- Hub: ` Keep normalized quota warnings usable for coordinator selection ` (177f78e4)
-- App, CLI, Hub: ` Remind Claude cloud sessions to refresh stale usage and preserve quota warnings ` (31fa1e85)
-- App: ` Show GLM MCP quota separately from model windows ` (76c0f706)
-- App, Hub: ` Add GLM Kimi and OpenRouter account quota sources ` (762bc184)
-- App: ` Keep Escape scoped to the open language menu ` (23e05a38)
+- Hub: ` Use fresh shared windows in quota availability checks ` (3d72ba58)
+- App: ` Keep sign-in issues visible beside shared quota usage ` (05c3c642)
+- Hub: ` Share usage with legacy Claude cloud collector records ` (890319e7)
+- Hub: ` Preserve authentication errors over quota collector placeholders ` (6c99acd2)
+- App, CLI, Hub: ` Share subscription quota across agents on the same account ` (1b5f2b9c)
+- Hub: ` Run scripted coordination baselines on cooperative scenario time ` (f5532418)
 
 **中文**
 
 简要说明，直接列出提交原标题；正式说明稍后补充。
-- Hub：` Keep normalized quota warnings usable for coordinator selection ` (177f78e4)
-- 桌面应用、命令行、Hub：` Remind Claude cloud sessions to refresh stale usage and preserve quota warnings ` (31fa1e85)
-- 桌面应用：` Show GLM MCP quota separately from model windows ` (76c0f706)
-- 桌面应用、Hub：` Add GLM Kimi and OpenRouter account quota sources ` (762bc184)
-- 桌面应用：` Keep Escape scoped to the open language menu ` (23e05a38)
+- Hub：` Use fresh shared windows in quota availability checks ` (3d72ba58)
+- 桌面应用：` Keep sign-in issues visible beside shared quota usage ` (05c3c642)
+- Hub：` Share usage with legacy Claude cloud collector records ` (890319e7)
+- Hub：` Preserve authentication errors over quota collector placeholders ` (6c99acd2)
+- 桌面应用、命令行、Hub：` Share subscription quota across agents on the same account ` (1b5f2b9c)
+- Hub：` Run scripted coordination baselines on cooperative scenario time ` (f5532418)
 
-https://github.com/myco-ai/myco/compare/9dc9e2f7444c62002ff6facac8474ed23387726d...0b1123a47706db7410188c3cfb093e69630f073c
+https://github.com/myco-ai/myco/compare/0b1123a47706db7410188c3cfb093e69630f073c...3d72ba58ad46b81a47ecf882e64cb414a8a272b8
+
+## v0.23.14
+
+
+- Hub: a recent quota window marked warning or allowed_warning does not by itself block an agent from coordinator selection, even when reported usage is full; other blocked statuses or windows still apply.
+- CLI: Claude cloud sessions without a profile-backed quota can receive a quota_hint in reply and inbox-wait JSON when their session usage is missing or over 30 minutes old.
+- App: while the language menu is open, Escape closes the menu and consumes that key event.
+
+**中文**
+
+- Hub：近期配额窗口标为 warning 或 allowed_warning 时，即使用量报告已满，也不会仅因此阻止协调者选择该 Agent；其他被阻止的状态或窗口仍会生效。
+- 命令行：没有基于本机连接配额的 Claude 云端会话，若缺少会话用量或数据已超过 30 分钟，可在回复和收件箱等待的 JSON 结果中收到 quota_hint 提醒。
+- 桌面应用：语言菜单打开时，按 Escape 会关闭菜单并拦截这次按键事件。
 
 ## v0.23.13
 
