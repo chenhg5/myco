@@ -235,10 +235,10 @@ function summaryOf(rows: Row[]): string {
   }
   const parts: string[] = [];
   if (rows.some((r) => r.kind === "thinking")) parts.push(L("想了一下", "thought"));
-  if (read) parts.push(L(E`读了 ${read} 个文件`, E`read ${read} file${read > 1 ? "s" : ""}`));
-  if (run) parts.push(L(E`跑了 ${run} 条命令`, E`ran ${run} command${run > 1 ? "s" : ""}`));
-  if (edit) parts.push(L(E`改了 ${files.size || edit} 个文件`, E`edited ${files.size || edit} file${(files.size || edit) > 1 ? "s" : ""}`));
-  if (other) parts.push(L(E`另外 ${other} 次操作`, E`${other} other step${other > 1 ? "s" : ""}`));
+  if (read) parts.push(L(E`读了 ${read} 个文件`, (read > 1 ? E`read ${read} files` : E`read ${read} file`)));
+  if (run) parts.push(L(E`跑了 ${run} 条命令`, (run > 1 ? E`ran ${run} commands` : E`ran ${run} command`)));
+  if (edit) parts.push(L(E`改了 ${files.size || edit} 个文件`, ((files.size || edit) > 1 ? E`edited ${files.size || edit} files` : E`edited ${files.size || edit} file`)));
+  if (other) parts.push(L(E`另外 ${other} 次操作`, (other > 1 ? E`${other} other steps` : E`${other} other step`)));
   if (failed) parts.push(L(E`${failed} 次失败`, E`${failed} failed`));
   return parts.join(L("、", ", "));
 }

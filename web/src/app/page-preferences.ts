@@ -1,13 +1,12 @@
+import { lang, type Lang } from "@/lib/i18n";
 import { useEffect, useState } from "react";
 export type PagePreferences = {
-  language: "zh" | "en";
+  language: Lang;
   theme: "light" | "dark";
 };
 export function pagePreferences(): PagePreferences {
   return {
-    language: document.documentElement.lang.toLowerCase().startsWith("zh")
-      ? "zh"
-      : "en",
+    language: lang(),
     theme: document.documentElement.classList.contains("dark")
       ? "dark"
       : "light",

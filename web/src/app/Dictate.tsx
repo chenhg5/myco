@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic } from "lucide-react";
 import { appApi } from "@/appapi";
-import { L, lang, E } from "@/lib/i18n";
+import { L, lang, speechLocale, languageName, isChinese, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /*
@@ -24,7 +24,7 @@ let appDictation = false;
 export function setSystemDictation(on: boolean) { appDictation = on; }
 
 /** The app's language as a speech tag. */
-const speechLang = () => (lang() === "zh" ? "zh-CN" : "en-US");
+const speechLang = speechLocale;
 
 type Recognition = {
   lang: string; continuous: boolean; interimResults: boolean;
@@ -124,7 +124,7 @@ export function DictateButton({ input, value, onText, disabled }: {
   if (!appDictation && !Recog) return null;
 
   const begin = () => {
-    const base = value && !/\s$/.test(value) ? `${value}${lang() === "zh" ? "" : " "}` : value;
+    const base = value && !/\s$/.test(value) ? `${value}${isChinese(lang()) || lang() === "ja" ? "" : " "}` : value;
     const write = (heard: string) => {
       if (!live.current) return;
       live.current.wrote = [...live.current.wrote.slice(-7), base + heard];
@@ -232,7 +232,7 @@ export function DictateButton({ input, value, onText, disabled }: {
   const holdKeyEn = holdKey === "⌥空格" ? "⌥Space" : "Ctrl+M";
   const title = note
     || (listening ? L("正在听…再点一下停止", "Listening… click to stop")
-      : L(E`语音输入（${lang() === "zh" ? "中文" : "English"}，跟 App 的语言；按住 ${holdKey} 说话）`, E`Dictate (${lang() === "zh" ? "Chinese" : "English"}, the app's language; hold ${holdKeyEn} to talk)`));
+      : L(E`语音输入（${languageName(lang())}，跟 App 的语言；按住 ${holdKey} 说话）`, E`Dictate (${languageName(lang())}, the app's language; hold ${holdKeyEn} to talk)`));
   return (
     <>
     {fixed && (

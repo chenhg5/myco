@@ -177,7 +177,7 @@ export function UsagePage({ hubId, projects, rows, onOpenAgent }: {
     { label: L("总 token", "Total tokens"), value: compactUsage(t.total), hint: exact(t.total), sub: L(E`日均 ${compactUsage(t.total / nDays)}`, E`${compactUsage(t.total / nDays)} a day`) },
     { label: L("输出 token", "Output tokens"), value: compactUsage(t.output), hint: exact(t.output), sub: t.total ? L(E`占总量 ${percent(t.output, t.total)}`, E`${percent(t.output, t.total)} of the total`) : "" },
     { label: L("调用次数", "Calls"), value: compactUsage(t.calls), hint: exact(t.calls), sub: L(E`日均 ${compactUsage(t.calls / nDays)}`, E`${compactUsage(t.calls / nDays)} a day`) },
-    { label: L("已上报费用", "Reported cost"), value: money(t.cost), hint: costNote(), sub: unreported ? L(E`${unreported} 个成员没有上报费用`, E`${unreported} ${unreported === 1 ? "member" : "members"} reported no cost`) : t.cost ? L("都已上报", "All reported") : "" },
+    { label: L("已上报费用", "Reported cost"), value: money(t.cost), hint: costNote(), sub: unreported ? L(E`${unreported} 个成员没有上报费用`, (unreported === 1 ? E`${unreported} member reported no cost` : E`${unreported} members reported no cost`)) : t.cost ? L("都已上报", "All reported") : "" },
   ];
   const open = (name: string) => onOpenAgent(name);
   return <div className="pc au usage-page">

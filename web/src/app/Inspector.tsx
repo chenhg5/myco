@@ -19,7 +19,7 @@ import { NodePicker } from "@/app/NodePicker";
 import { summarize } from "@/app/summary";
 import { stateMeta } from "@/components/status";
 import { cn, timeAgo } from "@/lib/utils";
-import { L, lang, locale, E } from "@/lib/i18n";
+import { L, locale, E } from "@/lib/i18n";
 import { RowsSkeleton } from "@/app/Skeleton";
 import { Avatar } from "@/app/persona";
 import { ResumeRow } from "@/app/ResumeRow";
@@ -112,7 +112,7 @@ function historyLines(e: AuditEntry): string[] {
     });
   }
   switch (e.action) {
-    case "agent.visibility": return [L(E`可见范围改为「${e.detail === "private" ? "仅自己" : "团队可见"}」`, E`Visibility set to ${e.detail === "private" ? "only its owner" : "everyone on the hub"}`)];
+    case "agent.visibility": return [L(E`可见范围改为「${e.detail === "private" ? "仅自己" : "团队可见"}」`, (e.detail === "private" ? E`Visibility set to only its owner` : E`Visibility set to everyone on the hub`))];
     case "agent.owner": return [L(E`转交：${e.detail || ""}`, E`Given: ${e.detail || ""}`)];
     case "agent.update": {
       try {
@@ -193,7 +193,7 @@ function PeerRows({ row, now, onPeer }: {
           <span className="meta">
             {stOf(p.agent) && <Avatar agent={stOf(p.agent)!.agent} size={18} badge={false} />}
             <span className="who">{nameOf(p.agent)}</span>
-            <span className="count">{L(E`${p.messages} 条消息`, E`${p.messages} message${p.messages === 1 ? "" : "s"}`)}</span>
+            <span className="count">{L(E`${p.messages} 条消息`, (p.messages === 1 ? E`${p.messages} message` : E`${p.messages} messages`))}</span>
             {p.last && <span className="time">{timeAgo(p.last.created_at, now)}</span>}
           </span>
           {p.last && <span className="body"><span className="app-peer-dir">{p.last.from === name ? L("发出", "Sent") : L("收到", "Got")}</span>{summarize(p.last)}</span>}
@@ -485,8 +485,8 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
 
       <Modal open={open} onOpenChange={(o) => !busy && setOpen(o)} title={L("服务商", "Provider")}
         description={remote
-          ? L(E`它在另一台电脑上：它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型），由它那台电脑上的 runner 照着改。只影响这个 agent，密钥只存在它那台电脑上。`, E`It runs on another computer: which provider (endpoint, key and model) its ${codex ? "Codex" : "Claude Code"} uses; the runner there applies it. Only this agent is affected; keys stay on that computer.`)
-          : L(E`后台唤醒这个 agent 时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`, E`Which provider (endpoint, key and model) this agent's ${codex ? "Codex" : "Claude Code"} uses when it is woken in the background. Only this agent is affected; keys stay on this computer.`)}>
+          ? L(E`它在另一台电脑上：它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型），由它那台电脑上的 runner 照着改。只影响这个 agent，密钥只存在它那台电脑上。`, (codex ? E`It runs on another computer: which provider (endpoint, key and model) its Codex uses; the runner there applies it. Only this agent is affected; keys stay on that computer.` : E`It runs on another computer: which provider (endpoint, key and model) its Claude Code uses; the runner there applies it. Only this agent is affected; keys stay on that computer.`))
+          : L(E`后台唤醒这个 agent 时，它的 ${codex ? "Codex" : "Claude Code"} 用哪个服务商（地址、密钥和模型）。只影响这个 agent，密钥只保存在这台电脑上。`, (codex ? E`Which provider (endpoint, key and model) this agent's Codex uses when it is woken in the background. Only this agent is affected; keys stay on this computer.` : E`Which provider (endpoint, key and model) this agent's Claude Code uses when it is woken in the background. Only this agent is affected; keys stay on this computer.`))}>
         <div className="app-provider-list" role="radiogroup" data-testid="provider-options">
           <label className={cn("app-provider-opt", choice === "" && "picked")}>
             <input type="radio" name="provider" checked={choice === ""} onChange={() => setChoice("")} />
@@ -496,8 +496,8 @@ function ProviderRow({ row, onRefresh }: { row: AgentRow; onRefresh: () => Promi
                 {following
                   ? L(E`现在走的是 ${following}`, E`Now going through ${following}`)
                   : current ? L(E`现在是「${current.name}」，在 cc-switch 里切换时跟着变`, E`Now “${current.name}”; changes when you switch in cc-switch`)
-                  : remote ? L(E`用它那台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, E`Uses ${codex ? "Codex" : "Claude Code"}'s own settings on its computer`)
-                  : L(E`用这台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, E`Uses ${codex ? "Codex" : "Claude Code"}'s own settings on this computer`)}
+                  : remote ? L(E`用它那台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, (codex ? E`Uses Codex's own settings on its computer` : E`Uses Claude Code's own settings on its computer`))
+                  : L(E`用这台电脑上 ${codex ? "Codex" : "Claude Code"} 自己的设置`, (codex ? E`Uses Codex's own settings on this computer` : E`Uses Claude Code's own settings on this computer`))}
               </small>
             </span>
           </label>
@@ -782,7 +782,7 @@ export function OfflineCard({ row, now, onRefresh }: { row: AgentRow; now: numbe
       ) : (
         <>
           <p>
-            {machine ? (lang() === "zh" ? <>它在「{machine.name}」上。</> : <>It runs on “{machine.name}”. </>) : null}
+            {machine ? L(E`它在「${machine.name}」上。`, E`It runs on “${machine.name}”. `) : null}
             {L("在那台电脑的终端里运行下面这条命令（启动 myco 后台；已经在运行就重启它）。电脑关机或睡眠时，开机后会自动上线。", "Run this command in a terminal on that machine (it starts the runner, or restarts it if it's already running). If the machine is off or asleep, the node comes back online once it wakes.")}
           </p>
           <div className="app-command">

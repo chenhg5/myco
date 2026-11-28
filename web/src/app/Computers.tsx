@@ -289,7 +289,7 @@ export function ComputersPage({ rows, projects, onOpen, onProfile, onConnect, on
                   <span className="pc-card-count">
                     {healthState(m)==="alert" && <span className="dot failed" title={L("机器负载需要关注", "Machine needs attention")} />}
                     {agents.length || terminals.length
-                      ? [agents.length ? L(E`${agents.length} 个 agent`, E`${agents.length} agent${agents.length === 1 ? "" : "s"}`) : "", terminals.length ? L(E`${terminals.length} 个终端`, E`${terminals.length} terminal${terminals.length === 1 ? "" : "s"}`) : ""].filter(Boolean).join(" · ")
+                      ? [agents.length ? L(E`${agents.length} 个 agent`, (agents.length === 1 ? E`${agents.length} agent` : E`${agents.length} agents`)) : "", terminals.length ? L(E`${terminals.length} 个终端`, (terminals.length === 1 ? E`${terminals.length} terminal` : E`${terminals.length} terminals`)) : ""].filter(Boolean).join(" · ")
                       : L("上面还没有 agent", "Nothing on it yet")}
                   </span>
                   {quota && <span className={cn("pc-quota", quota.level === "spent" && "is-spent")} title={quota.title}>{quota.text}</span>}
@@ -497,7 +497,7 @@ function RemoveComputer({ machine, rows, onClose, onRemoved }: {
           <Info />
           <div>
             <div>{n > 0
-              ? L(E`它上面的 ${n} 个 agent 和终端会一起移除；聊过的内容都保留。`, E`The ${n} agent${n === 1 ? "" : "s"} and terminals on it go too; conversations are kept.`)
+              ? L(E`它上面的 ${n} 个 agent 和终端会一起移除；聊过的内容都保留。`, (n === 1 ? E`The ${n} agent and terminals on it go too; conversations are kept.` : E`The ${n} agents and terminals on it go too; conversations are kept.`))
               : L("它上面没有 agent 或终端；聊过的内容都保留。", "Nothing else is on it; conversations are kept.")}</div>
             {machine.online && (
               <>

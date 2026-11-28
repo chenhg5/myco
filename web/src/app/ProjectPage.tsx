@@ -310,7 +310,7 @@ export function ProjectPage({ target, reloadKey, hubName, rows, now, onOpenNode,
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }}
         onDrop={(e) => { e.preventDefault(); setDragging(false); if (!p.archived) void upload(Array.from(e.dataTransfer.files)); }}>
         <div className="app-group-title">
-          <span className="name">{L(`文件 ${files.length || ""}`.trim(), `Files ${files.length || ""}`.trim())}</span>
+          <span className="name">{L(E`文件 ${files.length || ""}`, E`Files ${files.length || ""}`).trim()}</span>
           <button type="button" className="app-group-action" onClick={() => fileInput.current?.click()} disabled={p.archived || uploading !== null}><Upload />{L("上传", "Upload")}</button>
           <input ref={fileInput} type="file" multiple hidden onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ""; void upload(fs); }} />
         </div>
@@ -679,7 +679,7 @@ function AddDialog({ open, nodes, busy, error, onClose, onAdd }: { open: boolean
         ? <div className="app-empty-note">{L("没有可以添加的 agent 了。", "No more nodes you can add.")}</div>
         : <NodePicker nodes={nodes} value={picked} onChange={setPicked} disabled={busy} listedOnly emptyPlaceholder={L("搜索 agent", "Search nodes")} />}
       <ErrorText error={error} />
-      <Actions busy={busy} onCancel={onClose} onSave={() => onAdd(picked)} saveLabel={L(`添加 ${picked.length || ""}`.trim(), `Add ${picked.length || ""}`.trim())} disabled={picked.length === 0} />
+      <Actions busy={busy} onCancel={onClose} onSave={() => onAdd(picked)} saveLabel={L(E`添加 ${picked.length || ""}`, E`Add ${picked.length || ""}`).trim()} disabled={picked.length === 0} />
     </Modal>
   );
 }

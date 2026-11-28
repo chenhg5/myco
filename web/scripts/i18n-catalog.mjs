@@ -17,7 +17,8 @@ function texts(node) {
   if (ts.isTaggedTemplateExpression(node) && node.tag.getText() === "E") {
     const t = node.template;
     if (ts.isNoSubstitutionTemplateLiteral(t)) return [t.text];
-    return [t.head.text + t.templateSpans.map((s, i) => `{${i}}${s.literal.text}`).join("")];
+    const escaped = (text) => text.replace(/\{/g,"{{").replace(/\}/g,"}}");
+    return [escaped(t.head.text) + t.templateSpans.map((s, i) => `{${i}}${escaped(s.literal.text)}`).join("")];
   }
   if (ts.isConditionalExpression(node)) return [...texts(node.whenTrue), ...texts(node.whenFalse)];
   if (ts.isParenthesizedExpression(node)) return texts(node.expression);
@@ -40,9 +41,19 @@ for (const file of files(src)) {
       for (const text of texts(n.arguments[1])) add(english,text,file);
       if (!texts(n.arguments[1]).length) unresolved.push({file:path.relative(root,file),line:tree.getLineAndCharacterOfPosition(n.getStart(tree)).line+1,expression:n.arguments[1].getText(tree)});
     }
-    // A few existing status/access tables pass their pair to L at render time.
-    if (ts.isArrayLiteralExpression(n) && n.elements.length === 2 && ts.isStringLiteral(n.elements[0]) && ts.isStringLiteral(n.elements[1]) && /[\u3400-\u9fff]/.test(n.elements[0].text)) {
-      add(chinese,n.elements[0].text,file); add(english,n.elements[1].text,file);
+    // Bilingual helper arguments and status tables are resolved by L at render time.
+    const pairs = ts.isArrayLiteralExpression(n) ? n.elements : ts.isCallExpression(n) ? n.arguments : [];
+    for (let i = 0; i + 1 < pairs.length; i++) {
+      if (ts.isStringLiteral(pairs[i]) && ts.isStringLiteral(pairs[i+1]) && /[\u3400-\u9fff]/.test(pairs[i].text)) {
+        add(chinese,pairs[i].text,file); add(english,pairs[i+1].text,file);
+      }
+    }
+    if(ts.isObjectLiteralExpression(n)) {
+      const fields = new Map(n.properties.filter(ts.isPropertyAssignment).map((p)=>[p.name.getText(tree).replace(/["']/g,""),p.initializer]));
+      for(const [zh,en] of [["zh","en"],["name","name_en"],["help","help_en"]]) {
+        const a=fields.get(zh),b=fields.get(en);
+        if(a&&b&&ts.isStringLiteral(a)&&ts.isStringLiteral(b)&&/[\u3400-\u9fff]/.test(a.text)){add(chinese,a.text,file);add(english,b.text,file);}
+      }
     }
     ts.forEachChild(n,visit);
   }
@@ -55,17 +66,25 @@ for (const file of files(src)) {
   }
 }
 // The desktop's native menus use the same catalogs and English fallback.
-for (const name of ["appmenu_darwin.go","traystatus.go","traymenu.go"]) {
-  const file=path.join(root,"cmd/myco-app",name), text=fs.readFileSync(file,"utf8");
-  for (const m of text.matchAll(/\.s\(\s*("(?:\\.|[^"\\])*")\s*,\s*("(?:\\.|[^"\\])*")\s*\)/g)) {
+for (const name of ["cmd/myco-app/appmenu_darwin.go","cmd/myco-app/traystatus.go","cmd/myco-app/traymenu.go","internal/console/notices/notices.go"]) {
+  const file=path.join(root,name), text=fs.readFileSync(file,"utf8");
+  for (const m of text.matchAll(/(?:\.s|choose)\(\s*("(?:\\.|[^"\\])*")\s*,\s*("(?:\\.|[^"\\])*")\s*\)/g)) {
     add(chinese,JSON.parse(m[1]),file); add(english,JSON.parse(m[2]),file);
+  }
+}
+const noticesFile=path.join(root,"internal/console/notices/notices.go");
+for(const m of fs.readFileSync(noticesFile,"utf8").matchAll(/uilocale\.Text\(language,\s*("(?:\\.|[^"\\])*")\s*,\s*("(?:\\.|[^"\\])*")/g)) {add(chinese,JSON.parse(m[1]),noticesFile);add(english,JSON.parse(m[2]),noticesFile);}
+for (const entry of Object.values(JSON.parse(fs.readFileSync(path.join(src,"lib/app-locales.json"),"utf8")))) {
+  for (const key of ["name","description"]) {
+    if(entry.en?.[key]) add(english,entry.en[key],path.join(src,"lib/app-locales.json"));
+    if(entry.zh?.[key]) add(chinese,entry.zh[key],path.join(src,"lib/app-locales.json"));
   }
 }
 for (const file of fs.readdirSync(path.join(src,"app/help/zh"))) if(file.endsWith(".md")) add(chinese,fs.readFileSync(path.join(src,"app/help/zh",file),"utf8"),path.join(src,"app/help/zh",file));
 const manifest={english:[...english].sort(([a],[b])=>a.localeCompare(b,"en")).map(([text,source])=>({text,files:[...source]})),chinese:[...chinese].sort(([a],[b])=>a.localeCompare(b,"en")).map(([text,source])=>({text,files:[...source]})),unresolved};
 if(process.argv.includes("--manifest")) process.stdout.write(JSON.stringify(manifest,null,2)+"\n");
 if(process.argv.includes("--check")) {
-  const signature=s=>(s.match(/\{\d+\}|%(?:\[\d+\])?[+#0 .\-\d]*[sdvfx]/g)||[]).sort().join("|");
+  const signature=s=>(s.match(/\{\{|\}\}|\{\d+\}|%(?:\[\d+\])?[+#0 .\-\d]*[sdvfx]/g)||[]).filter(x=>x!=="{{"&&x!=="}}").sort().join("|");
   const errors=[];
   for(const language of ["zh-Hant","ja","ko","es","pt-BR"]) {
     const catalog=JSON.parse(fs.readFileSync(path.join(root,"internal/uilocale/catalogs",language+".json"),"utf8"));

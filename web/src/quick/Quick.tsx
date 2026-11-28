@@ -145,7 +145,7 @@ export function Quick() {
           {error && <div className="qp-error">{error}</div>}
           {waiting > 0 && (
             <button type="button" className="qp-waiting" onClick={() => once(() => openChat())} data-testid="quick-waiting">
-              <ShieldQuestion />{L(E`${name} 有 ${waiting} 件事等你点头`, E`${name} has ${waiting} thing${waiting > 1 ? "s" : ""} waiting for your OK`)}
+              <ShieldQuestion />{L(E`${name} 有 ${waiting} 件事等你点头`, (waiting > 1 ? E`${name} has ${waiting} things waiting for your OK` : E`${name} has ${waiting} thing waiting for your OK`))}
               <span className="qp-waiting-go">{L("去看", "See")}</span>
             </button>
           )}

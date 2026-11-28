@@ -28,7 +28,7 @@ import { useContextMenu } from "@/app/ContextMenu";
 import { handoverItem } from "@/app/Handover";
 import { forkItem } from "@/app/Fork";
 import { PaneGrid, dragAgent, leastShare, onePane, paneKeys, placePane, removePane, replacePane, soundLayout, PANE_MIN_W, type DragAgent, type DropAt, type PaneLayout, type PaneSlot } from "@/app/Panes";
-import { L, E } from "@/lib/i18n";
+import { L, E, locale } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 import { recall, remember } from "@/lib/memo";
 
@@ -1181,7 +1181,7 @@ function dayLabel(iso: string, now: number): string {
   const days = Math.round((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86400e3);
   if (days === 0) return L("今天", "Today");
   if (days === 1) return L("昨天", "Yesterday");
-  return L(E`${d.getMonth() + 1} 月 ${d.getDate()} 日`, d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+  return d.toLocaleDateString(locale(), { month: "short", day: "numeric" });
 }
 
 /** "14:05" */

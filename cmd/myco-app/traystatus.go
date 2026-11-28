@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/myco-ai/myco/internal/api"
+	"github.com/myco-ai/myco/internal/uilocale"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -103,31 +105,38 @@ func trayCounts(kind, harness string) bool {
 	return true
 }
 
-// trayText picks the Chinese or English text.
-type trayText bool
+// trayLocale keeps the same language as the App's pages.
+type trayLocale string
 
-func (zh trayText) s(cn, en string) string {
-	if zh {
-		return cn
+func trayText(chinese bool) trayLocale {
+	if chinese {
+		return "zh"
 	}
-	return en
+	return "en"
 }
+func trayLanguage(language string) trayLocale {
+	if api.UILanguage(language).Valid() {
+		return trayLocale(language)
+	}
+	return "en"
+}
+func (language trayLocale) s(cn, en string) string { return uilocale.Text(string(language), cn, en) }
 
 // summary is the first line of the menu, e.g. "2 个工作中 · 1 个离线".
-func (zh trayText) summary(st trayStatus) string {
+func (zh trayLocale) summary(st trayStatus) string {
 	if st.Hubs == 0 {
 		return zh.s("还没有连接 Hub", "No hub connected yet")
 	}
 	var parts []string
-	add := func(n int, cn, en string) {
+	add := func(n int, label string) {
 		if n > 0 {
-			parts = append(parts, fmt.Sprintf(zh.s("%d 个"+cn, "%d "+en), n))
+			parts = append(parts, fmt.Sprintf(label, n))
 		}
 	}
-	add(st.Working, "在干活", "working")
-	add(st.Pending, "有活待接", "with tasks waiting")
-	add(st.Idle, "空闲", "idle")
-	add(st.Offline, "离线", "offline")
+	add(st.Working, zh.s("%d 个在干活", "%d working"))
+	add(st.Pending, zh.s("%d 个有活待接", "%d with tasks waiting"))
+	add(st.Idle, zh.s("%d 个空闲", "%d idle"))
+	add(st.Offline, zh.s("%d 个离线", "%d offline"))
 	if len(parts) == 0 {
 		return zh.s("还没有节点", "No nodes yet")
 	}
@@ -136,7 +145,7 @@ func (zh trayText) summary(st trayStatus) string {
 
 // nodeLine is a busy node's menu line: "PM (Codex) — reviewing the branch",
 // or "— tasks waiting" for one not at work yet.
-func (zh trayText) nodeLine(n trayNode) string {
+func (zh trayLocale) nodeLine(n trayNode) string {
 	status := n.Status
 	if status == "" {
 		status = zh.s("在干活", "working")
@@ -161,12 +170,12 @@ func clip(s string, n int) string {
 }
 
 // wakeLabel is the menu item that restarts this computer's runner.
-func (zh trayText) wakeLabel() string {
+func (zh trayLocale) wakeLabel() string {
 	return zh.s("唤醒本机节点", "Wake this computer's nodes")
 }
 
 // downLine names the hubs the app cannot reach.
-func (zh trayText) downLine(down []string) string {
+func (zh trayLocale) downLine(down []string) string {
 	return zh.s("连不上 ", "Can't reach ") + clip(strings.Join(down, zh.s("、", ", ")), 40)
 }
 
@@ -200,6 +209,6 @@ func readTrayUpdate(h http.Handler) string {
 }
 
 // updateLine is the menu item for a newer release.
-func (zh trayText) updateLine(latest string) string {
-	return zh.s("有新版本 "+latest+"，点此更新", "myco "+latest+" is out: update")
+func (zh trayLocale) updateLine(latest string) string {
+	return fmt.Sprintf(zh.s("有新版本 %s，点此更新", "myco %s is out: update"), latest)
 }

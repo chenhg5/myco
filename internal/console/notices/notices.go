@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -28,9 +29,11 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/myco-ai/myco/internal/domain"
+
 	"github.com/myco-ai/myco/internal/api"
 	"github.com/myco-ai/myco/internal/client"
-	"github.com/myco-ai/myco/internal/domain"
+	"github.com/myco-ai/myco/internal/uilocale"
 )
 
 // Feed is a workspace's notice feed (a *client.Client).
@@ -145,7 +148,7 @@ type group struct {
 type Options struct {
 	Hubs    Hubs
 	Present Presenter
-	// Lang is the App's language ("zh" or "en").
+	// Lang is the App's supported interface language.
 	Lang func() string
 	// StatePath keeps where each feed was read up to, so a restart does
 	// not announce again (nor miss) what came meanwhile.
@@ -338,7 +341,7 @@ func (w *Watcher) tell(ctx context.Context, h Hub, f Feed, n *api.Notice) {
 }
 
 func (w *Watcher) toast(h Hub, n *api.Notice) Toast {
-	zh := w.lang() == "zh"
+	language := w.lang()
 	id := h.ID + "|" + targetKey(n.Target)
 	t := Toast{ID: id, Hub: h.ID, Target: n.Target, Actor: n.Actor, Sound: n.Tier == "needs_you"}
 	t.Title = n.Actor
@@ -362,14 +365,11 @@ func (w *Watcher) toast(h Hub, n *api.Notice) Toast {
 	g.at = now
 	count := g.count
 	w.mu.Unlock()
-	t.Body = Words(n, zh)
+	t.Body = WordsForLanguage(n, language)
 	if count > 1 {
-		if zh {
-			t.Body = itoa(count) + " 条新消息 · " + t.Body
-		} else {
-			t.Body = itoa(count) + " new · " + t.Body
-		}
+		t.Body = fmt.Sprintf(uilocale.Text(language, "%s 条新消息 · ", "%s new · "), itoa(count)) + t.Body
 	}
+
 	return t
 }
 
@@ -508,41 +508,44 @@ func (w *Watcher) setCursor(id string, seq int64) {
 // Words is a notice's line, in Chinese or English: what kind of thing it
 // is, then its first line.
 func Words(n *api.Notice, zh bool) string {
+	language := "en"
+	if zh {
+		language = "zh"
+	}
+	return WordsForLanguage(n, language)
+}
+
+// WordsForLanguage localizes only the UI prefix; subjects and bodies stay intact.
+func WordsForLanguage(n *api.Notice, language string) string {
+	choose := func(zh, en string) string { return uilocale.Text(language, zh, en) }
 	text := n.Subject
 	if n.Message != nil {
 		if n.Message.Body != "" && !looksSealed(n.Message.Body) {
 			text = firstLine(n.Message.Body)
 		} else if text == "" {
-			text = pick(zh, "有一条新消息", "A new message")
+			text = choose("有一条新消息", "A new message")
 		}
 	}
 	lead := ""
 	switch n.Kind {
 	case "asking":
-		lead = pick(zh, "问你：", "Asks you: ")
+		lead = choose("问你：", "Asks you: ")
 	case "decision":
-		lead = pick(zh, "等你决定：", "Waiting for your decision: ")
+		lead = choose("等你决定：", "Waiting for your decision: ")
 	case "approval":
-		lead = pick(zh, "请你批准：", "Needs your OK: ")
+		lead = choose("请你批准：", "Needs your OK: ")
 	case "failed":
-		lead = pick(zh, "没做成：", "Didn't get done: ")
+		lead = choose("没做成：", "Didn't get done: ")
 	case "run_failed":
-		lead = pick(zh, "运行失败：", "Run failed: ")
+		lead = choose("运行失败：", "Run failed: ")
 	case "stuck":
-		lead = pick(zh, "可能卡住了：", "May be stuck: ")
+		lead = choose("可能卡住了：", "May be stuck: ")
 	case "answered":
-		lead = pick(zh, "回复：", "Replied: ")
+		lead = choose("回复：", "Replied: ")
 	case "progress":
-		lead = pick(zh, "进展：", "Update: ")
+		lead = choose("进展：", "Update: ")
 	}
 	return lead + text
-}
-
-func pick(zh bool, a, b string) string {
-	if zh {
-		return a
-	}
-	return b
 }
 
 func firstLine(s string) string {

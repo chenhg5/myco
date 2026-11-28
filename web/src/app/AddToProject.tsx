@@ -1312,7 +1312,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
           <div className="ws-who">
             {project
               ? users.length > 0
-                ? L(E`项目里的 ${users.length} 个 agent 都能在那里跑命令，之后加入的也能。`, E`The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands there, and so can those who join later.`)
+                ? L(E`项目里的 ${users.length} 个 agent 都能在那里跑命令，之后加入的也能。`, (users.length > 1 ? E`The project's ${users.length} agents can run commands there, and so can those who join later.` : E`The project's ${users.length} agent can run commands there, and so can those who join later.`))
                 : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")
               : L("先不给 agent 用。把它加进项目后，项目里的 agent 就能在那里跑命令。", "No agent may use it yet: put it in a project and the project's agents can.")}
             {" "}{L("运行命令就是那台电脑同意了：agent 能用你的身份在这个文件夹里跑命令。", "Running it is that computer's consent: agents can run commands in that folder as you.")}
@@ -1390,7 +1390,7 @@ export function AddWorkspaceDialog({ open, hub, project, rows, workspace, pick, 
           {!project
             ? L("先不给 agent 用。把它加进项目后，项目里的 agent 就能在这里跑命令。", "No agent may use it yet: put it in a project and the project's agents can.")
             : users.length > 0
-              ? L(E`项目里的 ${users.length} 个 agent 都能在这里跑命令，之后加入的也能。`, E`The project's ${users.length} agent${users.length > 1 ? "s" : ""} can run commands here, and so can those who join later.`)
+              ? L(E`项目里的 ${users.length} 个 agent 都能在这里跑命令，之后加入的也能。`, (users.length > 1 ? E`The project's ${users.length} agents can run commands here, and so can those who join later.` : E`The project's ${users.length} agent can run commands here, and so can those who join later.`))
               : L("项目里还没有 agent。之后加进来的 agent 都能用它。", "No agents in the project yet; the ones you add later can use it.")}
         </div>
         {machine && <LocalShellAccess machine={machine} hub={ov} what="shell" shell={shell} />}

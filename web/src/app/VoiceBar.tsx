@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { AudioLines, Mic, MicOff, PhoneOff } from "lucide-react";
 import { appApi, type VoiceLine, type VoiceState } from "@/appapi";
 import { ErrorText } from "@/app/dialogs";
-import { L, lang, E } from "@/lib/i18n";
+import { L, lang, isChinese, E } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { Agent } from "@/api";
 import { Avatar } from "@/app/persona";
@@ -129,7 +129,7 @@ async function follow(c: VoiceCall) {
   try {
     const first = await appApi.voiceEvents(-1);
     after = first.seq;
-    await inTurn(async () => { if (mine()) await appApi.voiceStart(c.hubId, c.agent, c.peer, lang() === "en" ? "en-US" : "zh-CN"); });
+    await inTurn(async () => { if (mine()) await appApi.voiceStart(c.hubId, c.agent, c.peer, isChinese(lang()) ? "zh-CN" : "en-US"); });
     if (!mine()) return;
     set({ on: true, state: "listening" });
   } catch (e) {

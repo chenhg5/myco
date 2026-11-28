@@ -132,7 +132,7 @@ export function UpgradeAll({ items, latest, onDone }: {
     <div className="app-notice mu" data-testid="upgrade-all">
       <ArrowUpCircle />
       <div>
-        <div className="mu-text">{L(E`${old.length} 台电脑的 myco 不是最新（最新 ${ver(latest)}）`, E`${old.length} computer${old.length > 1 ? "s" : ""} not on the latest myco (${ver(latest)})`)}</div>
+        <div className="mu-text">{L(E`${old.length} 台电脑的 myco 不是最新（最新 ${ver(latest)}）`, (old.length > 1 ? E`${old.length} computers not on the latest myco (${ver(latest)})` : E`${old.length} computer not on the latest myco (${ver(latest)})`))}</div>
         <ul className="mu-list">
           {old.map((x) => (
             <li key={`${x.hubId}/${x.m.id}`}>

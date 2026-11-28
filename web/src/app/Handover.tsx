@@ -431,7 +431,7 @@ export function HandoverDialog({ target, rows, onClose, onDone, onOpenProfile }:
                   ? <li>{L("现在回答它的会话会停下，不再收消息。", "The session answering it now stops and gets no more messages.")}</li>
                   : <li>{L("名字、聊天记录和项目都不变。新的会话先读一份交接说明：最近 30 条对话和还没做完的事。", "Its name, chats and projects stay. The new session first reads a handover note: the last 30 messages and what is not done yet.")}</li>}
                 {!back && <li>{L("原来的会话会停下，不再收消息；之后在「接手记录」里可以换回来。", "The earlier session stops and gets no more messages; you can switch back under Handovers.")}</li>}
-                {open > 0 && <li>{L(E`它手上没做完的 ${open} 件事，交给${back ? "换回去的" : "新的"}会话重新做。`, E`The ${open} task${open > 1 ? "s" : ""} it has not finished go to the ${back ? "earlier" : "new"} session to redo.`)}</li>}
+                {open > 0 && <li>{L(E`它手上没做完的 ${open} 件事，交给${back ? "换回去的" : "新的"}会话重新做。`, (open > 1 ? (back ? E`The ${open} tasks it has not finished go to the earlier session to redo.` : E`The ${open} tasks it has not finished go to the new session to redo.`) : (back ? E`The ${open} task it has not finished go to the earlier session to redo.` : E`The ${open} task it has not finished go to the new session to redo.`)))}</li>}
                 {row.st.state === "working" && <li>{L("它现在正在干活，那件事也会交过去重新做。", "It is at work right now; that task goes over too.")}</li>}
               </ul>
               <ErrorText error={error} />

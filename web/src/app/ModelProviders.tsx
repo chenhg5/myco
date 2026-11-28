@@ -55,7 +55,7 @@ function testResultText(result: ModelProviderTestResponse) {
   const names = ms.slice(0, 4).map((m) => m.id);
   return result.models_source === "catalog"
     ? L(E`对话验证通过，可选 ${ms.length} 个预设模型：${names.join("、")}`, E`Completion verified; ${ms.length} preset models: ${names.join(", ")}`)
-    : L(E`读到 ${ms.length} 个模型：${names.join("、")}${ms.length > 4 ? " 等" : ""}`, E`${ms.length} models: ${names.join(", ")}${ms.length > 4 ? " and more" : ""}`);
+    : L(E`读到 ${ms.length} 个模型：${names.join("、")}${ms.length > 4 ? " 等" : ""}`, (ms.length > 4 ? E`${ms.length} models: ${names.join(", ")} and more` : E`${ms.length} models: ${names.join(", ")}`));
 }
 function providerErrorSummary(error: unknown) {
   return error instanceof ApiError && error.code === "provider_region_or_key" ? {

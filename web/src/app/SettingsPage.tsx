@@ -1,3 +1,5 @@
+import { RichText } from "@/app/RichText";
+import { LanguageSelect } from "@/app/LanguageSelect";
 import { localPreferences, saveWorkspaceAppearance } from "@/lib/localPreferences";
 import { clearAll, forgetHub, recall, remember } from "@/lib/memo";
 import { openHelp } from "@/app/Help";
@@ -140,12 +142,8 @@ function AboutSection({ info, local }: { info: AppInfo | null; local: LocalState
       <ErrorText error={failure} summary={st.step === "failed" && st.u ? updateFailure(failure) : null} />
       <p className="app-about-note">
         {isWindows
-          ? lang() === "zh"
-            ? <>更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换正在运行的这个 exe，再自动重新打开；这台电脑上的 myco 命令行工具也会一起升级。</>
-            : <>Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces this exe and reopens it; the myco command-line tool on this computer is upgraded along with it.</>
-          : lang() === "zh"
-            ? <>更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具和 runner 服务另外用 <code>myco upgrade</code> 升级。</>
-            : <>Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. Upgrade the command-line tool and the runner service separately with <code>myco upgrade</code>.</>}
+          ? L("更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换正在运行的这个 exe，再自动重新打开；这台电脑上的 myco 命令行工具也会一起升级。", "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces this exe and reopens it; the myco command-line tool on this computer is upgraded along with it.")
+          : <RichText text={L("更新会从 GitHub 和 Gitee 里较快的一个下载最新 App，校验 SHA256 后替换「应用程序」里的 myco，再自动重新打开。命令行工具和 runner 服务另外用 {0} 升级。", "Updating downloads the latest app release from GitHub or Gitee, whichever answers faster, verifies its SHA256, replaces myco in Applications and reopens it. Upgrade the command-line tool and the runner service separately with {0}.")} values={[<code>myco upgrade</code>]} />}
       </p>
       <p className="app-about-note">{L("agent、任务和对话都由工作区提供，App 只负责显示和转发。", "Nodes, tasks and conversations come from the Hub; the app only displays and relays them.")}</p>
     </>
@@ -274,13 +272,6 @@ const THEMES: { mode: ThemeMode; label: string }[] = [
   { mode: "dark", get label() { return L("深色", "Dark"); } },
 ];
 
-/** Language names stay in their own language so either reader can find theirs. */
-const LANGS: { choice: LangChoice; label: string }[] = [
-  { choice: "system", get label() { return L("跟随系统", "System"); } },
-  { choice: "zh", label: "中文" },
-  { choice: "en", label: "English" },
-];
-
 /** A section another page asks Settings to open on (say, voice from the
  *  call button); taken once. */
 let nextSettingsSection: Section | null = null;
@@ -336,7 +327,7 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
   textSize: TextSize;
   onTextSize: (size: TextSize) => void;
   langChoice: LangChoice;
-  onLangChoice: (c: LangChoice) => void;
+  onLangChoice: (c: LangChoice) => void | Promise<void>;
   /** Bumped by the App poll so the local hub state stays current. */
   refreshKey: number;
   /** Bumped when the Hub switcher asks for the Hub section. */
@@ -838,23 +829,10 @@ export function SettingsPage({ hubs, hubsOv, info, theme, onTheme, textSize, onT
               {info?.shell === "mac" && <IslandLine />}
               <div data-setting="language" className="app-setting-line">
                 <div className="app-setting-line-text">
-                  <b>语言 / Language</b>
-                  <span>{L("跟随系统时，App 使用 macOS 的语言设置。", "With System, the app uses the macOS language.")}</span>
+                  <b>{L("语言", "Language")} / Language</b>
+                  <span>{L("跟随系统时，App 使用这台设备的语言偏好。", "With System, the app follows this device’s language preferences.")}</span>
                 </div>
-                <div className="seg" role="tablist" aria-label="语言 / Language">
-                  {LANGS.map((t) => (
-                    <button
-                      key={t.choice}
-                      type="button"
-                      role="tab"
-                      aria-selected={langChoice === t.choice}
-                      className={cn("seg-btn", langChoice === t.choice && "active")}
-                      onClick={() => { langSwitchSection = section; onLangChoice(t.choice); }}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
+                <LanguageSelect value={langChoice} onChange={(choice) => { langSwitchSection = section; return onLangChoice(choice); }} />
               </div>
             </section>
           </>
@@ -1570,8 +1548,8 @@ function VoiceSection() {
   const voices = svc.voices || [];
   // The voice on the list, or the default one when none is set.
   const chosen = speaker.trim() || svc.default_speaker || "";
-  const svcName = lang() === "en" ? svc.name_en : svc.name;
-  const svcHelp = lang() === "en" ? svc.help_en : svc.help;
+  const svcName = L(svc.name, svc.name_en);
+  const svcHelp = L(svc.help || "", svc.help_en || svc.help || "");
   // The key shown as kept is the chosen service's.
   const hasTtsKey = info.tts_providers ? svc.has_key : info.has_tts_key;
   const share = info.share !== false;
@@ -1618,7 +1596,7 @@ function VoiceSection() {
             {providers.map((p) => (
               <button key={p.id} type="button" role="tab" aria-selected={svc.id === p.id} className={cn("seg-btn", svc.id === p.id && "active")}
                 onClick={() => { setProvider(p.id); setTtsKey(""); setSpeaker(""); setTyping(false); setSaved(false); setError(null); }}>
-                {lang() === "en" ? p.name_en : p.name}
+                {L(p.name, p.name_en)}
               </button>
             ))}
           </div>
