@@ -96,8 +96,19 @@ func TestAgentRuntimeQuotaAndInboxWaitReportTheSessionsLimits(t *testing.T) {
 		_ = json.Unmarshal([]byte(out), &a)
 		return a.Runtime.Quota
 	}
+	// The fixture's dates are fixed. Shift them to now: the Hub drops a
+	// window whose reset has passed, and presents an observation over an
+	// hour old as unknown, so a fixed date would stop testing the report.
+	now := time.Now().UTC()
+	newest := now.Add(-30 * time.Minute).Format(time.RFC3339Nano)
+	eventsJSON := strings.NewReplacer(
+		"2026-11-26T05:08:46.300421Z", now.Add(-3*time.Hour).Format(time.RFC3339Nano),
+		"2026-11-26T08:37:29.921996Z", newest,
+		"1795687200", itoa(now.Add(time.Hour).Unix()),
+		"1796090400", itoa(now.Add(6*24*time.Hour).Unix()),
+	).Replace(rateLimitEvents)
 	events := filepath.Join(dir, "events.json")
-	if err := os.WriteFile(events, []byte(rateLimitEvents), 0o600); err != nil {
+	if err := os.WriteFile(events, []byte(eventsJSON), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	// A dry run says what it would report, and reports nothing.
@@ -158,7 +169,7 @@ func TestAgentRuntimeQuotaAndInboxWaitReportTheSessionsLimits(t *testing.T) {
 	// A newer one does. Then a limit that has reset says nothing about
 	// now: nothing reported.
 	fresh := filepath.Join(dir, "fresh.json")
-	_ = os.WriteFile(fresh, []byte(strings.Replace(rateLimitEvents, "2026-11-26T08:37:29.921996Z", time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano), 1)), 0o600)
+	_ = os.WriteFile(fresh, []byte(strings.Replace(eventsJSON, newest, time.Now().Add(time.Second).UTC().Format(time.RFC3339Nano), 1)), 0o600)
 	if code, _, e := h.run("agent", "runtime", "quota", "--file", fresh); code != 0 {
 		t.Fatalf("quota: %s", e)
 	}
