@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/myco-ai/myco/internal/api"
@@ -41,7 +42,7 @@ type Fake struct {
 	FakeSpec
 	w       *World
 	c       *client.Client
-	offline bool
+	offline atomic.Bool
 	done    map[string]int // answers given per item
 }
 
@@ -97,10 +98,18 @@ func (w *World) preload(ctx context.Context) error {
 
 var notWords = regexp.MustCompile(`(?i)\b(not|never|don't|do not|must not|mustn't|without|leave|untouched|avoid)\b|不要|别|不许|不能|勿|保持不动`)
 
-// run takes tasks one at a time, as a runner does.
+// run takes tasks one at a time, as a runner does; like a runner, it
+// keeps its presence up while it works, from its own goroutine (a slow
+// machine stalling its work does not make it look away).
 func (f *Fake) run(ctx context.Context) {
+	go func() {
+		for ctx.Err() == nil && !f.offline.Load() {
+			_, _ = f.c.Me(ctx)
+			sleepCtx(ctx, f.w.opts.Unit/4)
+		}
+	}()
 	for ctx.Err() == nil {
-		if f.offline {
+		if f.offline.Load() {
 			<-ctx.Done()
 			return
 		}
@@ -118,7 +127,7 @@ func (f *Fake) run(ctx context.Context) {
 				continue
 			}
 			f.handle(ctx, m)
-			if f.offline {
+			if f.offline.Load() {
 				break
 			}
 		}
@@ -232,7 +241,7 @@ func (f *Fake) work(ctx context.Context, msgID string, it Item, d time.Duration)
 	step := max(f.w.opts.Unit/2, 10*time.Millisecond)
 	for spent := time.Duration(0); spent < d; spent += step {
 		if spent >= offlineAt {
-			f.offline = true
+			f.offline.Store(true)
 			f.w.record(Event{Agent: f.Name, Kind: EvOffline, Item: it.Name, Msg: msgID})
 			return false
 		}
