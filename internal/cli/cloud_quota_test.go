@@ -14,6 +14,7 @@ import (
 	"github.com/myco-ai/myco/internal/api"
 	"github.com/myco-ai/myco/internal/client"
 	"github.com/myco-ai/myco/internal/harness/claude"
+	"github.com/myco-ai/myco/internal/testutil"
 )
 
 // What a cloud session's event list gives: rate_limit_events, oldest first.
@@ -81,6 +82,7 @@ func TestSessionQuotaIsNumbersAndTimesOnly(t *testing.T) {
 }
 
 func TestAgentRuntimeQuotaAndInboxWaitReportTheSessionsLimits(t *testing.T) {
+	testutil.SetHome(t, t.TempDir())
 	hub := newHub(t)
 	dir := t.TempDir()
 	h := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(dir, "agent.yaml")}}
@@ -240,6 +242,7 @@ func TestSessionQuotaHintFreshness(t *testing.T) {
 }
 
 func TestCloudQuotaHintsThroughCommands(t *testing.T) {
+	testutil.SetHome(t, t.TempDir())
 	hub := newHub(t)
 	dir := t.TempDir()
 	cloud := &harnessT{t, map[string]string{"MYCO_HUB": hub, "MYCO_ADMIN_TOKEN": "admin-token-123456", "MYCO_CONFIG": filepath.Join(dir, "cloud.yaml"), "CLAUDE_CODE_REMOTE_SESSION_ID": "demo-session"}}
